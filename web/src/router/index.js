@@ -24,6 +24,12 @@ const routes = [
         component: () => import('../views/OrderDetail.vue'),
         meta: { title: 'Detail Pesanan', subtitle: 'Lihat dan perbarui detail satu pesanan' },
       },
+      {
+        path: 'produk',
+        name: 'produk',
+        component: () => import('../views/ListProduk.vue'),
+        meta: { title: 'List Produk', subtitle: 'Daftar produk/outfit dari seluruh kategori' },
+      },
     ],
   },
   { path: '/:pathMatch(.*)*', redirect: '/' },

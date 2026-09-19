@@ -8,6 +8,7 @@ const mobileOpen = ref(false)
 const menu = [
   { to: '/', label: 'Ringkasan', icon: 'M3 12l9-9 9 9M5 10v10h14V10' },
   { to: '/orders', label: 'Semua Pesanan', icon: 'M9 5h6M9 3v2M9 19h6M4 7h16v13H4zM4 7l2-4h12l2 4' },
+  { to: '/produk', label: 'List Produk', icon: 'M4 6h16M4 10h16M4 14h10M4 18h10' },
 ]
 
 function handleResize() {
