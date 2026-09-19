@@ -1,9 +1,9 @@
 <template>
-  <div class="min-h-screen bg-cream-200 p-6">
-    <!-- Header -->
+  <div class="w-full">
+    <!-- Header hanya tombol -->
     <div class="mb-6 flex justify-end">
       <button
-        @click="addNewRow"
+        @click="openAddModal"
         class="inline-flex items-center gap-2 bg-brand-500 hover:bg-brand-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium transition shadow-sm"
       >
         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -13,147 +13,136 @@
       </button>
     </div>
 
+    <!-- Search & Filter Bar -->
+    <div class="mb-5 bg-white rounded-card shadow-card border border-ink-100 p-4">
+      <div class="flex flex-col lg:flex-row gap-3">
+        <div class="relative flex-1">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-400"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <input
+            v-model="searchQuery"
+            type="text"
+            placeholder="Cari nama, style, designer, platform..."
+            class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-ink-200 bg-cream-50 focus:bg-white focus:border-brand-400 outline-none text-sm transition"
+          />
+        </div>
+
+        <select
+          v-model="filterSold"
+          class="px-3 py-2.5 rounded-xl border border-ink-200 bg-cream-50 focus:bg-white focus:border-brand-400 outline-none text-sm min-w-[150px]"
+        >
+          <option value="all">Semua Status</option>
+          <option value="sold">Terjual</option>
+          <option value="unsold">Belum Terjual</option>
+        </select>
+
+        <select
+          v-model="filterStyle"
+          class="px-3 py-2.5 rounded-xl border border-ink-200 bg-cream-50 focus:bg-white focus:border-brand-400 outline-none text-sm min-w-[140px]"
+        >
+          <option value="all">Semua Style</option>
+          <option v-for="style in uniqueStyles" :key="style" :value="style">
+            {{ style }}
+          </option>
+        </select>
+
+        <select
+          v-model="filterPlatform"
+          class="px-3 py-2.5 rounded-xl border border-ink-200 bg-cream-50 focus:bg-white focus:border-brand-400 outline-none text-sm min-w-[150px]"
+        >
+          <option value="all">Semua Platform</option>
+          <option v-for="plat in uniquePlatforms" :key="plat" :value="plat">
+            {{ plat }}
+          </option>
+        </select>
+
+        <button
+          v-if="hasActiveFilter"
+          @click="resetFilters"
+          class="px-4 py-2.5 rounded-xl border border-ink-200 text-ink-600 hover:bg-ink-50 text-sm font-medium transition whitespace-nowrap"
+        >
+          Reset
+        </button>
+      </div>
+
+      <div v-if="hasActiveFilter" class="mt-3 text-xs text-ink-500">
+        Menampilkan <span class="font-semibold text-ink-700">{{ filteredProducts.length }}</span> dari {{ products.length }} produk
+      </div>
+    </div>
+
     <!-- Table Card -->
     <div class="bg-white rounded-card shadow-card border border-ink-100 overflow-hidden">
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
           <thead>
             <tr class="bg-cream-100 text-ink-700 border-b border-ink-100">
-              <th class="px-4 py-3 text-left font-semibold whitespace-nowrap w-12">No</th>
+              <!-- Kolom No (sticky) -->
+              <th class="px-4 py-3 text-left font-semibold whitespace-nowrap w-12 sticky left-0 z-20 bg-cream-100">
+                No
+              </th>
               <th class="px-4 py-3 text-left font-semibold whitespace-nowrap min-w-[200px]">Nama Produk</th>
               <th class="px-4 py-3 text-left font-semibold whitespace-nowrap min-w-[110px]">Style</th>
               <th class="px-4 py-3 text-left font-semibold whitespace-nowrap min-w-[130px]">Substyle</th>
               <th class="px-4 py-3 text-left font-semibold whitespace-nowrap min-w-[110px]">Designer</th>
-              <th class="px-4 py-3 text-left font-semibold whitespace-nowrap min-w-[190px]">Tanggal</th>
-              <th class="px-4 py-3 text-left font-semibold whitespace-nowrap min-w-[140px]">Status Produksi</th>
+              <th class="px-4 py-3 text-left font-semibold whitespace-nowrap min-w-[160px]">Tanggal</th>
+              <th class="px-4 py-3 text-left font-semibold whitespace-nowrap min-w-[130px]">Status Produksi</th>
               <th class="px-4 py-3 text-left font-semibold whitespace-nowrap min-w-[120px]">Platform</th>
-              <th class="px-4 py-3 text-left font-semibold whitespace-nowrap min-w-[180px]">Link DB</th>
-              <th class="px-4 py-3 text-right font-semibold whitespace-nowrap min-w-[120px]">Harga</th>
+              <th class="px-4 py-3 text-left font-semibold whitespace-nowrap min-w-[160px]">Link DB</th>
+              <th class="px-4 py-3 text-right font-semibold whitespace-nowrap min-w-[100px]">Harga</th>
               <th class="px-4 py-3 text-center font-semibold whitespace-nowrap w-20">Sales</th>
               <th class="px-4 py-3 text-center font-semibold whitespace-nowrap min-w-[120px]">Status Jual</th>
               <th class="px-4 py-3 text-center font-semibold whitespace-nowrap w-28">Aksi</th>
-              <th class="px-4 py-3 text-left font-semibold whitespace-nowrap min-w-[160px]">Catatan</th>
+              <th class="px-4 py-3 text-left font-semibold whitespace-nowrap min-w-[140px]">Catatan</th>
             </tr>
           </thead>
 
           <tbody>
             <tr
-              v-for="(item, index) in products"
+              v-for="(item, index) in filteredProducts"
               :key="item.id"
-              class="border-b border-ink-50 hover:bg-cream-50 transition"
+              class="border-b border-ink-50 hover:bg-cream-50 transition group"
             >
-              <!-- No -->
-              <td class="px-4 py-3 text-ink-500">{{ index + 1 }}</td>
+              <!-- Kolom No (sticky) -->
+              <td class="px-4 py-3 text-ink-500 sticky left-0 z-10 bg-white group-hover:bg-cream-50">
+                {{ index + 1 }}
+              </td>
 
-              <!-- Nama Produk -->
+              <td class="px-4 py-3 font-medium text-ink-800">{{ item.name || '—' }}</td>
+              <td class="px-4 py-3 text-ink-700">{{ item.style || '—' }}</td>
+              <td class="px-4 py-3 text-ink-700">{{ item.substyle || '—' }}</td>
+              <td class="px-4 py-3 text-ink-700">{{ item.designer || '—' }}</td>
+              <td class="px-4 py-3 text-ink-600 text-[13px]">
+                {{ formatDate(item.date) }}
+              </td>
+              <td class="px-4 py-3 text-ink-700">{{ item.productionStatus || '—' }}</td>
+              <td class="px-4 py-3 text-ink-700">{{ item.platform || '—' }}</td>
               <td class="px-4 py-3">
-                <input
-                  v-model="item.name"
-                  :ref="(el) => setNameInputRef(item.id, el)"
-                  class="w-full bg-transparent border border-transparent hover:border-ink-200 focus:border-brand-400 focus:bg-white rounded-lg px-0 py-1.5 outline-none transition"
-                  placeholder="Nama outfit..."
-                />
+                <a
+                  v-if="item.linkDb"
+                  :href="item.linkDb"
+                  target="_blank"
+                  class="text-brand-600 hover:underline truncate block max-w-[160px]"
+                >
+                  {{ item.linkDb }}
+                </a>
+                <span v-else class="text-ink-400">—</span>
               </td>
-
-              <!-- Style -->
-              <td class="px-4 py-3">
-                <input
-                  v-model="item.style"
-                  class="w-full bg-transparent border border-transparent hover:border-ink-200 focus:border-brand-400 focus:bg-white rounded-lg px-0 py-1.5 outline-none transition"
-                  placeholder="Casual / Fantasy..."
-                />
+              <td class="px-4 py-3 text-right text-ink-700">
+                {{ item.price ? `$${item.price}` : '—' }}
               </td>
-
-              <!-- Substyle -->
-              <td class="px-4 py-3">
-                <input
-                  v-model="item.substyle"
-                  class="w-full bg-transparent border border-transparent hover:border-ink-200 focus:border-brand-400 focus:bg-white rounded-lg px-0 py-1.5 outline-none transition"
-                  placeholder="Daily outfit / Cyber..."
-                />
-              </td>
-
-              <!-- Designer -->
-              <td class="px-4 py-3">
-                <input
-                  v-model="item.designer"
-                  class="w-full bg-transparent border border-transparent hover:border-ink-200 focus:border-brand-400 focus:bg-white rounded-lg px-0 py-1.5 outline-none transition"
-                  placeholder="Nama designer"
-                />
-              </td>
-
-              <!-- Tanggal & Jam -->
-              <td class="px-4 py-3">
-                <input
-                  v-model="item.date"
-                  type="datetime-local"
-                  class="w-full bg-transparent border border-transparent hover:border-ink-200 focus:border-brand-400 focus:bg-white rounded-lg px-0 py-1.5 outline-none transition text-[13px]"
-                />
-              </td>
-
-              <!-- Status Produksi -->
-              <td class="px-4 py-3">
-                <input
-                  v-model="item.productionStatus"
-                  class="w-full bg-transparent border border-transparent hover:border-ink-200 focus:border-brand-400 focus:bg-white rounded-lg px-0 py-1.5 outline-none transition"
-                  placeholder="Preview / Done..."
-                />
-              </td>
-
-              <!-- Platform -->
-              <td class="px-4 py-3">
-                <input
-                  v-model="item.platform"
-                  class="w-full bg-transparent border border-transparent hover:border-ink-200 focus:border-brand-400 focus:bg-white rounded-lg px-0 py-1.5 outline-none transition"
-                  placeholder="Booth / Etsy / Both"
-                />
-              </td>
-
-              <!-- Link DB -->
-              <td class="px-4 py-3">
-                <input
-                  v-model="item.linkDb"
-                  class="w-full bg-transparent border border-transparent hover:border-ink-200 focus:border-brand-400 focus:bg-white rounded-lg px-0 py-1.5 outline-none transition text-brand-600"
-                  placeholder="https://..."
-                />
-              </td>
-
-              <!-- Harga -->
-              <td class="px-4 py-3">
-                <div class="flex items-center justify-end gap-0.5">
-                  <span
-                    v-if="item.price"
-                    class="text-ink-400 text-[13px] shrink-0"
-                  >$</span>
-                  <input
-                    v-model.number="item.price"
-                    type="number"
-                    min="0"
-                    step="0.5"
-                    class="w-16 text-right bg-transparent border border-transparent hover:border-ink-200 focus:border-brand-400 focus:bg-white rounded-lg px-0 py-1.5 outline-none transition"
-                    placeholder="0.00"
-                  />
-                </div>
-              </td>
-
-              <!-- Sales -->
-              <td class="px-4 py-3 text-center">
-                <input
-                  v-model.number="item.sales"
-                  type="number"
-                  min="0"
-                  class="w-16 text-center bg-transparent border border-transparent hover:border-ink-200 focus:border-brand-400 focus:bg-white rounded-lg px-0 py-1.5 outline-none transition"
-                />
-              </td>
-
-              <!-- Status Jual -->
+              <td class="px-4 py-3 text-center text-ink-700">{{ item.sales ?? 0 }}</td>
               <td class="px-4 py-3 text-center">
                 <span
                   :class="[
                     'inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium',
-                    item.isSold
-                      ? 'bg-ok-100 text-ok-600'
-                      : 'bg-warn-100 text-warn-600'
+                    item.isSold ? 'bg-ok-100 text-ok-600' : 'bg-warn-100 text-warn-600'
                   ]"
                 >
                   {{ item.isSold ? 'Terjual' : 'Belum Terjual' }}
@@ -163,7 +152,6 @@
               <!-- Aksi -->
               <td class="px-4 py-3 relative">
                 <div class="flex items-center justify-center gap-1">
-                  <!-- Tombol Tandai Terjual -->
                   <button
                     v-if="!item.isSold"
                     @click="markAsSold(item)"
@@ -185,7 +173,6 @@
                     </svg>
                   </button>
 
-                  <!-- Tombol titik tiga -->
                   <button
                     @click.stop="toggleMenu(item.id, $event)"
                     class="p-1.5 rounded-lg hover:bg-ink-100 text-ink-500 transition"
@@ -203,7 +190,7 @@
                       :style="{ top: menuPos.top + 'px', left: menuPos.left + 'px' }"
                     >
                       <button
-                        @click="editItem(item)"
+                        @click="openEditModal(item)"
                         class="w-full flex items-center gap-2 px-3 py-2 text-sm text-ink-700 hover:bg-cream-100 transition"
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -211,7 +198,6 @@
                         </svg>
                         Edit
                       </button>
-
                       <button
                         @click="removeRow(item.id)"
                         class="w-full flex items-center gap-2 px-3 py-2 text-sm text-danger-600 hover:bg-danger-50 transition"
@@ -226,31 +212,189 @@
                 </div>
               </td>
 
-              <!-- Catatan -->
-              <td class="px-4 py-3">
-                <input
-                  v-model="item.note"
-                  class="w-full bg-transparent border border-transparent hover:border-ink-200 focus:border-brand-400 focus:bg-white rounded-lg px-0 py-1.5 outline-none transition"
-                  placeholder="Catatan..."
-                />
-              </td>
+              <td class="px-4 py-3 text-ink-600">{{ item.note || '—' }}</td>
             </tr>
 
-            <!-- Empty state -->
-            <tr v-if="products.length === 0">
+            <tr v-if="filteredProducts.length === 0">
               <td colspan="14" class="px-4 py-16 text-center text-ink-400">
-                Belum ada data. Klik tombol <strong>Tambah Produk</strong> untuk mulai.
+                <template v-if="products.length === 0">
+                  Belum ada data. Klik tombol <strong>Tambah Produk</strong> untuk mulai.
+                </template>
+                <template v-else>
+                  Tidak ada produk yang cocok dengan filter / pencarian.
+                </template>
               </td>
             </tr>
           </tbody>
         </table>
       </div>
     </div>
+
+    <!-- ==================== MODAL TAMBAH / EDIT ==================== -->
+    <Teleport to="body">
+      <div
+        v-if="showModal"
+        class="fixed inset-0 z-50 flex items-center justify-center p-4"
+      >
+        <div
+          class="absolute inset-0 bg-ink-900/40 backdrop-blur-sm"
+          @click="closeModal"
+        ></div>
+
+        <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+          <!-- Header -->
+          <div class="flex items-center justify-between px-6 py-4 border-b border-ink-100">
+            <h2 class="text-lg font-semibold text-ink-900">
+              {{ isEditMode ? 'Edit Produk' : 'Tambah Produk Baru' }}
+            </h2>
+            <button
+              @click="closeModal"
+              class="p-1.5 rounded-lg hover:bg-ink-100 text-ink-500 transition"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          <!-- Body -->
+          <div class="px-6 py-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div class="sm:col-span-2">
+              <label class="block text-sm font-medium text-ink-700 mb-1.5">Nama Produk</label>
+              <input
+                v-model="form.name"
+                type="text"
+                class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition"
+                placeholder="Contoh: Bunny knit Sweater Outfit"
+              />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-ink-700 mb-1.5">Style</label>
+              <input
+                v-model="form.style"
+                type="text"
+                class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition"
+                placeholder="Casual / Fantasy / Formal..."
+              />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-ink-700 mb-1.5">Substyle</label>
+              <input
+                v-model="form.substyle"
+                type="text"
+                class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition"
+                placeholder="Daily outfit / Cyber..."
+              />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-ink-700 mb-1.5">Designer</label>
+              <input
+                v-model="form.designer"
+                type="text"
+                class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition"
+                placeholder="Nama designer"
+              />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-ink-700 mb-1.5">Tanggal</label>
+              <input
+                v-model="form.date"
+                type="datetime-local"
+                class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition"
+              />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-ink-700 mb-1.5">Status Produksi</label>
+              <input
+                v-model="form.productionStatus"
+                type="text"
+                class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition"
+                placeholder="Preview / Done / Ready..."
+              />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-ink-700 mb-1.5">Platform</label>
+              <input
+                v-model="form.platform"
+                type="text"
+                class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition"
+                placeholder="Booth / Etsy / Both"
+              />
+            </div>
+
+            <div class="sm:col-span-2">
+              <label class="block text-sm font-medium text-ink-700 mb-1.5">Link DB</label>
+              <input
+                v-model="form.linkDb"
+                type="url"
+                class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition"
+                placeholder="https://..."
+              />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-ink-700 mb-1.5">Harga ($)</label>
+              <input
+                v-model.number="form.price"
+                type="number"
+                min="0"
+                step="0.5"
+                class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition"
+                placeholder="0.00"
+              />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-ink-700 mb-1.5">Sales</label>
+              <input
+                v-model.number="form.sales"
+                type="number"
+                min="0"
+                class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition"
+                placeholder="0"
+              />
+            </div>
+
+            <div class="sm:col-span-2">
+              <label class="block text-sm font-medium text-ink-700 mb-1.5">Catatan</label>
+              <textarea
+                v-model="form.note"
+                rows="2"
+                class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition resize-none"
+                placeholder="Catatan tambahan..."
+              ></textarea>
+            </div>
+          </div>
+
+          <!-- Footer -->
+          <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-ink-100 bg-cream-50 rounded-b-2xl">
+            <button
+              @click="closeModal"
+              class="px-4 py-2.5 rounded-xl border border-ink-200 text-ink-600 hover:bg-white text-sm font-medium transition"
+            >
+              Batal
+            </button>
+            <button
+              @click="submitForm"
+              class="px-5 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium transition shadow-sm"
+            >
+              {{ isEditMode ? 'Simpan Perubahan' : 'Simpan Produk' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 
 const products = ref([
   {
@@ -287,9 +431,92 @@ const products = ref([
 
 let nextId = 3
 
-function addNewRow() {
-  products.value.push({
-    id: nextId++,
+// ========== SEARCH & FILTER ==========
+const searchQuery = ref('')
+const filterSold = ref('all')
+const filterStyle = ref('all')
+const filterPlatform = ref('all')
+
+const uniqueStyles = computed(() => {
+  const styles = products.value.map(p => p.style).filter(Boolean)
+  return [...new Set(styles)].sort()
+})
+
+const uniquePlatforms = computed(() => {
+  const platforms = products.value.map(p => p.platform).filter(Boolean)
+  return [...new Set(platforms)].sort()
+})
+
+const hasActiveFilter = computed(() => {
+  return (
+    searchQuery.value.trim() !== '' ||
+    filterSold.value !== 'all' ||
+    filterStyle.value !== 'all' ||
+    filterPlatform.value !== 'all'
+  )
+})
+
+const filteredProducts = computed(() => {
+  let result = products.value
+
+  if (searchQuery.value.trim()) {
+    const q = searchQuery.value.toLowerCase().trim()
+    result = result.filter(p =>
+      (p.name || '').toLowerCase().includes(q) ||
+      (p.style || '').toLowerCase().includes(q) ||
+      (p.substyle || '').toLowerCase().includes(q) ||
+      (p.designer || '').toLowerCase().includes(q) ||
+      (p.platform || '').toLowerCase().includes(q) ||
+      (p.productionStatus || '').toLowerCase().includes(q) ||
+      (p.note || '').toLowerCase().includes(q)
+    )
+  }
+
+  if (filterSold.value === 'sold') {
+    result = result.filter(p => p.isSold === true)
+  } else if (filterSold.value === 'unsold') {
+    result = result.filter(p => p.isSold === false)
+  }
+
+  if (filterStyle.value !== 'all') {
+    result = result.filter(p => p.style === filterStyle.value)
+  }
+
+  if (filterPlatform.value !== 'all') {
+    result = result.filter(p => p.platform === filterPlatform.value)
+  }
+
+  return result
+})
+
+function resetFilters() {
+  searchQuery.value = ''
+  filterSold.value = 'all'
+  filterStyle.value = 'all'
+  filterPlatform.value = 'all'
+}
+
+// ========== MODAL ==========
+const showModal = ref(false)
+const isEditMode = ref(false)
+const editingId = ref(null)
+
+const form = ref({
+  name: '',
+  style: '',
+  substyle: '',
+  designer: '',
+  date: '',
+  productionStatus: '',
+  platform: '',
+  linkDb: '',
+  price: 0,
+  sales: 0,
+  note: ''
+})
+
+function resetForm() {
+  form.value = {
     name: '',
     style: '',
     substyle: '',
@@ -300,11 +527,87 @@ function addNewRow() {
     linkDb: '',
     price: 0,
     sales: 0,
-    isSold: false,
     note: ''
-  })
+  }
 }
 
+function openAddModal() {
+  isEditMode.value = false
+  editingId.value = null
+  resetForm()
+  showModal.value = true
+}
+
+function openEditModal(item) {
+  isEditMode.value = true
+  editingId.value = item.id
+  form.value = {
+    name: item.name || '',
+    style: item.style || '',
+    substyle: item.substyle || '',
+    designer: item.designer || '',
+    date: item.date || '',
+    productionStatus: item.productionStatus || '',
+    platform: item.platform || '',
+    linkDb: item.linkDb || '',
+    price: item.price || 0,
+    sales: item.sales || 0,
+    note: item.note || ''
+  }
+  openMenuId.value = null
+  showModal.value = true
+}
+
+function closeModal() {
+  showModal.value = false
+}
+
+function submitForm() {
+  if (!form.value.name.trim()) {
+    alert('Nama Produk wajib diisi')
+    return
+  }
+
+  if (isEditMode.value) {
+    const index = products.value.findIndex(p => p.id === editingId.value)
+    if (index !== -1) {
+      products.value[index] = {
+        ...products.value[index],
+        name: form.value.name.trim(),
+        style: form.value.style.trim(),
+        substyle: form.value.substyle.trim(),
+        designer: form.value.designer.trim(),
+        date: form.value.date,
+        productionStatus: form.value.productionStatus.trim(),
+        platform: form.value.platform.trim(),
+        linkDb: form.value.linkDb.trim(),
+        price: form.value.price || 0,
+        sales: form.value.sales || 0,
+        note: form.value.note.trim()
+      }
+    }
+  } else {
+    products.value.push({
+      id: nextId++,
+      name: form.value.name.trim(),
+      style: form.value.style.trim(),
+      substyle: form.value.substyle.trim(),
+      designer: form.value.designer.trim(),
+      date: form.value.date,
+      productionStatus: form.value.productionStatus.trim(),
+      platform: form.value.platform.trim(),
+      linkDb: form.value.linkDb.trim(),
+      price: form.value.price || 0,
+      sales: form.value.sales || 0,
+      isSold: false,
+      note: form.value.note.trim()
+    })
+  }
+
+  closeModal()
+}
+
+// ========== AKSI ==========
 function markAsSold(item) {
   item.isSold = true
   openMenuId.value = null
@@ -315,14 +618,25 @@ function removeRow(id) {
   openMenuId.value = null
 }
 
-// --- Dropdown menu titik tiga (Aksi) ---
+function formatDate(dateStr) {
+  if (!dateStr) return '—'
+  try {
+    const d = new Date(dateStr)
+    return d.toLocaleString('id-ID', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  } catch {
+    return dateStr
+  }
+}
+
+// ========== DROPDOWN MENU ==========
 const openMenuId = ref(null)
 const menuPos = ref({ top: 0, left: 0 })
-const nameInputs = {}
-
-function setNameInputRef(id, el) {
-  if (el) nameInputs[id] = el
-}
 
 function toggleMenu(id, event) {
   if (openMenuId.value === id) {
@@ -340,13 +654,6 @@ function toggleMenu(id, event) {
   }
   menuPos.value = { top, left }
   openMenuId.value = id
-}
-
-function editItem(item) {
-  openMenuId.value = null
-  nextTick(() => {
-    nameInputs[item.id]?.focus()
-  })
 }
 
 function handleClickOutside(e) {

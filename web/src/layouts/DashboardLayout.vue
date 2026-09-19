@@ -19,68 +19,97 @@ onUnmounted(() => window.removeEventListener('resize', handleResize))
 </script>
 
 <template>
-  <div class="flex h-screen overflow-hidden">
-    <div v-if="mobileOpen" class="fixed inset-0 z-40 bg-black/50 lg:hidden" @click="mobileOpen = false" />
+  <div class="flex h-screen overflow-hidden bg-cream">
+    <!-- Overlay mobile -->
+    <div
+      v-if="mobileOpen"
+      class="fixed inset-0 z-40 bg-ink-900/50 backdrop-blur-sm lg:hidden"
+      @click="mobileOpen = false"
+    />
 
-    <!-- SIDEBAR -->
+    <!-- ==================== SIDEBAR ==================== -->
     <aside
       :class="[
-        'bg-brand-700 text-white h-screen flex flex-col shrink-0 w-64 z-50 transition-transform duration-300',
+        'bg-sidebar text-white h-screen flex flex-col shrink-0 w-64 z-50 transition-transform duration-300',
         'hidden lg:flex',
-        mobileOpen ? '!flex fixed inset-y-0 left-0 shadow-2xl' : '',
+        mobileOpen ? '!flex fixed inset-y-0 left-0 shadow-sidebar' : '',
       ]"
     >
+      <!-- Logo -->
       <div class="h-16 flex items-center gap-2.5 px-4 border-b border-white/10">
         <div class="w-8 h-8 rounded-lg bg-gold-500 flex items-center justify-center text-brand-900 shrink-0 text-sm font-bold">
           DO
         </div>
         <div class="min-w-0 flex-1">
           <p class="font-semibold text-[13.5px] leading-tight truncate">Designer Orders</p>
-          <p class="text-[11.5px] text-white/70 leading-tight mt-0.5 truncate">Aka Studio</p>
+          <p class="text-[11.5px] text-white/60 leading-tight mt-0.5 truncate">Aka Studio</p>
         </div>
       </div>
 
-      <nav class="flex-1 overflow-y-auto py-3 px-2 space-y-1 text-[13.5px]">
+      <!-- Menu -->
+      <nav class="flex-1 overflow-y-auto py-3 px-2.5 space-y-1 text-[13.5px]">
         <router-link
           v-for="m in menu"
           :key="m.to"
           :to="m.to"
-          class="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/10 transition"
-          exact-active-class="bg-white text-brand-700 font-semibold hover:bg-white"
+          class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-white/80 hover:bg-white/10 hover:text-white transition"
+          exact-active-class="!bg-white !text-brand-700 font-semibold shadow-sm"
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="shrink-0"
+          >
             <path :d="m.icon" />
           </svg>
           <span>{{ m.label }}</span>
         </router-link>
       </nav>
 
-      <div class="px-4 py-4 border-t border-white/10 text-[12px] text-white/60">
+      <!-- Footer sidebar -->
+      <div class="px-4 py-4 border-t border-white/10 text-[12px] text-white/50">
         Ruang kerja produksi desain
       </div>
     </aside>
 
-    <!-- KONTEN -->
+    <!-- ==================== KONTEN ==================== -->
     <div class="flex-1 flex flex-col overflow-hidden min-w-0">
+      <!-- Header -->
       <header class="h-16 flex items-center gap-3 px-4 sm:px-6 bg-white border-b border-ink-100 shrink-0">
         <button
           type="button"
-          class="lg:hidden w-9 h-9 flex items-center justify-center rounded-lg text-ink-600 hover:bg-ink-100 transition shrink-0"
+          class="lg:hidden w-9 h-9 flex items-center justify-center rounded-xl text-ink-600 hover:bg-ink-100 transition shrink-0"
           @click="mobileOpen = true"
           aria-label="Buka menu"
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
-            <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />
+            <line x1="3" y1="6" x2="21" y2="6" />
+            <line x1="3" y1="12" x2="21" y2="12" />
+            <line x1="3" y1="18" x2="21" y2="18" />
           </svg>
         </button>
+
         <div class="min-w-0 flex-1">
-          <h1 class="text-[16px] sm:text-[18px] font-semibold text-ink-900 truncate">{{ route.meta.title }}</h1>
-          <p class="text-[12px] text-ink-400 truncate hidden sm:block">{{ route.meta.subtitle }}</p>
+          <h1 class="text-[16px] sm:text-[18px] font-semibold text-ink-900 truncate">
+            {{ route.meta.title }}
+          </h1>
+          <p class="text-[12px] text-ink-400 truncate hidden sm:block">
+            {{ route.meta.subtitle }}
+          </p>
         </div>
-        <div class="w-9 h-9 rounded-full bg-brand-500 flex items-center justify-center text-white font-semibold text-sm shrink-0">
+
+        <div class="w-9 h-9 rounded-full bg-brand-500 flex items-center justify-center text-white font-semibold text-sm shrink-0 shadow-sm">
           AK
         </div>
       </header>
+
+      <!-- Main content -->
       <main class="flex-1 overflow-y-auto p-4 sm:p-6 bg-cream">
         <router-view />
       </main>
