@@ -9,10 +9,10 @@ body {
 }
 
 body {
- @apply bg-[#F7F5F0] text-ink-900 antialiased;
+  @apply bg-cream text-ink-900 antialiased;
 }
 
-/* Scrollbar yang lebih soft & modern */
+/* Scrollbar halus */
 * {
   scrollbar-width: thin;
   scrollbar-color: theme('colors.ink.300') transparent;
@@ -36,13 +36,8 @@ body {
   background-color: theme('colors.ink.400');
 }
 
-/* Focus ring yang lebih bagus */
+/* Focus ring */
 :focus-visible {
   outline: 2px solid theme('colors.brand.500');
   outline-offset: 2px;
-}
-
-/* Optional: smooth transition global */
-* {
-  @apply transition-colors duration-150;
 }
