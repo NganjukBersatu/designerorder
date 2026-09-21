@@ -1,21 +1,46 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+import { useAuth } from '../composables/useAuth'
 
 const route = useRoute()
+const router = useRouter()
+const { logout: clearSession } = useAuth()
 const mobileOpen = ref(false)
+const showLogoutConfirm = ref(false)
 
 const menu = [
   { to: '/', label: 'Ringkasan', icon: 'M3 12l9-9 9 9M5 10v10h14V10' },
   { to: '/orders', label: 'Semua Pesanan', icon: 'M9 5h6M9 3v2M9 19h6M4 7h16v13H4zM4 7l2-4h12l2 4' },
   { to: '/produk', label: 'List Produk', icon: 'M4 6h16M4 10h16M4 14h10M4 18h10' },
+  { to: '/laporan', label: 'Laporan', icon: 'M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8zM14 3v5h5M9 13h6M9 17h6' },
+  { to: '/pengaturan', label: 'Pengaturan', icon: 'M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6' },
 ]
+
+// Menu tetap menyala di halaman turunannya (mis. /produk/1 → List Produk)
+function isActive(to) {
+  if (to === '/') return route.path === '/'
+  return route.path === to || route.path.startsWith(to + '/')
+}
 
 function handleResize() {
   if (window.innerWidth >= 1024) mobileOpen.value = false
 }
 onMounted(() => window.addEventListener('resize', handleResize))
 onUnmounted(() => window.removeEventListener('resize', handleResize))
+
+// ========== KELUAR AKUN ==========
+function askLogout() {
+  showLogoutConfirm.value = true
+}
+
+function logout() {
+  clearSession()
+
+  showLogoutConfirm.value = false
+  mobileOpen.value = false
+  router.push('/login')
+}
 </script>
 
 <template>
@@ -42,7 +67,7 @@ onUnmounted(() => window.removeEventListener('resize', handleResize))
         </div>
         <div class="min-w-0 flex-1">
           <p class="font-semibold text-[13.5px] leading-tight truncate">Designer Orders</p>
-          <p class="text-[11.5px] text-white/60 leading-tight mt-0.5 truncate">Aka Studio</p>
+          <p class="text-[11.5px] text-white/60 leading-tight mt-0.5 truncate">Ruang kerja produksi</p>
         </div>
       </div>
 
@@ -53,7 +78,7 @@ onUnmounted(() => window.removeEventListener('resize', handleResize))
           :key="m.to"
           :to="m.to"
           class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-white/80 hover:bg-white/10 hover:text-white transition"
-          exact-active-class="!bg-white !text-brand-700 font-semibold shadow-sm"
+          :class="isActive(m.to) ? '!bg-white !text-brand-700 font-semibold shadow-sm' : ''"
         >
           <svg
             width="16"
@@ -72,9 +97,30 @@ onUnmounted(() => window.removeEventListener('resize', handleResize))
         </router-link>
       </nav>
 
-      <!-- Footer sidebar -->
-      <div class="px-4 py-4 border-t border-white/10 text-[12px] text-white/50">
-        Ruang kerja produksi desain
+      <!-- Footer sidebar: keluar akun -->
+      <div class="px-2.5 py-3 border-t border-white/10">
+        <button
+          type="button"
+          @click="askLogout"
+          class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13.5px] text-white/80 hover:bg-white/10 hover:text-white transition"
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="shrink-0"
+          >
+            <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" />
+          </svg>
+          <span>Keluar</span>
+        </button>
+
+        <p class="px-3 pt-3 text-[12px] text-white/50">Ruang kerja produksi desain</p>
       </div>
     </aside>
 
@@ -114,5 +160,37 @@ onUnmounted(() => window.removeEventListener('resize', handleResize))
         <router-view />
       </main>
     </div>
+
+    <!-- ==================== KONFIRMASI KELUAR ==================== -->
+    <Teleport to="body">
+      <div v-if="showLogoutConfirm" class="fixed inset-0 z-[60] flex items-center justify-center p-4">
+        <div
+          class="absolute inset-0 bg-ink-900/40 backdrop-blur-sm"
+          @click="showLogoutConfirm = false"
+        ></div>
+
+        <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+          <h2 class="text-lg font-semibold text-ink-900 mb-1">Keluar dari akun?</h2>
+          <p class="text-sm text-ink-500 mb-6">Kamu perlu masuk lagi untuk mengakses dashboard.</p>
+
+          <div class="flex justify-end gap-3">
+            <button
+              type="button"
+              @click="showLogoutConfirm = false"
+              class="px-4 py-2.5 rounded-xl border border-ink-200 text-ink-600 hover:bg-ink-50 text-sm font-medium transition"
+            >
+              Batal
+            </button>
+            <button
+              type="button"
+              @click="logout"
+              class="px-5 py-2.5 rounded-xl bg-danger-600 hover:opacity-90 text-white text-sm font-medium transition shadow-sm"
+            >
+              Keluar
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
