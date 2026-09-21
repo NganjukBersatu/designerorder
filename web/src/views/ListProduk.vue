@@ -13,18 +13,60 @@
       </button>
     </div>
 
+    <!-- Statistik -->
+    <div class="mb-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div class="relative bg-white rounded-card shadow-card border border-ink-100 overflow-hidden pl-5 pr-4 py-4">
+        <span class="absolute left-0 top-0 bottom-0 w-1 bg-brand-400"></span>
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <p class="text-[13px] text-ink-500 mb-1.5">Total Produk</p>
+            <p class="text-[28px] leading-none font-semibold text-ink-900">{{ totalProducts }}</p>
+          </div>
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-brand-400 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+          </svg>
+        </div>
+      </div>
+
+      <div class="relative bg-white rounded-card shadow-card border border-ink-100 overflow-hidden pl-5 pr-4 py-4">
+        <span class="absolute left-0 top-0 bottom-0 w-1 bg-ok-500"></span>
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <p class="text-[13px] text-ink-500 mb-1.5">Terjual</p>
+            <p class="text-[28px] leading-none font-semibold text-ok-600">{{ soldCount }}</p>
+          </div>
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-ok-500 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M5 13l4 4L19 7" />
+          </svg>
+        </div>
+      </div>
+
+      <div class="relative bg-white rounded-card shadow-card border border-ink-100 overflow-hidden pl-5 pr-4 py-4">
+        <span class="absolute left-0 top-0 bottom-0 w-1 bg-warn-400"></span>
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <p class="text-[13px] text-ink-500 mb-1.5">Belum Terjual</p>
+            <p class="text-[28px] leading-none font-semibold text-warn-600">{{ unsoldCount }}</p>
+          </div>
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-warn-500 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+      </div>
+    </div>
+
     <!-- Search & Filter Bar -->
     <div class="mb-5 bg-white rounded-card shadow-card border border-ink-100 p-4">
       <div class="flex flex-col lg:flex-row gap-3">
         <div class="relative flex-1">
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-400"
+            class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-400"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
           >
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
           <input
             v-model="searchQuery"
@@ -82,24 +124,24 @@
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
           <thead>
-            <tr class="bg-cream-100 text-ink-700 border-b border-ink-100">
+            <tr class="bg-cream-100 text-ink-500 border-b border-ink-100">
               <!-- Kolom No (sticky) -->
-              <th class="px-4 py-3 text-left font-semibold whitespace-nowrap w-12 sticky left-0 z-20 bg-cream-100">
+              <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap w-12 sticky left-0 z-20 bg-cream-100">
                 No
               </th>
-              <th class="px-4 py-3 text-left font-semibold whitespace-nowrap min-w-[200px]">Nama Produk</th>
-              <th class="px-4 py-3 text-left font-semibold whitespace-nowrap min-w-[110px]">Style</th>
-              <th class="px-4 py-3 text-left font-semibold whitespace-nowrap min-w-[130px]">Substyle</th>
-              <th class="px-4 py-3 text-left font-semibold whitespace-nowrap min-w-[110px]">Designer</th>
-              <th class="px-4 py-3 text-left font-semibold whitespace-nowrap min-w-[160px]">Tanggal</th>
-              <th class="px-4 py-3 text-left font-semibold whitespace-nowrap min-w-[130px]">Status Produksi</th>
-              <th class="px-4 py-3 text-left font-semibold whitespace-nowrap min-w-[120px]">Platform</th>
-              <th class="px-4 py-3 text-left font-semibold whitespace-nowrap min-w-[160px]">Link DB</th>
-              <th class="px-4 py-3 text-right font-semibold whitespace-nowrap min-w-[100px]">Harga</th>
-              <th class="px-4 py-3 text-center font-semibold whitespace-nowrap w-20">Sales</th>
-              <th class="px-4 py-3 text-center font-semibold whitespace-nowrap min-w-[120px]">Status Jual</th>
-              <th class="px-4 py-3 text-center font-semibold whitespace-nowrap w-28">Aksi</th>
-              <th class="px-4 py-3 text-left font-semibold whitespace-nowrap min-w-[140px]">Catatan</th>
+              <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[200px]">Nama Produk</th>
+              <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[110px]">Style</th>
+              <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[130px]">Substyle</th>
+              <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[110px]">Designer</th>
+              <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[160px]">Tanggal Pesan</th>
+              <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[130px]">Status Produksi</th>
+              <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[120px]">Platform</th>
+              <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[160px]">Link DB</th>
+              <th class="px-4 py-3.5 text-right font-medium whitespace-nowrap min-w-[100px]">Harga</th>
+              <th class="px-4 py-3.5 text-right font-medium whitespace-nowrap w-28">Jumlah Terjual</th>
+              <th class="px-4 py-3.5 text-center font-medium whitespace-nowrap min-w-[120px]">Status Jual</th>
+              <th class="px-4 py-3.5 text-center font-medium whitespace-nowrap w-28">Aksi</th>
+              <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[140px]">Catatan</th>
             </tr>
           </thead>
 
@@ -107,23 +149,23 @@
             <tr
               v-for="(item, index) in filteredProducts"
               :key="item.id"
-              class="border-b border-ink-50 hover:bg-cream-50 transition group"
+              class="border-b border-ink-50 hover:bg-cream-50/70 transition group"
             >
               <!-- Kolom No (sticky) -->
-              <td class="px-4 py-3 text-ink-500 sticky left-0 z-10 bg-white group-hover:bg-cream-50">
+              <td class="px-4 py-4 text-ink-400 sticky left-0 z-10 bg-white group-hover:bg-cream-50/70">
                 {{ index + 1 }}
               </td>
 
-              <td class="px-4 py-3 font-medium text-ink-800">{{ item.name || '—' }}</td>
-              <td class="px-4 py-3 text-ink-700">{{ item.style || '—' }}</td>
-              <td class="px-4 py-3 text-ink-700">{{ item.substyle || '—' }}</td>
-              <td class="px-4 py-3 text-ink-700">{{ item.designer || '—' }}</td>
-              <td class="px-4 py-3 text-ink-600 text-[13px]">
+              <td class="px-4 py-4 font-medium text-ink-800">{{ item.name || '—' }}</td>
+              <td class="px-4 py-4 text-ink-600">{{ item.style || '—' }}</td>
+              <td class="px-4 py-4 text-ink-600">{{ item.substyle || '—' }}</td>
+              <td class="px-4 py-4 text-ink-600">{{ item.designer || '—' }}</td>
+              <td class="px-4 py-4 text-ink-500 text-[13px]">
                 {{ formatDate(item.date) }}
               </td>
-              <td class="px-4 py-3 text-ink-700">{{ item.productionStatus || '—' }}</td>
-              <td class="px-4 py-3 text-ink-700">{{ item.platform || '—' }}</td>
-              <td class="px-4 py-3">
+              <td class="px-4 py-4 text-ink-600">{{ item.productionStatus || '—' }}</td>
+              <td class="px-4 py-4 text-ink-600">{{ item.platform || '—' }}</td>
+              <td class="px-4 py-4">
                 <a
                   v-if="item.linkDb"
                   :href="item.linkDb"
@@ -132,17 +174,17 @@
                 >
                   {{ item.linkDb }}
                 </a>
-                <span v-else class="text-ink-400">—</span>
+                <span v-else class="text-ink-300">—</span>
               </td>
-              <td class="px-4 py-3 text-right text-ink-700">
+              <td class="px-4 py-4 text-right text-ink-700 font-medium tabular-nums">
                 {{ item.price ? `$${item.price}` : '—' }}
               </td>
-              <td class="px-4 py-3 text-center text-ink-700">{{ item.sales ?? 0 }}</td>
-              <td class="px-4 py-3 text-center">
+              <td class="px-4 py-4 text-right text-ink-700 tabular-nums">{{ item.sales ?? 0 }}</td>
+              <td class="px-4 py-4 text-center">
                 <span
                   :class="[
-                    'inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium',
-                    item.isSold ? 'bg-ok-100 text-ok-600' : 'bg-warn-100 text-warn-600'
+                    'inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-medium',
+                    item.isSold ? 'bg-ok-100 text-ok-700' : 'bg-warn-100 text-warn-700'
                   ]"
                 >
                   {{ item.isSold ? 'Terjual' : 'Belum Terjual' }}
@@ -150,7 +192,7 @@
               </td>
 
               <!-- Aksi -->
-              <td class="px-4 py-3 relative">
+              <td class="px-4 py-4 relative">
                 <div class="flex items-center justify-center gap-1">
                   <button
                     v-if="!item.isSold"
@@ -212,7 +254,7 @@
                 </div>
               </td>
 
-              <td class="px-4 py-3 text-ink-600">{{ item.note || '—' }}</td>
+              <td class="px-4 py-4 text-ink-500">{{ item.note || '—' }}</td>
             </tr>
 
             <tr v-if="filteredProducts.length === 0">
@@ -300,7 +342,7 @@
             </div>
 
             <div>
-              <label class="block text-sm font-medium text-ink-700 mb-1.5">Tanggal</label>
+              <label class="block text-sm font-medium text-ink-700 mb-1.5">Tanggal Pesan</label>
               <input
                 v-model="form.date"
                 type="datetime-local"
@@ -351,7 +393,7 @@
             </div>
 
             <div>
-              <label class="block text-sm font-medium text-ink-700 mb-1.5">Sales</label>
+              <label class="block text-sm font-medium text-ink-700 mb-1.5">Jumlah Terjual</label>
               <input
                 v-model.number="form.sales"
                 type="number"
@@ -430,6 +472,11 @@ const products = ref([
 ])
 
 let nextId = 3
+
+// ========== STATISTIK ==========
+const totalProducts = computed(() => products.value.length)
+const soldCount = computed(() => products.value.filter(p => p.isSold).length)
+const unsoldCount = computed(() => products.value.filter(p => !p.isSold).length)
 
 // ========== SEARCH & FILTER ==========
 const searchQuery = ref('')
@@ -610,6 +657,8 @@ function submitForm() {
 // ========== AKSI ==========
 function markAsSold(item) {
   item.isSold = true
+  // Tambah jumlah terjual otomatis +1
+  item.sales = (item.sales || 0) + 1
   openMenuId.value = null
 }
 
