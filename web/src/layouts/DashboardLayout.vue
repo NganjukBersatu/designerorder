@@ -62,9 +62,11 @@ function logout() {
     >
       <!-- Logo -->
       <div class="h-16 flex items-center gap-2.5 px-4 border-b border-white/10">
-        <div class="w-8 h-8 rounded-lg bg-gold-500 flex items-center justify-center text-brand-900 shrink-0 text-sm font-bold">
-          DO
-        </div>
+        <img
+          src="/logo.png"
+          alt="Designer Orders"
+          class="w-8 h-8 rounded-lg object-contain shrink-0"
+        />
         <div class="min-w-0 flex-1">
           <p class="font-semibold text-[13.5px] leading-tight truncate">Designer Orders</p>
           <p class="text-[11.5px] text-white/60 leading-tight mt-0.5 truncate">Ruang kerja produksi</p>
