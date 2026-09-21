@@ -1,7 +1,16 @@
+// src/router/index.js
 import { createRouter, createWebHistory } from 'vue-router'
 import DashboardLayout from '../layouts/DashboardLayout.vue'
+import { useAuth } from '../composables/useAuth'
 
 const routes = [
+  // Halaman login (di luar layout dashboard)
+  {
+    path: '/login',
+    name: 'login',
+    component: () => import('../views/Login.vue'),
+    meta: { public: true, title: 'Masuk' },
+  },
   {
     path: '/',
     component: DashboardLayout,
@@ -10,7 +19,7 @@ const routes = [
         path: '',
         name: 'dashboard',
         component: () => import('../views/Dashboard.vue'),
-        meta: { title: 'Ringkasan', subtitle: 'Ringkasan pesanan, status kerja, dan pendapatan' },
+        meta: { title: 'Ringkasan', subtitle: 'Ringkasan pesanan, produk, penjualan, dan pendapatan' },
       },
       {
         path: 'orders',
@@ -30,6 +39,24 @@ const routes = [
         component: () => import('../views/ListProduk.vue'),
         meta: { title: 'List Produk', subtitle: 'Daftar produk/outfit dari seluruh kategori' },
       },
+      {
+        path: 'produk/:id',
+        name: 'produk-detail',
+        component: () => import('../views/Productdetail.vue'),
+        meta: { title: 'Detail Produk', subtitle: 'Lihat pembeli, jumlah terjual, dan waktu penjualan produk' },
+      },
+      {
+        path: 'laporan',
+        name: 'laporan',
+        component: () => import('../views/Laporan.vue'),
+        meta: { title: 'Laporan', subtitle: 'Laporan bulanan pesanan, produk, dan penjualan' },
+      },
+      {
+        path: 'pengaturan',
+        name: 'pengaturan',
+        component: () => import('../views/Pengaturan.vue'),
+        meta: { title: 'Pengaturan', subtitle: 'Kelola username dan kata sandi untuk masuk dashboard' },
+      },
     ],
   },
   { path: '/:pathMatch(.*)*', redirect: '/' },
@@ -38,6 +65,20 @@ const routes = [
 const router = createRouter({
   history: createWebHistory(),
   routes,
+})
+
+// Penjaga halaman: belum masuk → ke /login, sudah masuk → jangan buka /login lagi
+router.beforeEach((to) => {
+  const { isLoggedIn } = useAuth()
+
+  if (to.meta.public) {
+    return isLoggedIn.value && to.name === 'login' ? '/' : true
+  }
+
+  if (!isLoggedIn.value) {
+    return { name: 'login', query: to.fullPath !== '/' ? { redirect: to.fullPath } : {} }
+  }
+  return true
 })
 
 export default router
