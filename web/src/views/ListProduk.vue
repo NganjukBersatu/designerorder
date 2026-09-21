@@ -48,7 +48,7 @@
           class="px-3 py-2.5 rounded-xl border border-ink-200 bg-cream-50 focus:bg-white focus:border-brand-400 outline-none text-sm min-w-[140px]"
         >
           <option value="all">Semua Style</option>
-          <option v-for="style in uniqueStyles" :key="style" :value="style">
+          <option v-for="style in styleOptions" :key="style" :value="style">
             {{ style }}
           </option>
         </select>
@@ -58,7 +58,7 @@
           class="px-3 py-2.5 rounded-xl border border-ink-200 bg-cream-50 focus:bg-white focus:border-brand-400 outline-none text-sm min-w-[150px]"
         >
           <option value="all">Semua Platform</option>
-          <option v-for="plat in uniquePlatforms" :key="plat" :value="plat">
+          <option v-for="plat in platformOptions" :key="plat" :value="plat">
             {{ plat }}
           </option>
         </select>
@@ -299,42 +299,22 @@
 
             <div>
               <label class="block text-sm font-medium text-ink-700 mb-1.5">Style</label>
-              <input
-                v-model="form.style"
-                type="text"
-                class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition"
-                placeholder="Casual / Fantasy / Formal..."
-              />
+              <OptionSelect v-model="form.style" :options="optionsOf('style')" placeholder="Pilih style" />
             </div>
 
             <div>
               <label class="block text-sm font-medium text-ink-700 mb-1.5">Substyle</label>
-              <input
-                v-model="form.substyle"
-                type="text"
-                class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition"
-                placeholder="Daily outfit / Cyber..."
-              />
+              <OptionSelect v-model="form.substyle" :options="optionsOf('substyle')" placeholder="Pilih substyle" />
             </div>
 
             <div>
               <label class="block text-sm font-medium text-ink-700 mb-1.5">Designer</label>
-              <input
-                v-model="form.designer"
-                type="text"
-                class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition"
-                placeholder="Nama designer"
-              />
+              <OptionSelect v-model="form.designer" :options="optionsOf('designer')" placeholder="Pilih designer" />
             </div>
 
             <div>
               <label class="block text-sm font-medium text-ink-700 mb-1.5">Status Produksi</label>
-              <input
-                v-model="form.productionStatus"
-                type="text"
-                class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition"
-                placeholder="Preview / Done / Ready..."
-              />
+              <OptionSelect v-model="form.productionStatus" :options="optionsOf('productionStatus')" placeholder="Pilih status produksi" />
             </div>
 
             <div>
@@ -357,12 +337,7 @@
 
             <div class="sm:col-span-2">
               <label class="block text-sm font-medium text-ink-700 mb-1.5">Platform</label>
-              <input
-                v-model="form.platform"
-                type="text"
-                class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition"
-                placeholder="Booth / Etsy / Both"
-              />
+              <PlatformPicker v-model="form.platform" :options="optionsOf('platform')" />
             </div>
 
             <div class="sm:col-span-2">
@@ -453,31 +428,38 @@ import { useRouter } from 'vue-router'
 import { useProducts, formatDateTime, formatPrice, normalizeUrl } from '../composables/useProducts'
 import { fileToCompressedDataUrl } from '../utils/imageFile'
 import { getLinks, cleanLinks } from '../utils/links'
+import { splitPlatforms } from '../utils/platforms'
+import { useOptions } from '../composables/useOptions'
+import OptionSelect from '../components/OptionSelect.vue'
+import PlatformPicker from '../components/PlatformPicker.vue'
 
 const router = useRouter()
 const { products, addProduct, totalSold, isSold } = useProducts()
+const { optionsOf, mergeOptions } = useOptions()
 
 // ========== BADGE PLATFORM ==========
-// Warna per platform. Platform lain yang belum terdaftar tampil abu-abu.
+// Warna untuk Etsy dan Booth.
 const PLATFORM_STYLES = {
   etsy: 'bg-[#FDEBDD] text-[#B4500A]',
   booth: 'bg-[#FCE4EE] text-[#B0245A]'
 }
-const PLATFORM_FALLBACK = 'bg-ink-100 text-ink-600'
+// Platform baru dari Pengaturan otomatis dapat salah satu warna ini
+const PLATFORM_FALLBACKS = [
+  'bg-[#E3F1EC] text-[#1F6B55]',
+  'bg-[#E6EEFB] text-[#2F5DA8]',
+  'bg-[#F1E8FA] text-[#6B3FA0]',
+  'bg-[#FBF3D9] text-[#8A6A0A]'
+]
 
 // "Etsy & Booth" / "Etsy, Booth" / "Both" dipecah jadi badge terpisah
-function platformTags(value) {
-  if (!value) return []
-  const raw = String(value).trim()
-  if (/^both$/i.test(raw)) return ['Etsy', 'Booth']
-  return raw
-    .split(/\s*(?:&|,|\/|\+|\bdan\b|\band\b)\s*/i)
-    .map(s => s.trim())
-    .filter(Boolean)
-}
+const platformTags = splitPlatforms
 
 function platformClass(name) {
-  return PLATFORM_STYLES[name.toLowerCase()] || PLATFORM_FALLBACK
+  const known = PLATFORM_STYLES[name.toLowerCase()]
+  if (known) return known
+  let hash = 0
+  for (const ch of name) hash += ch.charCodeAt(0)
+  return PLATFORM_FALLBACKS[hash % PLATFORM_FALLBACKS.length]
 }
 
 // ========== NAVIGASI ==========
@@ -496,15 +478,14 @@ const filterSold = ref('all')
 const filterStyle = ref('all')
 const filterPlatform = ref('all')
 
-const uniqueStyles = computed(() => {
-  const styles = products.value.map(p => p.style).filter(Boolean)
-  return [...new Set(styles)].sort()
-})
+// Pilihan filter = pilihan dari Pengaturan + nilai lain yang sudah terpakai di data produk
+const styleOptions = computed(() =>
+  mergeOptions('style', [...new Set(products.value.map(p => p.style).filter(Boolean))].sort())
+)
 
-const uniquePlatforms = computed(() => {
-  const platforms = products.value.map(p => p.platform).filter(Boolean)
-  return [...new Set(platforms)].sort()
-})
+const platformOptions = computed(() =>
+  mergeOptions('platform', [...new Set(products.value.flatMap(p => splitPlatforms(p.platform)))].sort())
+)
 
 const hasActiveFilter = computed(() => {
   return (
@@ -542,7 +523,7 @@ const filteredProducts = computed(() => {
   }
 
   if (filterPlatform.value !== 'all') {
-    result = result.filter(p => p.platform === filterPlatform.value)
+    result = result.filter(p => splitPlatforms(p.platform).includes(filterPlatform.value))
   }
 
   return result
