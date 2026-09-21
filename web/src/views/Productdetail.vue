@@ -316,22 +316,22 @@
 
             <div>
               <label class="block text-sm font-medium text-ink-700 mb-1.5">Style</label>
-              <input v-model="editForm.style" type="text" class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition" placeholder="Casual / Fantasy / Formal..." />
+              <OptionSelect v-model="editForm.style" :options="optionsOf('style')" placeholder="Pilih style" />
             </div>
 
             <div>
               <label class="block text-sm font-medium text-ink-700 mb-1.5">Substyle</label>
-              <input v-model="editForm.substyle" type="text" class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition" placeholder="Daily outfit / Cyber..." />
+              <OptionSelect v-model="editForm.substyle" :options="optionsOf('substyle')" placeholder="Pilih substyle" />
             </div>
 
             <div>
               <label class="block text-sm font-medium text-ink-700 mb-1.5">Designer</label>
-              <input v-model="editForm.designer" type="text" class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition" />
+              <OptionSelect v-model="editForm.designer" :options="optionsOf('designer')" placeholder="Pilih designer" />
             </div>
 
             <div>
               <label class="block text-sm font-medium text-ink-700 mb-1.5">Status Produksi</label>
-              <input v-model="editForm.productionStatus" type="text" class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition" placeholder="Preview / Done / Ready..." />
+              <OptionSelect v-model="editForm.productionStatus" :options="optionsOf('productionStatus')" placeholder="Pilih status produksi" />
             </div>
 
             <div>
@@ -346,7 +346,7 @@
 
             <div class="sm:col-span-2">
               <label class="block text-sm font-medium text-ink-700 mb-1.5">Platform</label>
-              <input v-model="editForm.platform" type="text" class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition" placeholder="Booth / Etsy / Both" />
+              <PlatformPicker v-model="editForm.platform" :options="optionsOf('platform')" />
             </div>
 
             <div class="sm:col-span-2">
@@ -495,8 +495,7 @@
                 placeholder="Booth / Etsy"
               />
               <datalist id="platform-options">
-                <option value="Etsy" />
-                <option value="Booth" />
+                <option v-for="plat in optionsOf('platform')" :key="plat" :value="plat" />
               </datalist>
             </div>
 
@@ -536,10 +535,14 @@ import { useRoute, useRouter } from 'vue-router'
 import { useProducts, formatDateTime, formatPrice, nowLocal, normalizeUrl } from '../composables/useProducts'
 import { fileToCompressedDataUrl } from '../utils/imageFile'
 import { getLinks, cleanLinks } from '../utils/links'
+import { useOptions } from '../composables/useOptions'
+import OptionSelect from '../components/OptionSelect.vue'
+import PlatformPicker from '../components/PlatformPicker.vue'
 
 const route = useRoute()
 const router = useRouter()
 const { getProduct, salesOf, totalSold, isSold, addSale, removeSale, updateSale, updateProduct, removeProduct } = useProducts()
+const { optionsOf } = useOptions()
 
 // ========== DATA ==========
 const product = computed(() => getProduct(route.params.id))
