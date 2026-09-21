@@ -11,7 +11,7 @@
           <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
           </svg>
-          Kembali ke List Produk
+          Kembali ke Kategori
         </button>
 
         <div class="flex flex-wrap items-center gap-2">
@@ -253,7 +253,7 @@
         @click="goBack"
         class="px-4 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium transition shadow-sm"
       >
-        Kembali ke List Produk
+        Kembali ke Kategori
       </button>
     </div>
 
@@ -554,7 +554,15 @@ const revenue = computed(() => totalQty.value * (product.value?.price || 0))
 const links = computed(() => getLinks(product.value))
 
 function goBack() {
-  router.push('/produk')
+  const style = product.value?.style?.trim()
+  if (style) {
+    // Langsung kembali ke list produk di kategori yang sesuai
+    router.push(`/kategori/${encodeURIComponent(style)}`)
+  } else if (window.history.length > 1) {
+    router.back()
+  } else {
+    router.push('/kategori')
+  }
 }
 
 // ========== MODAL CATAT / EDIT PENJUALAN ==========
@@ -734,10 +742,16 @@ const showDeleteConfirm = ref(false)
 
 async function confirmDelete() {
   const id = product.value?.id
+  const style = product.value?.style?.trim()
   showDeleteConfirm.value = false
   if (id == null) return
+
   // Pindah halaman dulu supaya tidak sempat muncul "Produk tidak ditemukan"
-  await router.replace('/produk')
+  if (style) {
+    await router.replace(`/kategori/${encodeURIComponent(style)}`)
+  } else {
+    await router.replace('/kategori')
+  }
   removeProduct(id)
 }
 

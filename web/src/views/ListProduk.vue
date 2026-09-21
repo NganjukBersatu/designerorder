@@ -54,6 +54,16 @@
         </select>
 
         <select
+          v-model="filterSubstyle"
+          class="px-3 py-2.5 rounded-xl border border-ink-200 bg-cream-50 focus:bg-white focus:border-brand-400 outline-none text-sm min-w-[150px]"
+        >
+          <option value="all">Semua Substyle</option>
+          <option v-for="sub in substyleOptions" :key="sub" :value="sub">
+            {{ sub }}
+          </option>
+        </select>
+
+        <select
           v-model="filterPlatform"
           class="px-3 py-2.5 rounded-xl border border-ink-200 bg-cream-50 focus:bg-white focus:border-brand-400 outline-none text-sm min-w-[150px]"
         >
@@ -147,17 +157,7 @@
               </td>
               <td class="px-4 py-4 text-ink-600">{{ item.productionStatus || '—' }}</td>
               <td class="px-4 py-4">
-                <div v-if="platformTags(item.platform).length" class="flex flex-wrap items-center gap-1.5">
-                  <span
-                    v-for="tag in platformTags(item.platform)"
-                    :key="tag"
-                    :class="['inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-medium whitespace-nowrap', platformClass(tag)]"
-                  >
-                    <span class="w-1.5 h-1.5 rounded-full bg-current"></span>
-                    {{ tag }}
-                  </span>
-                </div>
-                <span v-else class="text-ink-300">—</span>
+                <PlatformBadges :platform="item.platform" />
               </td>
               <td class="px-4 py-4">
                 <div v-if="getLinks(item).length" class="flex flex-col gap-1">
@@ -423,8 +423,8 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useProducts, formatDateTime, formatPrice, normalizeUrl } from '../composables/useProducts'
 import { fileToCompressedDataUrl } from '../utils/imageFile'
 import { getLinks, cleanLinks } from '../utils/links'
@@ -432,35 +432,12 @@ import { splitPlatforms } from '../utils/platforms'
 import { useOptions } from '../composables/useOptions'
 import OptionSelect from '../components/OptionSelect.vue'
 import PlatformPicker from '../components/PlatformPicker.vue'
+import PlatformBadges from '../components/PlatformBadges.vue'
 
+const route = useRoute()
 const router = useRouter()
 const { products, addProduct, totalSold, isSold } = useProducts()
 const { optionsOf, mergeOptions } = useOptions()
-
-// ========== BADGE PLATFORM ==========
-// Warna untuk Etsy dan Booth.
-const PLATFORM_STYLES = {
-  etsy: 'bg-[#FDEBDD] text-[#B4500A]',
-  booth: 'bg-[#FCE4EE] text-[#B0245A]'
-}
-// Platform baru dari Pengaturan otomatis dapat salah satu warna ini
-const PLATFORM_FALLBACKS = [
-  'bg-[#E3F1EC] text-[#1F6B55]',
-  'bg-[#E6EEFB] text-[#2F5DA8]',
-  'bg-[#F1E8FA] text-[#6B3FA0]',
-  'bg-[#FBF3D9] text-[#8A6A0A]'
-]
-
-// "Etsy & Booth" / "Etsy, Booth" / "Both" dipecah jadi badge terpisah
-const platformTags = splitPlatforms
-
-function platformClass(name) {
-  const known = PLATFORM_STYLES[name.toLowerCase()]
-  if (known) return known
-  let hash = 0
-  for (const ch of name) hash += ch.charCodeAt(0)
-  return PLATFORM_FALLBACKS[hash % PLATFORM_FALLBACKS.length]
-}
 
 // ========== NAVIGASI ==========
 function goToDetail(id) {
@@ -476,11 +453,16 @@ function recordSale(id) {
 const searchQuery = ref('')
 const filterSold = ref('all')
 const filterStyle = ref('all')
+const filterSubstyle = ref('all')
 const filterPlatform = ref('all')
 
 // Pilihan filter = pilihan dari Pengaturan + nilai lain yang sudah terpakai di data produk
 const styleOptions = computed(() =>
   mergeOptions('style', [...new Set(products.value.map(p => p.style).filter(Boolean))].sort())
+)
+
+const substyleOptions = computed(() =>
+  mergeOptions('substyle', [...new Set(products.value.map(p => p.substyle).filter(Boolean))].sort())
 )
 
 const platformOptions = computed(() =>
@@ -492,6 +474,7 @@ const hasActiveFilter = computed(() => {
     searchQuery.value.trim() !== '' ||
     filterSold.value !== 'all' ||
     filterStyle.value !== 'all' ||
+    filterSubstyle.value !== 'all' ||
     filterPlatform.value !== 'all'
   )
 })
@@ -522,6 +505,10 @@ const filteredProducts = computed(() => {
     result = result.filter(p => p.style === filterStyle.value)
   }
 
+  if (filterSubstyle.value !== 'all') {
+    result = result.filter(p => p.substyle === filterSubstyle.value)
+  }
+
   if (filterPlatform.value !== 'all') {
     result = result.filter(p => splitPlatforms(p.platform).includes(filterPlatform.value))
   }
@@ -533,8 +520,20 @@ function resetFilters() {
   searchQuery.value = ''
   filterSold.value = 'all'
   filterStyle.value = 'all'
+  filterSubstyle.value = 'all'
   filterPlatform.value = 'all'
 }
+
+// Dibuka dari halaman Kategori (/produk?style=...&substyle=...): terapkan filternya.
+// Kalau query dihapus (mis. klik "Semua Produk" di sidebar), filter Style/Substyle ikut direset.
+watch(
+  () => route.query,
+  q => {
+    filterStyle.value = typeof q.style === 'string' && q.style ? q.style : 'all'
+    filterSubstyle.value = typeof q.substyle === 'string' && q.substyle ? q.substyle : 'all'
+  },
+  { immediate: true }
+)
 
 // ========== MODAL TAMBAH PRODUK ==========
 // Edit & hapus produk dilakukan di halaman detail, bukan di list.
