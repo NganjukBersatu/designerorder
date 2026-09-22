@@ -18,7 +18,7 @@ const routes = [
       {
         path: '',
         name: 'dashboard',
-        component: () => import('../views/Dashboard.vue'),
+        component: () => import('../views/Ringkasan.vue'),
         meta: { title: 'Ringkasan', subtitle: 'Ringkasan pesanan, produk, penjualan, dan pendapatan' },
       },
       {
@@ -52,12 +52,6 @@ const routes = [
         name: 'kategori-detail',
         component: () => import('../views/KategoriDetail.vue'),
         meta: { title: 'Isi Kategori', subtitle: 'Daftar produk dalam kategori' },
-      },
-      {
-        path: 'laporan',
-        name: 'laporan',
-        component: () => import('../views/Laporan.vue'),
-        meta: { title: 'Laporan', subtitle: 'Laporan bulanan pesanan, produk, dan penjualan' },
       },
       {
         path: 'pengaturan',

@@ -13,7 +13,6 @@ const menu = [
   { to: '/', label: 'Ringkasan', icon: 'M3 12l9-9 9 9M5 10v10h14V10' },
   { to: '/orders', label: 'Semua Pesanan', icon: 'M9 5h6M9 3v2M9 19h6M4 7h16v13H4zM4 7l2-4h12l2 4' },
   { to: '/kategori', label: 'Kategori', icon: 'M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z' },
-  { to: '/laporan', label: 'Laporan', icon: 'M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8zM14 3v5h5M9 13h6M9 17h6' },
   { to: '/pengaturan', label: 'Pengaturan', icon: 'M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6' },
 ]
 
@@ -63,7 +62,7 @@ function logout() {
       <!-- Logo -->
       <div class="h-16 flex items-center gap-2.5 px-4 border-b border-white/10">
         <img
-          src="/logo.png"
+          src="/favicon.png"
           alt="Designer Orders"
           class="w-8 h-8 rounded-lg object-contain shrink-0"
         />
