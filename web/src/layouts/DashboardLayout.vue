@@ -12,12 +12,12 @@ const showLogoutConfirm = ref(false)
 const menu = [
   { to: '/', label: 'Ringkasan', icon: 'M3 12l9-9 9 9M5 10v10h14V10' },
   { to: '/orders', label: 'Semua Pesanan', icon: 'M9 5h6M9 3v2M9 19h6M4 7h16v13H4zM4 7l2-4h12l2 4' },
-  { to: '/produk', label: 'List Produk', icon: 'M4 6h16M4 10h16M4 14h10M4 18h10' },
+  { to: '/kategori', label: 'Kategori', icon: 'M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z' },
   { to: '/laporan', label: 'Laporan', icon: 'M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8zM14 3v5h5M9 13h6M9 17h6' },
   { to: '/pengaturan', label: 'Pengaturan', icon: 'M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6' },
 ]
 
-// Menu tetap menyala di halaman turunannya (mis. /produk/1 → List Produk)
+// Menu tetap menyala di halaman turunannya (mis. /kategori/xxx → Kategori)
 function isActive(to) {
   if (to === '/') return route.path === '/'
   return route.path === to || route.path.startsWith(to + '/')

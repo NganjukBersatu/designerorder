@@ -33,17 +33,25 @@ const routes = [
         component: () => import('../views/OrderDetail.vue'),
         meta: { title: 'Detail Pesanan', subtitle: 'Lihat dan perbarui detail satu pesanan' },
       },
-      {
-        path: 'produk',
-        name: 'produk',
-        component: () => import('../views/ListProduk.vue'),
-        meta: { title: 'List Produk', subtitle: 'Daftar produk/outfit dari seluruh kategori' },
-      },
+      // ===== Detail Produk (tetap ada, tapi tidak ada List Produk global) =====
       {
         path: 'produk/:id',
         name: 'produk-detail',
         component: () => import('../views/Productdetail.vue'),
         meta: { title: 'Detail Produk', subtitle: 'Lihat pembeli, jumlah terjual, dan waktu penjualan produk' },
+      },
+      // ===== Route Kategori =====
+      {
+        path: 'kategori',
+        name: 'kategori',
+        component: () => import('../views/ProdukKategori.vue'),
+        meta: { title: 'Kategori Produk', subtitle: 'Produk dikelompokkan berdasarkan Style dan Substyle' },
+      },
+      {
+        path: 'kategori/:name',
+        name: 'kategori-detail',
+        component: () => import('../views/KategoriDetail.vue'),
+        meta: { title: 'Isi Kategori', subtitle: 'Daftar produk dalam kategori' },
       },
       {
         path: 'laporan',
