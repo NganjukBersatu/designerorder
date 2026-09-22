@@ -9,13 +9,13 @@
 
       <button
         type="button"
-        @click="router.push('/pengaturan')"
-        class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-ink-200 text-ink-700 hover:bg-ink-50 text-sm font-medium transition"
+        @click="openAddModal"
+        class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium transition shadow-sm"
       >
         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6" />
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
         </svg>
-        Atur kategori di Pengaturan
+        Tambah Kategori
       </button>
     </div>
 
@@ -114,10 +114,9 @@
           <button
             type="button"
             @click="openCategory(cat.name)"
-            :disabled="!cat.count"
-            class="w-full px-4 py-2 rounded-xl bg-brand-500 hover:bg-brand-600 disabled:bg-ink-100 disabled:text-ink-400 disabled:cursor-not-allowed text-white text-sm font-medium transition shadow-sm disabled:shadow-none"
+            class="w-full px-4 py-2 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium transition shadow-sm"
           >
-            {{ cat.count ? 'Lihat isi kategori' : 'Belum ada produk' }}
+            Lihat isi kategori
           </button>
         </div>
       </article>
@@ -133,18 +132,61 @@
         Isi Style pada produk, atau tambahkan pilihan Style di Pengaturan.
       </p>
     </div>
+
+    <!-- Modal Tambah Kategori -->
+    <Teleport to="body">
+      <div
+        v-if="showAddModal"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+        @click.self="closeAddModal"
+      >
+        <div class="w-full max-w-sm bg-white rounded-card shadow-card border border-ink-100 p-5">
+          <h3 class="text-base font-semibold text-ink-900 mb-1">Tambah Kategori</h3>
+          <p class="text-sm text-ink-500 mb-4">
+            Kategori baru akan tersedia sebagai pilihan Style pada form produk.
+          </p>
+
+          <input
+            ref="addInputRef"
+            v-model="newCategoryName"
+            type="text"
+            placeholder="Nama kategori, mis. Streetwear"
+            class="w-full px-3.5 py-2.5 rounded-xl border border-ink-200 text-sm text-ink-900 placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-brand-400"
+            @keyup.enter="submitAddCategory"
+          />
+          <p v-if="addError" class="text-xs text-red-500 mt-1.5">{{ addError }}</p>
+
+          <div class="flex justify-end gap-2 mt-5">
+            <button
+              type="button"
+              @click="closeAddModal"
+              class="px-4 py-2 rounded-xl border border-ink-200 text-ink-700 hover:bg-ink-50 text-sm font-medium transition"
+            >
+              Batal
+            </button>
+            <button
+              type="button"
+              @click="submitAddCategory"
+              class="px-4 py-2 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium transition"
+            >
+              Tambah
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useProducts, formatPrice } from '../composables/useProducts'
 import { useOptions } from '../composables/useOptions'
 
 const router = useRouter()
 const { products, totalSold } = useProducts()
-const { mergeOptions } = useOptions()
+const { mergeOptions, addOption } = useOptions()
 
 const MAX_THUMBS = 4
 
@@ -192,11 +234,37 @@ const uncategorizedCount = computed(
   () => products.value.filter(p => !(p.style || '').trim()).length
 )
 
-// Buka isi kategori (daftar produk di dalamnya), opsional langsung ke satu Substyle
+// Buka isi kategori (daftar produk di dalamnya, bisa kosong), opsional langsung ke satu Substyle
 function openCategory(style, substyle) {
   router.push({
     path: '/kategori/' + encodeURIComponent(style),
     query: substyle ? { substyle } : {}
   })
+}
+
+// --- Tambah Kategori ---
+const showAddModal = ref(false)
+const newCategoryName = ref('')
+const addError = ref('')
+const addInputRef = ref(null)
+
+function openAddModal() {
+  newCategoryName.value = ''
+  addError.value = ''
+  showAddModal.value = true
+  nextTick(() => addInputRef.value?.focus())
+}
+
+function closeAddModal() {
+  showAddModal.value = false
+}
+
+function submitAddCategory() {
+  const result = addOption('style', newCategoryName.value)
+  if (!result.ok) {
+    addError.value = result.message
+    return
+  }
+  closeAddModal()
 }
 </script>

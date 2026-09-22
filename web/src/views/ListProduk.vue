@@ -559,6 +559,16 @@ const form = ref(emptyForm())
 
 function openAddModal() {
   form.value = emptyForm()
+
+  // Kalau lagi lihat produk hasil filter dari kategori (mis. buka dari halaman Kategori
+  // atau filter Style/Substyle di list ini), produk baru langsung mengikuti filter itu.
+  if (filterStyle.value !== 'all') {
+    form.value.style = filterStyle.value
+  }
+  if (filterSubstyle.value !== 'all') {
+    form.value.substyle = filterSubstyle.value
+  }
+
   imageError.value = ''
   showModal.value = true
 }

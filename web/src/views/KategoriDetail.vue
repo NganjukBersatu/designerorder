@@ -16,14 +16,27 @@
       </div>
 
       <!-- Judul kategori -->
-      <div class="mb-6">
-        <div class="flex flex-wrap items-center gap-3">
-          <h2 class="text-2xl font-semibold text-ink-900">{{ name }}</h2>
-          <span class="inline-flex items-center px-2.5 py-1 rounded-full bg-cream-100 text-ink-600 text-[12px] font-medium tabular-nums">
-            {{ items.length }} produk
-          </span>
+      <div class="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div class="flex flex-wrap items-center gap-3">
+            <h2 class="text-2xl font-semibold text-ink-900">{{ name }}</h2>
+            <span class="inline-flex items-center px-2.5 py-1 rounded-full bg-cream-100 text-ink-600 text-[12px] font-medium tabular-nums">
+              {{ items.length }} produk
+            </span>
+          </div>
+          <p class="text-sm text-ink-500 mt-1">Semua produk dengan Style {{ name }}.</p>
         </div>
-        <p class="text-sm text-ink-500 mt-1">Semua produk dengan Style {{ name }}.</p>
+
+        <button
+          type="button"
+          @click="openAddModal"
+          class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium transition shadow-sm"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+          </svg>
+          Tambah Produk
+        </button>
       </div>
 
       <!-- Ringkasan kategori -->
@@ -161,7 +174,7 @@
               <tr v-if="filteredItems.length === 0">
                 <td colspan="9" class="px-4 py-16 text-center text-ink-400">
                   <template v-if="items.length === 0">
-                    Belum ada produk di kategori ini. Isi Style produk dengan <strong>{{ name }}</strong> dari halaman detail produk.
+                    Belum ada produk di kategori ini. Klik <strong>Tambah Produk</strong> untuk menambahkan yang pertama.
                   </template>
                   <template v-else>
                     Tidak ada produk yang cocok dengan filter / pencarian.
@@ -185,19 +198,188 @@
         Kembali ke Kategori
       </button>
     </div>
+
+    <!-- ==================== MODAL TAMBAH PRODUK ==================== -->
+    <Teleport to="body">
+      <div v-if="showAddModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-ink-900/40 backdrop-blur-sm" @click="closeAddModal"></div>
+
+        <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+          <div class="flex items-center justify-between px-6 py-4 border-b border-ink-100">
+            <h2 class="text-lg font-semibold text-ink-900">Tambah Produk</h2>
+            <button
+              @click="closeAddModal"
+              class="p-1.5 rounded-lg hover:bg-ink-100 text-ink-500 transition"
+              aria-label="Tutup"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          <div class="px-6 py-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <!-- Gambar produk -->
+            <div class="sm:col-span-2">
+              <label class="block text-sm font-medium text-ink-700 mb-1.5">Gambar Produk</label>
+              <div class="flex items-center gap-4">
+                <div class="w-24 h-24 shrink-0 rounded-xl overflow-hidden border border-ink-200 bg-cream-100 flex items-center justify-center">
+                  <img v-if="addForm.image" :src="addForm.image" alt="Pratinjau gambar" class="w-full h-full object-cover" />
+                  <svg v-else xmlns="http://www.w3.org/2000/svg" class="w-7 h-7 text-ink-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                </div>
+
+                <div class="flex flex-col items-start gap-2">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <label class="inline-flex items-center px-3.5 py-2 rounded-xl border border-ink-200 text-ink-700 hover:bg-ink-50 text-sm font-medium transition cursor-pointer">
+                      {{ addForm.image ? 'Ganti Gambar' : 'Pilih Gambar' }}
+                      <input type="file" accept="image/*" class="hidden" @change="onPickAddImage" />
+                    </label>
+                    <button
+                      v-if="addForm.image"
+                      type="button"
+                      @click="addForm.image = ''"
+                      class="px-3.5 py-2 rounded-xl text-danger-600 hover:bg-danger-50 text-sm font-medium transition"
+                    >
+                      Hapus Gambar
+                    </button>
+                  </div>
+                  <p v-if="addImageError" class="text-xs text-danger-600">{{ addImageError }}</p>
+                  <p v-else class="text-xs text-ink-400">JPG, PNG, atau WEBP. Ukuran otomatis diperkecil.</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="sm:col-span-2">
+              <label class="block text-sm font-medium text-ink-700 mb-1.5">Nama Produk</label>
+              <input v-model="addForm.name" type="text" class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition" placeholder="Nama produk" />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-ink-700 mb-1.5">Style</label>
+              <input
+                :value="name"
+                type="text"
+                disabled
+                class="w-full px-3 py-2.5 rounded-xl border border-ink-200 bg-cream-100 text-ink-500 text-sm cursor-not-allowed"
+              />
+              <p class="text-xs text-ink-400 mt-1">Otomatis mengikuti kategori {{ name }} yang sedang dibuka.</p>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-ink-700 mb-1.5">Substyle</label>
+              <OptionSelect v-model="addForm.substyle" :options="optionsOf('substyle')" placeholder="Pilih substyle" />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-ink-700 mb-1.5">Designer</label>
+              <OptionSelect v-model="addForm.designer" :options="optionsOf('designer')" placeholder="Pilih designer" />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-ink-700 mb-1.5">Status Produksi</label>
+              <OptionSelect v-model="addForm.productionStatus" :options="optionsOf('productionStatus')" placeholder="Pilih status produksi" />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-ink-700 mb-1.5">Tanggal Dibuat</label>
+              <input v-model="addForm.date" type="datetime-local" class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition" />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-ink-700 mb-1.5">Tanggal Upload ke Platform</label>
+              <input v-model="addForm.uploadDate" type="datetime-local" class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition" />
+            </div>
+
+            <div class="sm:col-span-2">
+              <label class="block text-sm font-medium text-ink-700 mb-1.5">Platform</label>
+              <PlatformPicker v-model="addForm.platform" :options="optionsOf('platform')" />
+            </div>
+
+            <div class="sm:col-span-2">
+              <div class="flex items-center justify-between mb-1.5">
+                <label class="block text-sm font-medium text-ink-700">Link DB</label>
+                <button
+                  type="button"
+                  @click="addForm.linkDbs.push('')"
+                  class="inline-flex items-center gap-1 text-sm font-medium text-brand-600 hover:underline"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                  </svg>
+                  Tambah Link
+                </button>
+              </div>
+              <div class="space-y-2">
+                <div v-for="(link, i) in addForm.linkDbs" :key="i" class="flex items-center gap-2">
+                  <input
+                    v-model="addForm.linkDbs[i]"
+                    type="text"
+                    class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition"
+                    :placeholder="`https://www.dropbox.com/... (link ${i + 1})`"
+                  />
+                  <button
+                    v-if="addForm.linkDbs.length > 1"
+                    type="button"
+                    @click="addForm.linkDbs.splice(i, 1)"
+                    class="p-2 rounded-lg hover:bg-danger-50 text-danger-600 transition"
+                    title="Hapus link"
+                    aria-label="Hapus link"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="sm:col-span-2">
+              <label class="block text-sm font-medium text-ink-700 mb-1.5">Harga ($)</label>
+              <input v-model.number="addForm.price" type="number" min="0" step="0.5" class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition" placeholder="0.00" />
+            </div>
+
+            <div class="sm:col-span-2">
+              <label class="block text-sm font-medium text-ink-700 mb-1.5">Catatan</label>
+              <textarea v-model="addForm.note" rows="2" class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition resize-none" placeholder="Catatan tambahan..."></textarea>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-ink-100 bg-cream-50 rounded-b-2xl">
+            <button
+              @click="closeAddModal"
+              class="px-4 py-2.5 rounded-xl border border-ink-200 text-ink-600 hover:bg-white text-sm font-medium transition"
+            >
+              Batal
+            </button>
+            <button
+              @click="submitAdd"
+              class="px-5 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium transition shadow-sm"
+            >
+              Simpan Produk
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useProducts, formatPrice } from '../composables/useProducts'
+import { useProducts, formatPrice, nowLocal, normalizeUrl } from '../composables/useProducts'
 import { useOptions } from '../composables/useOptions'
+import { fileToCompressedDataUrl } from '../utils/imageFile'
+import { cleanLinks } from '../utils/links'
 import PlatformBadges from '../components/PlatformBadges.vue'
+import OptionSelect from '../components/OptionSelect.vue'
+import PlatformPicker from '../components/PlatformPicker.vue'
 
 const route = useRoute()
 const router = useRouter()
-const { products, totalSold, isSold } = useProducts()
+const { products, totalSold, isSold, addProduct } = useProducts()
 const { optionsOf } = useOptions()
 
 const NONE = '__none' // produk di kategori ini yang belum punya Substyle
@@ -284,5 +466,75 @@ function goBack() {
 
 function goToProduct(id) {
   router.push(`/produk/${id}`)
+}
+
+// ========== TAMBAH PRODUK ==========
+const showAddModal = ref(false)
+const addImageError = ref('')
+const addForm = ref(emptyAddForm())
+
+function emptyAddForm() {
+  return {
+    image: '',
+    name: '',
+    substyle: '',
+    designer: '',
+    date: nowLocal(),
+    uploadDate: '',
+    productionStatus: '',
+    platform: '',
+    linkDbs: [''],
+    price: 0,
+    note: ''
+  }
+}
+
+function openAddModal() {
+  addForm.value = emptyAddForm()
+  addImageError.value = ''
+  showAddModal.value = true
+}
+
+function closeAddModal() {
+  showAddModal.value = false
+}
+
+async function onPickAddImage(e) {
+  const file = e.target.files?.[0]
+  e.target.value = '' // supaya file yang sama bisa dipilih ulang
+  if (!file) return
+  try {
+    addForm.value.image = await fileToCompressedDataUrl(file)
+    addImageError.value = ''
+  } catch (err) {
+    addImageError.value = err.message
+  }
+}
+
+function submitAdd() {
+  if (!addForm.value.name.trim()) {
+    alert('Nama Produk wajib diisi')
+    return
+  }
+
+  const cleaned = cleanLinks(addForm.value.linkDbs, normalizeUrl)
+
+  addProduct({
+    image: addForm.value.image,
+    name: addForm.value.name.trim(),
+    style: name.value, // dikunci mengikuti kategori yang sedang dibuka
+    substyle: addForm.value.substyle.trim(),
+    designer: addForm.value.designer.trim(),
+    date: addForm.value.date,
+    uploadDate: addForm.value.uploadDate,
+    productionStatus: addForm.value.productionStatus.trim(),
+    platform: addForm.value.platform.trim(),
+    linkDb: cleaned[0] || '',
+    linkDbs: cleaned,
+    price: addForm.value.price || 0,
+    note: addForm.value.note.trim()
+  })
+
+  closeAddModal()
 }
 </script>
