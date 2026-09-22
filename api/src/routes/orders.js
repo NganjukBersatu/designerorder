@@ -3,6 +3,23 @@ import { pool } from '../config/db.js'
 
 const router = Router()
 
+// Mapping status dari frontend ke database
+const STATUS_MAP = {
+  menunggu: 'Pending',
+  pending: 'Pending',
+  'sedang dikerjakan': 'Progress',
+  progress: 'Progress',
+  'in progress': 'Progress',
+  selesai: 'Done',
+  done: 'Done',
+}
+
+function normalizeStatus(status) {
+  if (!status) return 'Pending'
+  const key = String(status).toLowerCase().trim()
+  return STATUS_MAP[key] || 'Pending'
+}
+
 function mapRow(r) {
   return {
     id: r.id,
@@ -11,7 +28,7 @@ function mapRow(r) {
     category: r.category,
     characterType: r.character_type,
     style: r.style,
-    totalOrder: r.total_order,
+    package: r.package,
     buyerName: r.buyer_name,
     buyerReference: r.buyer_reference,
     storeName: r.store_name,
@@ -23,7 +40,7 @@ function mapRow(r) {
   }
 }
 
-// GET /api/orders?search=...&status=Pending
+// GET /api/orders
 router.get('/', async (req, res) => {
   try {
     const { search, status } = req.query
@@ -33,11 +50,15 @@ router.get('/', async (req, res) => {
     if (search) {
       params.push(`%${search}%`)
       where.push(
-        `(buyer_name ILIKE $${params.length} OR category ILIKE $${params.length} OR store_name ILIKE $${params.length})`
+        `(buyer_name ILIKE $${params.length} 
+         OR category ILIKE $${params.length} 
+         OR store_name ILIKE $${params.length} 
+         OR style ILIKE $${params.length}
+         OR designer_name ILIKE $${params.length})`
       )
     }
     if (status) {
-      params.push(status)
+      params.push(normalizeStatus(status))
       where.push(`status = $${params.length}`)
     }
 
@@ -75,7 +96,7 @@ router.post('/', async (req, res) => {
     category,
     characterType,
     style,
-    totalOrder,
+    package: pkg,
     buyerName,
     buyerReference,
     storeName,
@@ -84,30 +105,30 @@ router.post('/', async (req, res) => {
     price,
   } = req.body
 
-  if (!orderDate || !designerName || !category || !characterType || !style || !buyerName) {
-    return res.status(400).json({ message: 'Field wajib belum lengkap' })
+  if (!buyerName) {
+    return res.status(400).json({ message: 'Nama pembeli wajib diisi' })
   }
 
   try {
     const result = await pool.query(
       `INSERT INTO orders
-        (order_date, designer_name, category, character_type, style, total_order,
+        (order_date, designer_name, category, character_type, style, package,
          buyer_name, buyer_reference, store_name, status, completion_date, price)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        RETURNING *`,
       [
-        orderDate,
-        designerName,
-        category,
-        characterType,
-        style,
-        totalOrder || 1,
+        orderDate || new Date().toISOString().slice(0, 10),
+        designerName || 'Unknown',
+        category || 'Custom',
+        characterType || '-',
+        style || '-',
+        pkg || null,
         buyerName,
         buyerReference || null,
         storeName || null,
-        status || 'Pending',
+        normalizeStatus(status),
         completionDate || null,
-        price || 0,
+        price ?? 0,
       ]
     )
     res.status(201).json({ data: mapRow(result.rows[0]) })
@@ -117,7 +138,7 @@ router.post('/', async (req, res) => {
   }
 })
 
-// PATCH /api/orders/:id (partial update, seperti COALESCE)
+// PATCH /api/orders/:id
 router.patch('/:id', async (req, res) => {
   const {
     orderDate,
@@ -125,7 +146,7 @@ router.patch('/:id', async (req, res) => {
     category,
     characterType,
     style,
-    totalOrder,
+    package: pkg,
     buyerName,
     buyerReference,
     storeName,
@@ -137,19 +158,19 @@ router.patch('/:id', async (req, res) => {
   try {
     const result = await pool.query(
       `UPDATE orders SET
-        order_date = COALESCE($1, order_date),
-        designer_name = COALESCE($2, designer_name),
-        category = COALESCE($3, category),
-        character_type = COALESCE($4, character_type),
-        style = COALESCE($5, style),
-        total_order = COALESCE($6, total_order),
-        buyer_name = COALESCE($7, buyer_name),
-        buyer_reference = $8,
-        store_name = $9,
-        status = COALESCE($10, status),
-        completion_date = $11,
-        price = COALESCE($12, price),
-        updated_at = now()
+        order_date       = COALESCE($1, order_date),
+        designer_name    = COALESCE($2, designer_name),
+        category         = COALESCE($3, category),
+        character_type   = COALESCE($4, character_type),
+        style            = COALESCE($5, style),
+        package          = COALESCE($6, package),
+        buyer_name       = COALESCE($7, buyer_name),
+        buyer_reference  = COALESCE($8, buyer_reference),
+        store_name       = COALESCE($9, store_name),
+        status           = COALESCE($10, status),
+        completion_date  = COALESCE($11, completion_date),
+        price            = COALESCE($12, price),
+        updated_at       = now()
        WHERE id = $13
        RETURNING *`,
       [
@@ -158,16 +179,17 @@ router.patch('/:id', async (req, res) => {
         category || null,
         characterType || null,
         style || null,
-        totalOrder || null,
+        pkg !== undefined ? pkg : null,
         buyerName || null,
         buyerReference !== undefined ? buyerReference : null,
         storeName !== undefined ? storeName : null,
-        status || null,
+        status ? normalizeStatus(status) : null,
         completionDate !== undefined ? completionDate : null,
         price !== undefined ? price : null,
         req.params.id,
       ]
     )
+
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'Pesanan tidak ditemukan' })
     }
@@ -181,7 +203,10 @@ router.patch('/:id', async (req, res) => {
 // DELETE /api/orders/:id
 router.delete('/:id', async (req, res) => {
   try {
-    const result = await pool.query('DELETE FROM orders WHERE id = $1 RETURNING id', [req.params.id])
+    const result = await pool.query(
+      'DELETE FROM orders WHERE id = $1 RETURNING id',
+      [req.params.id]
+    )
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'Pesanan tidak ditemukan' })
     }

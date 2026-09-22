@@ -1,47 +1,56 @@
 // src/composables/useProducts.js
 // State dibuat di luar fungsi supaya dipakai bersama oleh halaman List & Detail.
+// Sekarang data diambil dari API (bukan disimpan di memory lagi), jadi tidak
+// hilang saat halaman di-refresh.
 import { ref } from 'vue'
 
-// ========== DATA PRODUK ==========
-const products = ref([
-  {
-    id: 1,
-    name: 'Bunny knit Sweater Outfit',
-    style: 'Casual',
-    substyle: 'Daily outfit',
-    designer: 'Reni',
-    date: '2026-04-10T14:30',
-    productionStatus: 'Preview',
-    platform: 'Etsy & Booth',
-    linkDb: '',
-    price: 12,
-    note: ''
-  },
-  {
-    id: 2,
-    name: 'Mocha Street Set',
-    style: 'Casual',
-    substyle: 'Daily outfit',
-    designer: 'Reni',
-    date: '2026-04-15T09:00',
-    productionStatus: 'Preview',
-    platform: 'Booth',
-    linkDb: '',
-    price: 9,
-    note: ''
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
+
+const products = ref([])
+const sales = ref([])
+const loading = ref(false)
+const error = ref(null)
+
+async function request(path, options = {}) {
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: { 'Content-Type': 'application/json' },
+    ...options,
+  })
+  const body = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    throw new Error(body.message || 'Terjadi kesalahan pada server')
   }
-])
+  return body.data
+}
 
-// ========== DATA PENJUALAN (riwayat pembeli) ==========
-// Data di bawah hanya contoh — ganti dengan data asli / dari API.
-const sales = ref([
-  { id: 1, productId: 1, buyer: 'Sakura Lin', qty: 1, platform: 'Etsy', soldAt: '2026-04-12T10:15' },
-  { id: 2, productId: 1, buyer: 'Mika_Rose', qty: 1, platform: 'Booth', soldAt: '2026-04-14T20:42' },
-  { id: 3, productId: 2, buyer: 'Nadia Putri', qty: 1, platform: 'Booth', soldAt: '2026-04-18T08:05' }
-])
+// Susun ulang `sales` global dari data yang sudah nempel di tiap produk
+// (backend mengirim sales sebagai bagian dari respons produk).
+function flattenSales(productList) {
+  const all = []
+  for (const p of productList) {
+    for (const s of p.sales || []) all.push(s)
+  }
+  return all
+}
 
-let nextProductId = 3
-let nextSaleId = 4
+// ========== FETCH ==========
+async function fetchProducts() {
+  loading.value = true
+  error.value = null
+  try {
+    const data = await request('/products')
+    products.value = data
+    sales.value = flattenSales(data)
+  } catch (err) {
+    error.value = err.message
+    console.error('Gagal memuat produk:', err.message)
+  } finally {
+    loading.value = false
+  }
+}
+
+// Muat otomatis begitu composable ini pertama kali dipakai
+fetchProducts()
 
 // ========== HELPER FORMAT ==========
 export function formatDateTime(dateStr) {
@@ -82,21 +91,19 @@ export function useProducts() {
     return products.value.find(p => p.id === Number(id)) || null
   }
 
-  function addProduct(data) {
-    products.value.push({ id: nextProductId++, ...data })
+  async function addProduct(data) {
+    await request('/products', { method: 'POST', body: JSON.stringify(data) })
+    await fetchProducts()
   }
 
-  function updateProduct(id, data) {
-    const index = products.value.findIndex(p => p.id === id)
-    if (index !== -1) {
-      products.value[index] = { ...products.value[index], ...data }
-    }
+  async function updateProduct(id, data) {
+    await request(`/products/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
+    await fetchProducts()
   }
 
-  function removeProduct(id) {
-    products.value = products.value.filter(p => p.id !== id)
-    // hapus juga riwayat penjualannya
-    sales.value = sales.value.filter(s => s.productId !== id)
+  async function removeProduct(id) {
+    await request(`/products/${id}`, { method: 'DELETE' })
+    await fetchProducts()
   }
 
   // Riwayat penjualan satu produk, terbaru di atas
@@ -115,17 +122,24 @@ export function useProducts() {
     return totalSold(productId) > 0
   }
 
-  function addSale(productId, data) {
-    sales.value.push({ id: nextSaleId++, productId: Number(productId), ...data })
+  async function addSale(productId, data) {
+    await request(`/products/${productId}/sales`, { method: 'POST', body: JSON.stringify(data) })
+    await fetchProducts()
   }
 
-  function removeSale(saleId) {
-    sales.value = sales.value.filter(s => s.id !== saleId)
+  async function removeSale(saleId, productId) {
+    // productId dibutuhkan karena endpoint di-nest di bawah /products/:id/sales/:saleId
+    const pid = productId ?? sales.value.find(s => s.id === saleId)?.productId
+    await request(`/products/${pid}/sales/${saleId}`, { method: 'DELETE' })
+    await fetchProducts()
   }
 
   return {
     products,
     sales,
+    loading,
+    error,
+    fetchProducts,
     getProduct,
     addProduct,
     updateProduct,
