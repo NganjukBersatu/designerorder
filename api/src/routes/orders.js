@@ -1,7 +1,27 @@
 import { Router } from 'express'
 import { pool } from '../config/db.js'
+import { validateBody } from '../middleware/validate.js'
+import { parsePagination, buildPaginationMeta } from '../utils/pagination.js'
 
 const router = Router()
+
+const orderFieldsCreate = {
+  buyerName: { required: true, type: 'string', min: 1, max: 150, label: 'Nama pembeli' },
+  orderDate: { type: 'date', label: 'Tanggal pesanan' },
+  designerName: { type: 'string', max: 150, label: 'Nama desainer' },
+  category: { type: 'string', max: 100, label: 'Kategori' },
+  characterType: { type: 'string', max: 100, label: 'Jenis karakter' },
+  style: { type: 'string', max: 100, label: 'Style' },
+  package: { type: 'string', max: 100, label: 'Paket' },
+  buyerReference: { type: 'string', max: 255, label: 'Referensi pembeli' },
+  storeName: { type: 'string', max: 150, label: 'Nama toko' },
+  completionDate: { type: 'date', label: 'Tanggal selesai' },
+  price: { type: 'number', min: 0, label: 'Harga' },
+}
+
+const orderFieldsUpdate = Object.fromEntries(
+  Object.entries(orderFieldsCreate).map(([key, rule]) => [key, { ...rule, required: false }])
+)
 
 // Mapping status dari frontend ke database
 const STATUS_MAP = {
@@ -63,11 +83,29 @@ router.get('/', async (req, res) => {
     }
 
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : ''
+    const pagination = parsePagination(req.query)
+
+    let limitSql = ''
+    const queryParams = [...params]
+    if (pagination) {
+      queryParams.push(pagination.limit)
+      limitSql += ` LIMIT $${queryParams.length}`
+      queryParams.push(pagination.offset)
+      limitSql += ` OFFSET $${queryParams.length}`
+    }
+
     const result = await pool.query(
-      `SELECT * FROM orders ${whereSql} ORDER BY order_date DESC, created_at DESC`,
-      params
+      `SELECT * FROM orders ${whereSql} ORDER BY order_date DESC, created_at DESC${limitSql}`,
+      queryParams
     )
-    res.json({ data: result.rows.map(mapRow) })
+
+    let meta = null
+    if (pagination) {
+      const countResult = await pool.query(`SELECT COUNT(*)::int AS total FROM orders ${whereSql}`, params)
+      meta = buildPaginationMeta(pagination, countResult.rows[0].total)
+    }
+
+    res.json({ data: result.rows.map(mapRow), pagination: meta })
   } catch (err) {
     console.error(err)
     res.status(500).json({ message: 'Gagal mengambil data pesanan', error: err.message })
@@ -89,7 +127,7 @@ router.get('/:id', async (req, res) => {
 })
 
 // POST /api/orders
-router.post('/', async (req, res) => {
+router.post('/', validateBody(orderFieldsCreate), async (req, res) => {
   const {
     orderDate,
     designerName,
@@ -104,10 +142,6 @@ router.post('/', async (req, res) => {
     completionDate,
     price,
   } = req.body
-
-  if (!buyerName) {
-    return res.status(400).json({ message: 'Nama pembeli wajib diisi' })
-  }
 
   try {
     const result = await pool.query(
@@ -139,7 +173,7 @@ router.post('/', async (req, res) => {
 })
 
 // PATCH /api/orders/:id
-router.patch('/:id', async (req, res) => {
+router.patch('/:id', validateBody(orderFieldsUpdate), async (req, res) => {
   const {
     orderDate,
     designerName,
