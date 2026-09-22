@@ -1,25 +1,71 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
+import { useProducts } from '../composables/useProducts'
+import { useOptions } from '../composables/useOptions'
 
 const route = useRoute()
 const router = useRouter()
 const { logout: clearSession } = useAuth()
+const { products } = useProducts()
+const { mergeOptions } = useOptions()
+
 const mobileOpen = ref(false)
 const showLogoutConfirm = ref(false)
+const kategoriOpen = ref(false)
+
+// Auto buka submenu kalau sedang di halaman kategori / produk
+const isKategoriRelated = computed(() => {
+  return route.path.startsWith('/kategori') || route.path.startsWith('/produk')
+})
+
+watch(isKategoriRelated, (val) => {
+  if (val) kategoriOpen.value = true
+}, { immediate: true })
+
+// Ambil daftar kategori (Style) secara dinamis
+const categoryList = computed(() => {
+  const styles = new Set()
+  for (const p of products.value) {
+    const s = (p.style || '').trim()
+    if (s) styles.add(s)
+  }
+  return mergeOptions('style', [...styles].sort())
+})
 
 const menu = [
-  { to: '/', label: 'Ringkasan', icon: 'M3 12l9-9 9 9M5 10v10h14V10' },
-  { to: '/orders', label: 'Semua Pesanan', icon: 'M9 5h6M9 3v2M9 19h6M4 7h16v13H4zM4 7l2-4h12l2 4' },
-  { to: '/kategori', label: 'Kategori', icon: 'M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z' },
-  { to: '/pengaturan', label: 'Pengaturan', icon: 'M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6' },
+  {
+    to: '/',
+    label: 'Ringkasan',
+    icon: 'M3 12l9-9 9 9M5 10v10h14V10'
+  },
+  {
+    to: '/orders',
+    label: 'Semua Pesanan',
+    icon: 'M9 5h6M9 3v2M9 19h6M4 7h16v13H4zM4 7l2-4h12l2 4'
+  },
+  {
+    label: 'Kategori',
+    icon: 'M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z',
+    children: true // penanda punya submenu dinamis
+  },
+  {
+    to: '/pengaturan',
+    label: 'Pengaturan',
+    icon: 'M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6'
+  },
 ]
 
-// Menu tetap menyala di halaman turunannya (mis. /kategori/xxx → Kategori)
 function isActive(to) {
   if (to === '/') return route.path === '/'
   return route.path === to || route.path.startsWith(to + '/')
+}
+
+function isParentActive(item) {
+  if (!item.children) return false
+  // aktif kalau sedang di /kategori/...
+  return route.path.startsWith('/kategori')
 }
 
 function handleResize() {
@@ -28,14 +74,12 @@ function handleResize() {
 onMounted(() => window.addEventListener('resize', handleResize))
 onUnmounted(() => window.removeEventListener('resize', handleResize))
 
-// ========== KELUAR AKUN ==========
 function askLogout() {
   showLogoutConfirm.value = true
 }
 
 function logout() {
   clearSession()
-
   showLogoutConfirm.value = false
   mobileOpen.value = false
   router.push('/login')
@@ -74,28 +118,72 @@ function logout() {
 
       <!-- Menu -->
       <nav class="flex-1 overflow-y-auto py-3 px-2.5 space-y-1 text-[13.5px]">
-        <router-link
-          v-for="m in menu"
-          :key="m.to"
-          :to="m.to"
-          class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-white/80 hover:bg-white/10 hover:text-white transition"
-          :class="isActive(m.to) ? '!bg-white !text-brand-700 font-semibold shadow-sm' : ''"
-        >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            class="shrink-0"
+        <template v-for="m in menu" :key="m.label">
+          <!-- Menu biasa -->
+          <router-link
+            v-if="!m.children"
+            :to="m.to"
+            class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-white/80 hover:bg-white/10 hover:text-white transition"
+            :class="isActive(m.to) ? '!bg-white !text-brand-700 font-semibold shadow-sm' : ''"
           >
-            <path :d="m.icon" />
-          </svg>
-          <span>{{ m.label }}</span>
-        </router-link>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0">
+              <path :d="m.icon" />
+            </svg>
+            <span>{{ m.label }}</span>
+          </router-link>
+
+          <!-- Menu Kategori (submenu dinamis = daftar kategori) -->
+          <div v-else>
+            <button
+              type="button"
+              @click="kategoriOpen = !kategoriOpen"
+              class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-white/80 hover:bg-white/10 hover:text-white transition"
+              :class="isParentActive(m) || kategoriOpen ? '!bg-white/15 !text-white font-semibold' : ''"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0">
+                <path :d="m.icon" />
+              </svg>
+              <span class="flex-1 text-left">{{ m.label }}</span>
+              <svg
+                width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                class="transition-transform duration-200"
+                :class="kategoriOpen ? 'rotate-180' : ''"
+              >
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </button>
+
+            <!-- Submenu: daftar kategori langsung -->
+            <div v-show="kategoriOpen" class="mt-1 ml-3 pl-3 border-l border-white/20 space-y-0.5">
+              <!-- Link Semua Kategori (opsional, bisa dihapus kalau tidak mau) -->
+              <router-link
+                to="/kategori"
+                class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] text-white/70 hover:bg-white/10 hover:text-white transition"
+                :class="route.path === '/kategori' ? '!bg-white !text-brand-700 font-semibold' : ''"
+              >
+                <span class="w-1.5 h-1.5 rounded-full bg-current opacity-60"></span>
+                Semua Kategori
+              </router-link>
+
+              <!-- Daftar kategori dinamis -->
+              <router-link
+                v-for="cat in categoryList"
+                :key="cat"
+                :to="`/kategori/${encodeURIComponent(cat)}`"
+                class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] text-white/70 hover:bg-white/10 hover:text-white transition"
+                :class="route.path === `/kategori/${encodeURIComponent(cat)}` ? '!bg-white !text-brand-700 font-semibold' : ''"
+              >
+                <span class="w-1.5 h-1.5 rounded-full bg-current opacity-60"></span>
+                {{ cat }}
+              </router-link>
+
+              <!-- Kalau belum ada kategori sama sekali -->
+              <p v-if="!categoryList.length" class="px-3 py-2 text-[12px] text-white/40">
+                Belum ada kategori
+              </p>
+            </div>
+          </div>
+        </template>
       </nav>
 
       <!-- Footer sidebar: keluar akun -->
@@ -105,17 +193,7 @@ function logout() {
           @click="askLogout"
           class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13.5px] text-white/80 hover:bg-white/10 hover:text-white transition"
         >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            class="shrink-0"
-          >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0">
             <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" />
           </svg>
           <span>Keluar</span>

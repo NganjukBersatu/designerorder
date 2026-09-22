@@ -17,7 +17,7 @@ const form = reactive({
   category: props.initial?.category || '',
   characterType: props.initial?.characterType || '',
   style: props.initial?.style || '',
-  totalOrder: props.initial?.totalOrder || 1,
+  package: props.initial?.package || '',
   buyerName: props.initial?.buyerName || '',
   buyerReference: props.initial?.buyerReference || '',
   storeName: props.initial?.storeName || '',
@@ -31,7 +31,6 @@ async function submit() {
   errorMsg.value = ''
   const payload = {
     ...form,
-    totalOrder: Number(form.totalOrder),
     price: Number(form.price),
     buyerReference: form.buyerReference || null,
     storeName: form.storeName || null,
@@ -74,8 +73,8 @@ async function submit() {
         <input v-model="form.style" type="text" required placeholder="contoh: SemiRealist" class="input" />
       </label>
       <label class="block">
-        <span class="text-[13px] font-medium text-ink-700">Total order *</span>
-        <input v-model.number="form.totalOrder" type="number" min="1" required class="input" />
+        <span class="text-[13px] font-medium text-ink-700">Paket *</span>
+        <input v-model="form.package" type="text" required placeholder="contoh: Paket A, Custom" class="input" />
       </label>
     </div>
 
@@ -104,8 +103,8 @@ async function submit() {
         </select>
       </label>
       <label class="block">
-        <span class="text-[13px] font-medium text-ink-700">Harga (Rp) *</span>
-        <input v-model.number="form.price" type="number" min="0" required class="input" />
+        <span class="text-[13px] font-medium text-ink-700">Harga ($) *</span>
+        <input v-model.number="form.price" type="number" min="0" step="0.01" required class="input" />
       </label>
       <label class="block">
         <span class="text-[13px] font-medium text-ink-700">Tanggal selesai</span>
