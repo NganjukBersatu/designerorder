@@ -6,30 +6,42 @@ const STORAGE_KEY = 'designer-orders:dropdown-options'
 // usedIn = tempat dropdown ini muncul, ditampilkan di kartu Pengaturan.
 export const OPTION_GROUPS = [
   {
+    id: 'kategori',
+    key: 'style',
+    label: 'Kategori',
+    description: 'Kategori produk yang dipakai di halaman Kategori. Datanya sama dengan Style.',
+    usedIn: ['Halaman Kategori']
+  },
+  {
+    id: 'style',
     key: 'style',
     label: 'Style',
     description: 'Gaya utama produk, mis. Casual atau Fantasy.',
     usedIn: ['Form produk', 'Filter list']
   },
   {
+    id: 'substyle',
     key: 'substyle',
     label: 'Substyle',
     description: 'Gaya turunan, mis. Daily outfit atau Cyber.',
     usedIn: ['Form produk']
   },
   {
+    id: 'designer',
     key: 'designer',
     label: 'Designer',
     description: 'Nama designer yang mengerjakan produk.',
     usedIn: ['Form produk']
   },
   {
+    id: 'productionStatus',
     key: 'productionStatus',
     label: 'Status Produksi',
     description: 'Tahap produksi, mis. Preview atau Done.',
     usedIn: ['Form produk']
   },
   {
+    id: 'platform',
     key: 'platform',
     label: 'Platform',
     description: 'Tempat produk dijual. Tulis satu platform per pilihan; produk boleh memilih lebih dari satu.',

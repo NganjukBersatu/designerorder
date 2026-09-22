@@ -56,14 +56,14 @@
     >
       <section
         v-for="group in OPTION_GROUPS"
-        :key="group.key"
+        :key="group.id"
         :class="[
           'relative flex flex-col bg-white rounded-card shadow-card border border-ink-100 overflow-hidden',
-          group.key === 'platform' ? 'md:col-span-2' : ''
+          group.id === 'platform' ? 'md:col-span-2' : ''
         ]"
       >
         <!-- Penanda warna per dropdown -->
-        <span class="absolute left-0 top-0 bottom-0 w-1" :class="TONES[group.key]"></span>
+        <span class="absolute left-0 top-0 bottom-0 w-1" :class="TONES[group.id]"></span>
 
         <div class="pl-6 pr-5 pt-4 pb-3 border-b border-ink-100">
           <div class="flex items-center justify-between gap-3">
@@ -110,15 +110,15 @@
           <!-- Tambah pilihan -->
           <div class="flex items-center gap-2">
             <input
-              v-model="newOption[group.key]"
+              v-model="newOption[group.id]"
               type="text"
-              @keydown.enter.prevent="submitOption(group.key)"
+              @keydown.enter.prevent="submitOption(group)"
               class="flex-1 min-w-0 px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition"
               :placeholder="`Tambah ${group.label.toLowerCase()} baru`"
             />
             <button
               type="button"
-              @click="submitOption(group.key)"
+              @click="submitOption(group)"
               class="px-4 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium transition shadow-sm"
             >
               Tambah
@@ -126,7 +126,7 @@
           </div>
 
           <p
-            v-if="optionMsg.key === group.key && optionMsg.text"
+            v-if="optionMsg.id === group.id && optionMsg.text"
             :class="['text-xs mt-2', optionMsg.ok ? 'text-ok-700' : 'text-danger-600']"
             role="status"
           >
@@ -137,7 +137,7 @@
         <div class="flex items-center justify-between gap-3 pl-6 pr-5 py-3 border-t border-ink-100 bg-cream-50 text-xs">
           <button
             type="button"
-            @click="importFromProducts(group.key)"
+            @click="importFromProducts(group)"
             class="font-medium text-brand-600 hover:underline"
           >
             Ambil dari produk
@@ -322,8 +322,9 @@ const TABS = [
 const activeTab = ref('dropdown')
 const activeTabInfo = computed(() => TABS.find(t => t.key === activeTab.value)?.info || '')
 
-// Warna penanda di sisi kiri tiap kartu dropdown
+// Warna penanda di sisi kiri tiap kartu dropdown (per id kartu, bukan per key data)
 const TONES = {
+  kategori: 'bg-[#8B5CF6]',
   style: 'bg-[#8B5CF6]',
   substyle: 'bg-[#3B82F6]',
   designer: 'bg-[#14A38B]',
@@ -335,17 +336,21 @@ const TONES = {
 const { optionsOf, addOption, removeOption, resetOptions } = useOptions()
 const { products } = useProducts()
 
-const newOption = ref(Object.fromEntries(OPTION_GROUPS.map(g => [g.key, ''])))
-const optionMsg = ref({ key: '', ok: false, text: '' })
+// newOption & optionMsg diindeks pakai group.id, bukan group.key —
+// supaya kartu Kategori dan kartu Style (yang berbagi data 'style')
+// punya input & pesan status masing-masing yang independen.
+const newOption = ref(Object.fromEntries(OPTION_GROUPS.map(g => [g.id, ''])))
+const optionMsg = ref({ id: '', ok: false, text: '' })
 
-function submitOption(key) {
-  const result = addOption(key, newOption.value[key])
-  optionMsg.value = { key, ok: result.ok, text: result.message }
-  if (result.ok) newOption.value[key] = ''
+function submitOption(group) {
+  const result = addOption(group.key, newOption.value[group.id])
+  optionMsg.value = { id: group.id, ok: result.ok, text: result.message }
+  if (result.ok) newOption.value[group.id] = ''
 }
 
 // Tambahkan semua nilai yang sudah dipakai di data produk ke daftar pilihan
-function importFromProducts(key) {
+function importFromProducts(group) {
+  const key = group.key
   const found = []
   for (const p of products.value) {
     const values = key === 'platform' ? splitPlatforms(p.platform) : [p[key]]
@@ -360,7 +365,7 @@ function importFromProducts(key) {
   }
 
   optionMsg.value = {
-    key,
+    id: group.id,
     ok: true,
     text: added
       ? `${added} pilihan ditambahkan dari data produk`
@@ -371,7 +376,7 @@ function importFromProducts(key) {
 function resetGroup(group) {
   if (!confirm(`Kembalikan pilihan ${group.label} ke bawaan?`)) return
   resetOptions(group.key)
-  optionMsg.value = { key: group.key, ok: true, text: 'Pilihan dikembalikan ke bawaan' }
+  optionMsg.value = { id: group.id, ok: true, text: 'Pilihan dikembalikan ke bawaan' }
 }
 
 // ========== USERNAME ==========
