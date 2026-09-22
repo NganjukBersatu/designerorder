@@ -39,29 +39,6 @@
         </button>
       </div>
 
-      <!-- Ringkasan kategori -->
-      <div class="mb-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div class="relative bg-white rounded-card shadow-card border border-ink-100 overflow-hidden pl-5 pr-4 py-4">
-          <span class="absolute left-0 top-0 bottom-0 w-1 bg-brand-400"></span>
-          <p class="text-[13px] text-ink-500 mb-1.5">Jumlah Produk</p>
-          <p class="text-[28px] leading-none font-semibold text-ink-900">{{ items.length }}</p>
-        </div>
-
-        <div class="relative bg-white rounded-card shadow-card border border-ink-100 overflow-hidden pl-5 pr-4 py-4">
-          <span class="absolute left-0 top-0 bottom-0 w-1 bg-ok-500"></span>
-          <p class="text-[13px] text-ink-500 mb-1.5">Total Terjual</p>
-          <p class="text-[28px] leading-none font-semibold text-ok-600">
-            {{ totalUnits }} <span class="text-sm font-normal text-ink-400">unit</span>
-          </p>
-        </div>
-
-        <div class="relative bg-white rounded-card shadow-card border border-ink-100 overflow-hidden pl-5 pr-4 py-4">
-          <span class="absolute left-0 top-0 bottom-0 w-1 bg-brand-400"></span>
-          <p class="text-[13px] text-ink-500 mb-1.5">Total Pendapatan</p>
-          <p class="text-[28px] leading-none font-semibold text-ink-900">{{ formatPrice(totalRevenue) }}</p>
-        </div>
-      </div>
-
       <!-- Isi kategori: daftar produk -->
       <div class="bg-white rounded-card shadow-card border border-ink-100 overflow-hidden">
         <div class="px-5 py-4 border-b border-ink-100 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
@@ -269,17 +246,38 @@
 
             <div>
               <label class="block text-sm font-medium text-ink-700 mb-1.5">Substyle</label>
-              <OptionSelect v-model="addForm.substyle" :options="optionsOf('substyle')" placeholder="Pilih substyle" />
+              <select
+                v-model="addForm.substyle"
+                class="w-full px-3 py-2.5 rounded-xl border border-ink-200 bg-white focus:border-brand-400 outline-none text-sm transition"
+              >
+                <option value="">Pilih substyle</option>
+                <option v-for="sub in substyleOptions" :key="sub" :value="sub">{{ sub }}</option>
+              </select>
+              <p v-if="!substyleOptions.length" class="text-[12px] text-ink-400 mt-1">
+                Belum ada pilihan substyle, tambahkan dulu di halaman Pengaturan.
+              </p>
             </div>
 
             <div>
               <label class="block text-sm font-medium text-ink-700 mb-1.5">Designer</label>
-              <OptionSelect v-model="addForm.designer" :options="optionsOf('designer')" placeholder="Pilih designer" />
+              <select
+                v-model="addForm.designer"
+                class="w-full px-3 py-2.5 rounded-xl border border-ink-200 bg-white focus:border-brand-400 outline-none text-sm transition"
+              >
+                <option value="">Pilih designer</option>
+                <option v-for="d in designerOptions" :key="d" :value="d">{{ d }}</option>
+              </select>
             </div>
 
             <div>
               <label class="block text-sm font-medium text-ink-700 mb-1.5">Status Produksi</label>
-              <OptionSelect v-model="addForm.productionStatus" :options="optionsOf('productionStatus')" placeholder="Pilih status produksi" />
+              <select
+                v-model="addForm.productionStatus"
+                class="w-full px-3 py-2.5 rounded-xl border border-ink-200 bg-white focus:border-brand-400 outline-none text-sm transition"
+              >
+                <option value="">Pilih status produksi</option>
+                <option v-for="s in productionStatusOptions" :key="s" :value="s">{{ s }}</option>
+              </select>
             </div>
 
             <div>
@@ -371,6 +369,7 @@ import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useProducts, formatPrice, nowLocal, normalizeUrl } from '../composables/useProducts'
 import { useOptions } from '../composables/useOptions'
+import { useTeamMembers } from '../composables/useTeamMembers'
 import { fileToCompressedDataUrl } from '../utils/imageFile'
 import { cleanLinks } from '../utils/links'
 import PlatformBadges from '../components/PlatformBadges.vue'
@@ -380,7 +379,18 @@ import PlatformPicker from '../components/PlatformPicker.vue'
 const route = useRoute()
 const router = useRouter()
 const { products, totalSold, isSold, addProduct } = useProducts()
-const { optionsOf } = useOptions()
+const { optionsOf, mergeOptions } = useOptions()
+const { members } = useTeamMembers()
+
+const substyleOptions = computed(() =>
+  mergeOptions('substyle', [...new Set(products.value.map(p => p.substyle).filter(Boolean))].sort())
+)
+const designerOptions = computed(() =>
+  mergeOptions('designer', members.value.map(m => m.username))
+)
+const productionStatusOptions = computed(() =>
+  mergeOptions('productionStatus', [...new Set(products.value.map(p => p.productionStatus).filter(Boolean))].sort())
+)
 
 const NONE = '__none' // produk di kategori ini yang belum punya Substyle
 
@@ -395,11 +405,6 @@ const items = computed(() =>
 // Kategori tetap ada walau kosong, selama Style-nya masih terdaftar di Pengaturan
 const categoryExists = computed(
   () => items.value.length > 0 || optionsOf('style').includes(name.value)
-)
-
-const totalUnits = computed(() => items.value.reduce((sum, p) => sum + totalSold(p.id), 0))
-const totalRevenue = computed(() =>
-  items.value.reduce((sum, p) => sum + totalSold(p.id) * (p.price || 0), 0)
 )
 
 // ========== FILTER SUBSTYLE & PENCARIAN ==========

@@ -1,11 +1,30 @@
 const BASE = '/api'
+const TOKEN_KEY = 'auth_token'
+
+export function getToken() {
+  return localStorage.getItem(TOKEN_KEY) || ''
+}
+
+export function setToken(token) {
+  if (token) localStorage.setItem(TOKEN_KEY, token)
+  else localStorage.removeItem(TOKEN_KEY)
+}
 
 async function request(path, options = {}) {
+  const token = getToken()
   const res = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     ...options,
   })
   const body = await res.json().catch(() => ({}))
+  if (res.status === 401) {
+    // Token habis/tidak valid: paksa keluar supaya tidak ada request yang gagal diam-diam
+    setToken('')
+    if (!location.pathname.startsWith('/login')) location.href = '/login'
+  }
   if (!res.ok) {
     throw new Error(body.message || 'Terjadi kesalahan pada server')
   }

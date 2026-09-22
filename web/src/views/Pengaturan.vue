@@ -1,22 +1,5 @@
 <template>
   <div class="w-full max-w-4xl space-y-6">
-    <!-- Peringatan kata sandi bawaan -->
-    <div
-      v-if="isDefaultPassword"
-      class="flex flex-wrap items-center justify-between gap-3 px-4 py-3 rounded-xl bg-warn-100 text-warn-700 text-sm"
-      role="alert"
-    >
-      <span>Kamu masih memakai kata sandi bawaan. Segera ganti kata sandi agar dashboard lebih aman.</span>
-      <button
-        v-if="activeTab !== 'akun'"
-        type="button"
-        @click="activeTab = 'akun'"
-        class="font-medium underline underline-offset-2 hover:opacity-80 transition"
-      >
-        Ganti sekarang
-      </button>
-    </div>
-
     <!-- Kategori pengaturan -->
     <div>
       <div
@@ -46,16 +29,16 @@
       <p class="text-[13px] text-ink-500 mt-2.5">{{ activeTabInfo }}</p>
     </div>
 
-    <!-- ==================== KATEGORI: PILIHAN DROPDOWN ==================== -->
+    <!-- ==================== KATEGORI: PILIHAN DROPDOWN (Produk / Tugas) ==================== -->
     <div
-      v-show="activeTab === 'dropdown'"
-      id="panel-dropdown"
+      v-show="activeTab === 'dropdown-produk' || activeTab === 'dropdown-tugas'"
+      :id="`panel-${activeTab}`"
       role="tabpanel"
-      aria-labelledby="tab-dropdown"
+      :aria-labelledby="`tab-${activeTab}`"
       class="grid grid-cols-1 md:grid-cols-2 gap-5"
     >
       <section
-        v-for="group in OPTION_GROUPS"
+        v-for="group in currentGroups"
         :key="group.id"
         :class="[
           'relative flex flex-col bg-white rounded-card shadow-card border border-ink-100 overflow-hidden',
@@ -136,12 +119,14 @@
 
         <div class="flex items-center justify-between gap-3 pl-6 pr-5 py-3 border-t border-ink-100 bg-cream-50 text-xs">
           <button
+            v-if="group.scope === 'produk'"
             type="button"
             @click="importFromProducts(group)"
             class="font-medium text-brand-600 hover:underline"
           >
             Ambil dari produk
           </button>
+          <span v-else></span>
           <button
             type="button"
             @click="resetGroup(group)"
@@ -293,6 +278,110 @@
         </div>
       </section>
     </div>
+
+    <!-- ==================== KATEGORI: ANGGOTA TIM ==================== -->
+    <div
+      v-show="activeTab === 'tim'"
+      id="panel-tim"
+      role="tabpanel"
+      aria-labelledby="tab-tim"
+      class="max-w-2xl space-y-6"
+    >
+      <section class="relative bg-white rounded-card shadow-card border border-ink-100 overflow-hidden">
+        <span class="absolute left-0 top-0 bottom-0 w-1 bg-[#14A38B]"></span>
+
+        <div class="pl-6 pr-5 py-4 border-b border-ink-100">
+          <h2 class="text-base font-semibold text-ink-900">
+            Tim {{ teamName }}
+          </h2>
+          <p class="text-[13px] text-ink-500 mt-0.5">
+            Semua anggota di sini berbagi produk & pesanan yang sama, apa pun rolenya.
+            <span v-if="role === 'admin'">Sebagai admin, kamu cuma bisa tambah/hapus anggota biasa.</span>
+            <span v-else-if="role === 'member'">Hanya owner/admin yang bisa menambah/menghapus anggota.</span>
+          </p>
+        </div>
+
+        <div class="pl-6 pr-5 py-5 space-y-3">
+          <div
+            v-if="membersMsg.text"
+            :class="[
+              'px-3 py-2.5 rounded-xl text-sm',
+              membersMsg.ok ? 'bg-ok-100 text-ok-700' : 'bg-danger-50 text-danger-600'
+            ]"
+            role="alert"
+          >
+            {{ membersMsg.text }}
+          </div>
+
+          <div
+            v-for="m in members"
+            :key="m.id"
+            class="flex items-center justify-between gap-3 px-3.5 py-3 rounded-xl bg-cream-50"
+          >
+            <div class="min-w-0">
+              <p class="text-sm font-medium text-ink-800 truncate">
+                {{ m.username }}
+                <span v-if="m.username === user" class="text-ink-400 font-normal">(kamu)</span>
+              </p>
+              <p class="text-[12px] text-ink-500">{{ roleLabel(m.role) }}</p>
+            </div>
+            <button
+              v-if="m.username !== user && canManage(m.role)"
+              type="button"
+              @click="removeMember(m)"
+              class="p-2 rounded-lg hover:bg-danger-50 text-danger-600 transition shrink-0"
+              title="Hapus anggota"
+              aria-label="Hapus anggota"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </button>
+          </div>
+          <p v-if="!members.length" class="text-sm text-ink-400">Belum ada anggota.</p>
+        </div>
+
+        <!-- Tambah anggota: owner & admin -->
+        <div v-if="role === 'owner' || role === 'admin'" class="pl-6 pr-5 py-5 border-t border-ink-100 bg-cream-50 space-y-3">
+          <h3 class="text-sm font-semibold text-ink-800">Tambah anggota</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <input
+              v-model="newMember.username"
+              type="text"
+              class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition bg-white"
+              placeholder="Username"
+            />
+            <input
+              v-model="newMember.password"
+              type="password"
+              class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition bg-white"
+              placeholder="Kata sandi (min. 8 karakter)"
+            />
+          </div>
+          <div class="flex items-center justify-between gap-3">
+            <!-- Admin cuma boleh nambah anggota biasa, jadi selector role cuma muncul buat owner -->
+            <select
+              v-if="role === 'owner'"
+              v-model="newMember.role"
+              class="px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition bg-white"
+            >
+              <option value="member">Biasa</option>
+              <option value="admin">Admin</option>
+              <option value="owner">Owner</option>
+            </select>
+            <span v-else class="text-sm text-ink-500">Ditambahkan sebagai anggota biasa</span>
+            <button
+              type="button"
+              @click="addMember"
+              :disabled="addMemberLoading"
+              class="px-4 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 disabled:opacity-60 text-white text-sm font-medium transition shadow-sm"
+            >
+              {{ addMemberLoading ? 'Menambahkan...' : 'Tambah Anggota' }}
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
   </div>
 </template>
 
@@ -302,24 +391,35 @@ import { useAuth } from '../composables/useAuth'
 import { useOptions, OPTION_GROUPS } from '../composables/useOptions'
 import { useProducts } from '../composables/useProducts'
 import { splitPlatforms } from '../utils/platforms'
+import { api } from '../utils/api.js'
 
-const { user, isDefaultPassword, changeUsername, changePassword } = useAuth()
+const { user, role, teamName, changeUsername, changePassword } = useAuth()
 
 // ========== KATEGORI PENGATURAN ==========
 const TABS = [
   {
-    key: 'dropdown',
-    label: 'Pilihan dropdown',
+    key: 'dropdown-produk',
+    label: 'Pilihan Produk',
     info: 'Atur pilihan yang muncul di form produk, filter list, dan Catat Penjualan.'
+  },
+  {
+    key: 'dropdown-tugas',
+    label: 'Pilihan Tugas',
+    info: 'Atur pilihan yang muncul di form Tugas — terpisah total dari pilihan produk jualan.'
   },
   {
     key: 'akun',
     label: 'Akun',
     info: 'Username dan kata sandi untuk masuk ke dashboard.'
+  },
+  {
+    key: 'tim',
+    label: 'Anggota Tim',
+    info: 'Kelola siapa saja yang bisa akses produk & pesanan tim ini.'
   }
 ]
 
-const activeTab = ref('dropdown')
+const activeTab = ref('dropdown-produk')
 const activeTabInfo = computed(() => TABS.find(t => t.key === activeTab.value)?.info || '')
 
 // Warna penanda di sisi kiri tiap kartu dropdown (per id kartu, bukan per key data)
@@ -329,12 +429,21 @@ const TONES = {
   substyle: 'bg-[#3B82F6]',
   designer: 'bg-[#14A38B]',
   productionStatus: 'bg-[#E0A21B]',
-  platform: 'bg-[#F0782B]'
+  platform: 'bg-[#F0782B]',
+  taskCategory: 'bg-[#8B5CF6]',
+  taskSubstyle: 'bg-[#3B82F6]',
+  taskProductionStatus: 'bg-[#E0A21B]',
+  taskDesigner: 'bg-[#14A38B]'
 }
 
 // ========== PILIHAN DROPDOWN ==========
 const { optionsOf, addOption, removeOption, resetOptions } = useOptions()
 const { products } = useProducts()
+
+// Grup mana yang kelihatan tergantung tab aktif (Pilihan Produk vs Pilihan Tugas)
+const currentGroups = computed(() =>
+  OPTION_GROUPS.filter(g => g.scope === (activeTab.value === 'dropdown-tugas' ? 'tugas' : 'produk'))
+)
 
 // newOption & optionMsg diindeks pakai group.id, bukan group.key —
 // supaya kartu Kategori dan kartu Style (yang berbagi data 'style')
@@ -438,4 +547,67 @@ async function submitPassword() {
     passwordForm.value = { current: '', next: '', confirm: '' }
   }
 }
+
+// ========== ANGGOTA TIM ==========
+const members = ref([])
+const membersMsg = ref({ ok: false, text: '' })
+const newMember = ref({ username: '', password: '', role: 'member' })
+const addMemberLoading = ref(false)
+
+const ROLE_LABELS = { owner: 'Owner', admin: 'Admin', member: 'Biasa' }
+function roleLabel(r) {
+  return ROLE_LABELS[r] || r
+}
+
+// owner boleh kelola siapa saja; admin cuma boleh kelola anggota biasa; biasa gak boleh kelola siapa pun
+function canManage(targetRole) {
+  if (role.value === 'owner') return true
+  if (role.value === 'admin') return targetRole === 'member'
+  return false
+}
+
+async function loadMembers() {
+  try {
+    const res = await api.get('/team/members')
+    members.value = res.data
+  } catch (err) {
+    membersMsg.value = { ok: false, text: err.message }
+  }
+}
+
+async function addMember() {
+  membersMsg.value = { ok: false, text: '' }
+  if (!newMember.value.username.trim() || !newMember.value.password) {
+    membersMsg.value = { ok: false, text: 'Isi username dan kata sandi' }
+    return
+  }
+
+  addMemberLoading.value = true
+  try {
+    await api.post('/team/members', {
+      username: newMember.value.username.trim(),
+      password: newMember.value.password,
+      role: role.value === 'owner' ? newMember.value.role : 'member',
+    })
+    newMember.value = { username: '', password: '', role: 'member' }
+    membersMsg.value = { ok: true, text: 'Anggota berhasil ditambahkan' }
+    await loadMembers()
+  } catch (err) {
+    membersMsg.value = { ok: false, text: err.message }
+  } finally {
+    addMemberLoading.value = false
+  }
+}
+
+async function removeMember(member) {
+  if (!confirm(`Hapus anggota "${member.username}" dari tim?`)) return
+  try {
+    await api.delete(`/team/members/${member.id}`)
+    await loadMembers()
+  } catch (err) {
+    membersMsg.value = { ok: false, text: err.message }
+  }
+}
+
+onMounted(loadMembers)
 </script>

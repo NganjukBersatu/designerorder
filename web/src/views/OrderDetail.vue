@@ -66,7 +66,7 @@ function onSaved(updated) {
             <p class="text-[12px] text-ink-400">Ringkasan nilai</p>
             <p class="text-[24px] font-semibold text-ink-900 mt-1">{{ amount(order.price) }}</p>
             <div class="mt-4 space-y-2 text-[13px]">
-              <div class="flex justify-between"><span class="text-ink-400">Total order</span><b class="text-ink-800">{{ order.totalOrder }} item</b></div>
+              <div class="flex justify-between"><span class="text-ink-400">Paket</span><b class="text-ink-800">{{ order.package || 'Satuan' }}</b></div>
               <div class="flex justify-between"><span class="text-ink-400">Designer</span><b class="text-ink-800">{{ order.designerName }}</b></div>
               <div class="flex justify-between"><span class="text-ink-400">Tanggal masuk</span><b class="text-ink-800">{{ shortDate(order.orderDate) }}</b></div>
               <div class="flex justify-between"><span class="text-ink-400">Selesai</span><b class="text-ink-800">{{ shortDate(order.completionDate) }}</b></div>

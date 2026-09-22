@@ -33,6 +33,12 @@ const routes = [
         component: () => import('../views/OrderDetail.vue'),
         meta: { title: 'Detail Pesanan', subtitle: 'Lihat dan perbarui detail satu pesanan' },
       },
+      {
+        path: 'tugas',
+        name: 'tugas',
+        component: () => import('../views/Tugas.vue'),
+        meta: { title: 'Tugas', subtitle: 'Kerjaan/service anggota tim, di luar produk yang dijual' },
+      },
       // ===== Detail Produk (tetap ada, tapi tidak ada List Produk global) =====
       {
         path: 'produk/:id',
