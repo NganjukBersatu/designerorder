@@ -1,7 +1,41 @@
 import { Router } from 'express'
 import { pool } from '../config/db.js'
+import { validateBody } from '../middleware/validate.js'
+import { parsePagination, buildPaginationMeta } from '../utils/pagination.js'
 
 const router = Router()
+
+const productFieldsCreate = {
+  name: { required: true, type: 'string', min: 1, max: 255, label: 'Nama produk' },
+  style: { type: 'string', max: 100, label: 'Style' },
+  substyle: { type: 'string', max: 100, label: 'Substyle' },
+  designer: { type: 'string', max: 150, label: 'Desainer' },
+  date: { type: 'date', label: 'Tanggal' },
+  uploadDate: { type: 'date', label: 'Tanggal upload' },
+  productionStatus: { type: 'string', max: 100, label: 'Status produksi' },
+  platform: { type: 'string', max: 255, label: 'Platform' },
+  linkDb: { type: 'string', max: 2000, label: 'Link DB' },
+  linkDbs: { type: 'array', itemType: 'string', label: 'Daftar link DB' },
+  price: { type: 'number', min: 0, label: 'Harga' },
+  note: { type: 'string', max: 5000, label: 'Catatan' },
+}
+
+const productFieldsUpdate = Object.fromEntries(
+  Object.entries(productFieldsCreate).map(([key, rule]) => [key, { ...rule, required: false }])
+)
+
+const saleFieldsCreate = {
+  buyer: { required: true, type: 'string', min: 1, max: 150, label: 'Nama pembeli' },
+  qty: { type: 'number', integer: true, min: 1, label: 'Jumlah' },
+  platform: { type: 'string', max: 100, label: 'Platform' },
+  package: { type: 'string', max: 100, label: 'Paket' },
+  total: { type: 'number', min: 0, label: 'Total' },
+  soldAt: { type: 'date', label: 'Tanggal jual' },
+}
+
+const saleFieldsUpdate = Object.fromEntries(
+  Object.entries(saleFieldsCreate).map(([key, rule]) => [key, { ...rule, required: false }])
+)
 
 // Query dasar yang menempelkan links & sales sebagai JSON array
 // langsung dari SQL, supaya frontend tidak perlu request terpisah.
@@ -69,8 +103,29 @@ async function replaceLinks(client, productId, urls) {
 // GET /api/products
 router.get('/', async (req, res) => {
   try {
-    const result = await pool.query(`${SELECT_PRODUCT} ORDER BY p.created_at DESC`)
-    res.json({ data: result.rows.map(mapRow) })
+    const pagination = parsePagination(req.query)
+
+    let limitSql = ''
+    const queryParams = []
+    if (pagination) {
+      queryParams.push(pagination.limit)
+      limitSql += ` LIMIT $${queryParams.length}`
+      queryParams.push(pagination.offset)
+      limitSql += ` OFFSET $${queryParams.length}`
+    }
+
+    const result = await pool.query(
+      `${SELECT_PRODUCT} ORDER BY p.created_at DESC${limitSql}`,
+      queryParams
+    )
+
+    let meta = null
+    if (pagination) {
+      const countResult = await pool.query('SELECT COUNT(*)::int AS total FROM products')
+      meta = buildPaginationMeta(pagination, countResult.rows[0].total)
+    }
+
+    res.json({ data: result.rows.map(mapRow), pagination: meta })
   } catch (err) {
     console.error(err)
     res.status(500).json({ message: 'Gagal mengambil data produk', error: err.message })
@@ -92,15 +147,11 @@ router.get('/:id', async (req, res) => {
 })
 
 // POST /api/products
-router.post('/', async (req, res) => {
+router.post('/', validateBody(productFieldsCreate), async (req, res) => {
   const {
     image, name, style, substyle, designer, date, uploadDate,
     productionStatus, platform, linkDb, linkDbs, price, note,
   } = req.body
-
-  if (!name) {
-    return res.status(400).json({ message: 'Nama Produk wajib diisi' })
-  }
 
   const client = await pool.connect()
   try {
@@ -136,7 +187,7 @@ router.post('/', async (req, res) => {
 })
 
 // PATCH /api/products/:id
-router.patch('/:id', async (req, res) => {
+router.patch('/:id', validateBody(productFieldsUpdate), async (req, res) => {
   const {
     image, name, style, substyle, designer, date, uploadDate,
     productionStatus, platform, linkDb, linkDbs, price, note,
@@ -220,12 +271,8 @@ router.delete('/:id', async (req, res) => {
 // ============================================================
 
 // POST /api/products/:id/sales
-router.post('/:id/sales', async (req, res) => {
+router.post('/:id/sales', validateBody(saleFieldsCreate), async (req, res) => {
   const { buyer, qty, platform, package: pkg, total, soldAt } = req.body
-
-  if (!buyer) {
-    return res.status(400).json({ message: 'Nama pembeli wajib diisi' })
-  }
 
   try {
     const result = await pool.query(
@@ -242,7 +289,7 @@ router.post('/:id/sales', async (req, res) => {
 })
 
 // PATCH /api/products/:id/sales/:saleId
-router.patch('/:id/sales/:saleId', async (req, res) => {
+router.patch('/:id/sales/:saleId', validateBody(saleFieldsUpdate), async (req, res) => {
   const { buyer, qty, platform, package: pkg, total, soldAt } = req.body
 
   try {

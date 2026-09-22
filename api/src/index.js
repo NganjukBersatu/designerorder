@@ -6,6 +6,8 @@ import { testConnection, ensureSchema } from './config/db.js'
 import ordersRoutes from './routes/orders.js'
 import dashboardRoutes from './routes/dashboard.js'
 import productsRoutes from './routes/products.js'
+import authRoutes from './routes/auth.js'
+import { requireAuth } from './middleware/auth.js'
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -15,9 +17,10 @@ app.use(express.json({ limit: '10mb' })) // dinaikkan supaya gambar base64 dari 
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'designer-orders-api' }))
 
-app.use('/api/orders', ordersRoutes)
-app.use('/api/dashboard', dashboardRoutes)
-app.use('/api/products', productsRoutes)
+app.use('/api/auth', authRoutes)
+app.use('/api/orders', requireAuth, ordersRoutes)
+app.use('/api/dashboard', requireAuth, dashboardRoutes)
+app.use('/api/products', requireAuth, productsRoutes)
 
 app.listen(PORT, async () => {
   console.log(`Designer Orders API berjalan di http://localhost:${PORT}`)

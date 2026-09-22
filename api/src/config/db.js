@@ -1,5 +1,6 @@
 import pg from 'pg'
 import dotenv from 'dotenv'
+import bcrypt from 'bcryptjs'
 
 dotenv.config() // load file .env
 
@@ -112,6 +113,28 @@ export const ensureSchema = async () => {
       updated_at TIMESTAMP NOT NULL DEFAULT now()
     );
   `)
+
+  // ===== Users (login backend) =====
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY,
+      username VARCHAR(50) UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT now(),
+      updated_at TIMESTAMP NOT NULL DEFAULT now()
+    );
+  `)
+
+  // Seed akun admin default kalau tabel users masih kosong
+  const { rows } = await pool.query('SELECT COUNT(*)::int AS count FROM users')
+  if (rows[0].count === 0) {
+    const defaultHash = await bcrypt.hash('admin123', 10)
+    await pool.query(
+      'INSERT INTO users (username, password_hash) VALUES ($1, $2)',
+      ['admin', defaultHash]
+    )
+    console.log('👤 Akun default dibuat: admin / admin123 (segera ganti password)')
+  }
 }
 
 pool.on('error', (err) => {
