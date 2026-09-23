@@ -1,3 +1,5 @@
+// src/services/api.js (atau lokasi file api.js kamu sekarang)
+
 const BASE = '/api'
 const TOKEN_KEY = 'auth_token'
 
@@ -12,22 +14,31 @@ export function setToken(token) {
 
 async function request(path, options = {}) {
   const token = getToken()
-  const res = await fetch(`${BASE}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    ...options,
-  })
-  const body = await res.json().catch(() => ({}))
-  if (res.status === 401) {
-    // Token habis/tidak valid: paksa keluar supaya tidak ada request yang gagal diam-diam
-    setToken('')
-    if (!location.pathname.startsWith('/login')) location.href = '/login'
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(options.headers || {}),
   }
+
+  const res = await fetch(`${BASE}${path}`, {
+    ...options,
+    headers,
+  })
+
+  const body = await res.json().catch(() => ({}))
+
+  if (res.status === 401) {
+    // Token tidak ada / tidak valid / kadaluarsa -> bersihkan & lempar error khusus
+    setToken(null)
+    const err = new Error(body.message || 'Sesi berakhir, silakan login lagi')
+    err.isAuthError = true
+    throw err
+  }
+
   if (!res.ok) {
     throw new Error(body.message || 'Terjadi kesalahan pada server')
   }
+
   return body
 }
 

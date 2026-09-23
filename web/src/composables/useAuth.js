@@ -55,14 +55,10 @@ function applySession({ token, user, teamName }) {
   useTeamMembers().fetchMembers()
 }
 
-// ========== VALIDASI ==========
 export function validateUsername(value) {
   const v = (value || '').trim()
   if (v.length < 3) return 'Username minimal 3 karakter'
   if (v.length > 30) return 'Username maksimal 30 karakter'
-  if (!/^[a-zA-Z0-9._-]+$/.test(v)) {
-    return 'Username hanya boleh berisi huruf, angka, titik, garis bawah, dan strip'
-  }
   return ''
 }
 
@@ -78,7 +74,7 @@ export function useAuth() {
   const role = computed(() => currentUser.value?.role || '')
   const teamName = computed(() => currentUser.value?.teamName || '')
 
-  async function login(username, password) {
+  async function login(usernameInput, password) {
     try {
       const data = await apiCall('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) })
       applySession(data)
