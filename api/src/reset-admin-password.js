@@ -1,17 +1,17 @@
 // api/src/reset-admin-password.js
 // Jalankan: node src/reset-admin-password.js
-// Reset password user 'admin' ke NEW_PASSWORD di bawah ini.
+// Reset password user di USERNAME ke NEW_PASSWORD di bawah ini.
 
 import bcrypt from 'bcryptjs'
 import { pool } from './config/db.js'
 
-const USERNAME = 'admin'
+const USERNAME = 'admin1' // <-- ganti ke username akun yang mau di-reset
 const NEW_PASSWORD = 'admin123' // <-- GANTI ini ke password yang kamu mau, lalu jalankan
 
 async function main() {
   const hash = await bcrypt.hash(NEW_PASSWORD, 10)
   const result = await pool.query(
-    'UPDATE users SET password_hash = $1, updated_at = now() WHERE username = $2 RETURNING id, username',
+    'UPDATE users SET password_hash = $1 WHERE username = $2 RETURNING id, username',
     [hash, USERNAME]
   )
 
