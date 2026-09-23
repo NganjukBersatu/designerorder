@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '../utils/api.js'
 import { amount, shortDate, STATUS_LABEL } from '../utils/format.js'
@@ -15,6 +15,35 @@ const search = ref('')
 const status = ref('all')
 const showCreate = ref(false)
 
+// --- Dropdown status custom ---
+const statusOptions = [
+  { value: 'all', label: 'Semua status' },
+  { value: 'Pending', label: 'Menunggu' },
+  { value: 'Progress', label: 'Dikerjakan' },
+  { value: 'Done', label: 'Selesai' },
+]
+const statusOpen = ref(false)
+const statusDropdownRef = ref(null)
+const statusLabel = computed(() => statusOptions.find((o) => o.value === status.value)?.label || 'Semua status')
+
+function selectStatus(value) {
+  status.value = value
+  statusOpen.value = false
+}
+
+function onClickOutsideStatus(e) {
+  if (statusDropdownRef.value && !statusDropdownRef.value.contains(e.target)) {
+    statusOpen.value = false
+  }
+}
+onMounted(() => document.addEventListener('click', onClickOutsideStatus))
+onUnmounted(() => document.removeEventListener('click', onClickOutsideStatus))
+
+// --- Pagination ---
+const page = ref(1)
+const limit = ref(10)
+const pagination = ref(null) // { page, limit, total, totalPages }
+
 async function load() {
   loading.value = true
   errorMsg.value = ''
@@ -22,9 +51,12 @@ async function load() {
     const params = new URLSearchParams()
     if (search.value) params.set('search', search.value)
     if (status.value !== 'all') params.set('status', status.value)
+    params.set('page', page.value)
+    params.set('limit', limit.value)
     const qs = params.toString()
     const res = await api.get(`/orders${qs ? `?${qs}` : ''}`)
     orders.value = res.data
+    pagination.value = res.pagination
   } catch (err) {
     errorMsg.value = err.message
   } finally {
@@ -32,27 +64,67 @@ async function load() {
   }
 }
 
+// Reset ke halaman 1 setiap kali filter berubah, lalu muat ulang
+function resetAndLoad() {
+  page.value = 1
+  load()
+}
+
 let debounceTimer
 watch(search, () => {
   clearTimeout(debounceTimer)
-  debounceTimer = setTimeout(load, 300)
+  debounceTimer = setTimeout(resetAndLoad, 300)
 })
-watch(status, load)
+watch(status, resetAndLoad)
+watch(page, load)
 onMounted(load)
 
-async function remove(order) {
-  if (!confirm(`Hapus pesanan untuk ${order.buyerName}?`)) return
-  try {
-    await api.delete(`/orders/${order.id}`)
-    load()
-  } catch (err) {
-    alert(err.message)
-  }
-}
+// Fungsi remove() lama sudah digantikan askDelete() + confirmDelete() di atas
 
 function onCreated() {
   showCreate.value = false
-  load()
+  resetAndLoad()
+}
+
+// --- Konfirmasi hapus custom (ganti confirm() bawaan browser) ---
+const deleteTarget = ref(null) // order yang mau dihapus, null = modal tertutup
+const deleting = ref(false)
+
+function askDelete(order) {
+  deleteTarget.value = order
+}
+
+async function confirmDelete() {
+  if (!deleteTarget.value) return
+  deleting.value = true
+  try {
+    await api.delete(`/orders/${deleteTarget.value.id}`)
+    showToast(`Pesanan untuk ${deleteTarget.value.buyerName} berhasil dihapus`, 'success')
+    if (orders.value.length === 1 && page.value > 1) {
+      page.value -= 1
+    } else {
+      load()
+    }
+  } catch (err) {
+    showToast(err.message || 'Gagal menghapus pesanan', 'error')
+  } finally {
+    deleting.value = false
+    deleteTarget.value = null
+  }
+}
+
+// --- Toast notification custom (ganti alert() bawaan browser) ---
+const toast = ref(null) // { message, type }
+let toastTimer
+function showToast(message, type = 'success') {
+  clearTimeout(toastTimer)
+  toast.value = { message, type }
+  toastTimer = setTimeout(() => { toast.value = null }, 3000)
+}
+
+function goToPage(p) {
+  if (p < 1 || (pagination.value && p > pagination.value.totalPages)) return
+  page.value = p
 }
 </script>
 
@@ -66,15 +138,41 @@ function onCreated() {
           placeholder="Cari pembeli, kategori, atau toko..."
           class="w-full sm:w-72 rounded-lg border border-ink-200 px-3 py-2 text-[13.5px] focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none"
         />
-        <select
-          v-model="status"
-          class="rounded-lg border border-ink-200 px-3 py-2 text-[13.5px] focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none"
-        >
-          <option value="all">Semua status</option>
-          <option value="Pending">Menunggu</option>
-          <option value="Progress">Dikerjakan</option>
-          <option value="Done">Selesai</option>
-        </select>
+        <div ref="statusDropdownRef" class="relative w-full sm:w-44">
+          <button
+            type="button"
+            class="w-full flex items-center justify-between rounded-lg border border-ink-200 pl-3 pr-2.5 py-2 text-[13.5px] text-ink-700 bg-white hover:border-ink-300 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none cursor-pointer transition"
+            @click="statusOpen = !statusOpen"
+          >
+            <span>{{ statusLabel }}</span>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+              class="text-ink-400 transition-transform"
+              :class="{ 'rotate-180': statusOpen }"
+            >
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </button>
+
+          <div
+            v-if="statusOpen"
+            class="absolute z-10 mt-1.5 w-full rounded-lg border border-ink-100 bg-white shadow-card-hover overflow-hidden py-1"
+          >
+            <button
+              v-for="opt in statusOptions"
+              :key="opt.value"
+              type="button"
+              class="w-full text-left px-3 py-2 text-[13.5px] transition"
+              :class="opt.value === status
+                ? 'bg-brand-50 text-brand-700 font-medium'
+                : 'text-ink-700 hover:bg-ink-50'"
+              @click="selectStatus(opt.value)"
+            >
+              {{ opt.label }}
+            </button>
+          </div>
+        </div>
       </div>
       <button
         type="button"
@@ -85,7 +183,7 @@ function onCreated() {
       </button>
     </div>
 
-    <div class="bg-white rounded-card shadow-card overflow-hidden">
+    <div class="bg-white rounded-card shadow-card-hover border border-ink-100 overflow-hidden">
       <div v-if="loading" class="p-6 space-y-3">
         <div v-for="i in 5" :key="i" class="h-10 rounded-lg bg-ink-100 animate-pulse" />
       </div>
@@ -96,47 +194,167 @@ function onCreated() {
       <div v-else-if="orders.length === 0" class="p-10 text-center text-[13.5px] text-ink-400">
         Belum ada pesanan yang cocok.
       </div>
-      <div v-else class="overflow-x-auto">
-        <table class="w-full text-left">
-          <thead class="bg-ink-50 text-[11.5px] uppercase text-ink-400">
-            <tr>
-              <th class="px-4 py-3 font-medium">Pesanan</th>
-              <th class="px-4 py-3 font-medium">Pembeli</th>
-              <th class="px-4 py-3 font-medium">Tanggal</th>
-              <th class="px-4 py-3 font-medium">Harga</th>
-              <th class="px-4 py-3 font-medium">Status</th>
-              <th class="px-4 py-3 font-medium"></th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-ink-100 text-[13.5px]">
-            <tr v-for="o in orders" :key="o.id" class="hover:bg-ink-50 transition">
-              <td class="px-4 py-3">
-                <p class="font-medium text-ink-900">{{ o.category }}</p>
-                <p class="text-[12px] text-ink-400">{{ o.characterType }} · {{ o.style }}</p>
-              </td>
-              <td class="px-4 py-3">
-                <p class="text-ink-800">{{ o.buyerName }}</p>
-                <p class="text-[12px] text-ink-400">{{ o.storeName || o.buyerReference || '—' }}</p>
-              </td>
-              <td class="px-4 py-3 text-ink-500">{{ shortDate(o.orderDate) }}</td>
-              <td class="px-4 py-3 font-medium text-ink-900">{{ amount(o.price) }}</td>
-              <td class="px-4 py-3"><StatusBadge :status="o.status" /></td>
-              <td class="px-4 py-3 text-right whitespace-nowrap">
-                <button class="text-brand-500 hover:text-brand-600 text-[12.5px] font-medium mr-3" @click="router.push(`/orders/${o.id}`)">
-                  Edit
-                </button>
-                <button class="text-danger-500 hover:text-danger-600 text-[12.5px] font-medium" @click="remove(o)">
-                  Hapus
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <template v-else>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left">
+            <thead class="bg-ink-50 border-b border-ink-200 text-[11.5px] uppercase tracking-wide text-ink-500">
+              <tr>
+                <th class="px-5 py-3.5 font-semibold">Pesanan</th>
+                <th class="px-5 py-3.5 font-semibold">Pembeli</th>
+                <th class="px-5 py-3.5 font-semibold">Tanggal</th>
+                <th class="px-5 py-3.5 font-semibold">Harga</th>
+                <th class="px-5 py-3.5 font-semibold">Status</th>
+                <th class="px-5 py-3.5 font-semibold"></th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-ink-100 text-[13.5px]">
+              <tr v-for="o in orders" :key="o.id" class="hover:bg-ink-50 transition">
+                <td class="px-5 py-4">
+                  <p class="font-medium text-ink-900">{{ o.category }}</p>
+                  <p class="text-[12px] text-ink-400 mt-0.5">{{ o.characterType }} · {{ o.style }}</p>
+                </td>
+                <td class="px-5 py-4">
+                  <p class="text-ink-800">{{ o.buyerName }}</p>
+                  <p class="text-[12px] text-ink-400 mt-0.5">{{ o.storeName || o.buyerReference || '—' }}</p>
+                </td>
+                <td class="px-5 py-4 text-ink-500">{{ shortDate(o.orderDate) }}</td>
+                <td class="px-5 py-4 font-medium text-ink-900">{{ amount(o.price) }}</td>
+                <td class="px-5 py-4"><StatusBadge :status="o.status" /></td>
+                <td class="px-5 py-4 text-right whitespace-nowrap">
+                  <button
+                    type="button"
+                    class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-brand-600 hover:bg-brand-50 text-[12.5px] font-medium transition mr-1.5"
+                    @click="router.push(`/orders/${o.id}`)"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4Z" />
+                    </svg>
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-danger-500 hover:bg-danger-100 text-[12.5px] font-medium transition"
+                    @click="askDelete(o)"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M3 6h18" />
+                      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                      <path d="M10 11v6" />
+                      <path d="M14 11v6" />
+                      <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                    </svg>
+                    Hapus
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Footer: info jumlah data + navigasi halaman -->
+        <div
+          v-if="pagination"
+          class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-4 border-t border-ink-100 text-[12.5px] text-ink-400"
+        >
+          <p>
+            Menampilkan
+            <span class="font-medium text-ink-600">
+              {{ (pagination.page - 1) * pagination.limit + 1 }}–{{ Math.min(pagination.page * pagination.limit, pagination.total) }}
+            </span>
+            dari
+            <span class="font-medium text-ink-600">{{ pagination.total }}</span>
+            pesanan
+          </p>
+
+          <div v-if="pagination.totalPages > 1" class="flex items-center gap-1">
+            <button
+              type="button"
+              class="px-2.5 py-1.5 rounded-lg border border-ink-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-ink-50 transition"
+              :disabled="pagination.page <= 1"
+              @click="goToPage(pagination.page - 1)"
+            >
+              Sebelumnya
+            </button>
+            <span class="px-2 text-ink-500">
+              Hal {{ pagination.page }} / {{ pagination.totalPages }}
+            </span>
+            <button
+              type="button"
+              class="px-2.5 py-1.5 rounded-lg border border-ink-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-ink-50 transition"
+              :disabled="pagination.page >= pagination.totalPages"
+              @click="goToPage(pagination.page + 1)"
+            >
+              Berikutnya
+            </button>
+          </div>
+        </div>
+      </template>
     </div>
 
     <Modal v-if="showCreate" title="Catat pesanan baru" @close="showCreate = false">
       <OrderForm @saved="onCreated" @cancel="showCreate = false" />
     </Modal>
+
+    <!-- Modal konfirmasi hapus custom -->
+    <Modal v-if="deleteTarget" title="Hapus pesanan?" @close="deleteTarget = null">
+      <div class="space-y-5">
+        <p class="text-[13.5px] text-ink-600">
+          Pesanan <span class="font-medium text-ink-900">{{ deleteTarget.category }}</span>
+          untuk <span class="font-medium text-ink-900">{{ deleteTarget.buyerName }}</span>
+          akan dihapus permanen. Tindakan ini tidak bisa dibatalkan.
+        </p>
+        <div class="flex justify-end gap-2.5">
+          <button
+            type="button"
+            class="px-4 py-2 rounded-lg border border-ink-200 text-ink-600 text-[13.5px] font-medium hover:bg-ink-50 transition"
+            :disabled="deleting"
+            @click="deleteTarget = null"
+          >
+            Batal
+          </button>
+          <button
+            type="button"
+            class="px-4 py-2 rounded-lg bg-danger-500 hover:bg-danger-600 text-white text-[13.5px] font-medium transition disabled:opacity-60"
+            :disabled="deleting"
+            @click="confirmDelete"
+          >
+            {{ deleting ? 'Menghapus...' : 'Ya, hapus' }}
+          </button>
+        </div>
+      </div>
+    </Modal>
+
+    <!-- Toast notification custom -->
+    <Transition name="fade">
+      <div
+        v-if="toast"
+        class="fixed bottom-5 right-5 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-card-hover text-[13.5px] font-medium text-white"
+        :class="toast.type === 'error' ? 'bg-danger-600' : 'bg-brand-600'"
+      >
+        <svg v-if="toast.type === 'success'" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+          <path d="m9 11 3 3L22 4" />
+        </svg>
+        <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10" />
+          <path d="M12 8v4" />
+          <path d="M12 16h.01" />
+        </svg>
+        {{ toast.message }}
+      </div>
+    </Transition>
   </div>
 </template>
+
+<style scoped>
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
+}
+</style>
