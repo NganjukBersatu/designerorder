@@ -111,15 +111,20 @@
           <table class="w-full text-sm">
             <thead>
               <tr class="bg-cream-100 text-ink-500 border-b border-ink-100">
-                <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap w-12">No</th>
-                <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[240px]">Nama Produk</th>
+                <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap w-12 sticky left-0 z-20 bg-cream-100">No</th>
+                <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[260px]">Nama Produk</th>
                 <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[130px]">Substyle</th>
                 <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[110px]">Designer</th>
-                <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[170px]">Platform</th>
+                <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[160px]">Tanggal Dibuat</th>
+                <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[170px]">Tanggal Upload Platform</th>
                 <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[130px]">Status Produksi</th>
-                <th class="px-4 py-3.5 text-right font-medium whitespace-nowrap min-w-[90px]">Harga</th>
-                <th class="px-4 py-3.5 text-right font-medium whitespace-nowrap w-24">Terjual</th>
+                <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[170px]">Platform</th>
+                <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[160px]">Link DB</th>
+                <th class="px-4 py-3.5 text-right font-medium whitespace-nowrap min-w-[100px]">Harga</th>
+                <th class="px-4 py-3.5 text-right font-medium whitespace-nowrap w-28">Jumlah Terjual</th>
                 <th class="px-4 py-3.5 text-center font-medium whitespace-nowrap min-w-[120px]">Status Jual</th>
+                <th class="px-4 py-3.5 text-center font-medium whitespace-nowrap w-20">Aksi</th>
+                <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[140px]">Catatan</th>
               </tr>
             </thead>
 
@@ -129,9 +134,11 @@
                 v-for="(item, index) in filteredItems"
                 :key="item.id"
                 @click="goToProduct(item.id)"
-                class="border-b border-ink-50 hover:bg-cream-50/70 transition cursor-pointer"
+                class="border-b border-ink-50 hover:bg-cream-50/70 transition group cursor-pointer"
               >
-                <td class="px-4 py-4 text-ink-400">{{ index + 1 }}</td>
+                <td class="px-4 py-4 text-ink-400 sticky left-0 z-10 bg-white group-hover:bg-cream-50">
+                  {{ index + 1 }}
+                </td>
 
                 <td class="px-4 py-3">
                   <div class="flex items-center gap-3">
@@ -153,8 +160,34 @@
 
                 <td class="px-4 py-4 text-ink-600">{{ item.substyle || '—' }}</td>
                 <td class="px-4 py-4 text-ink-600">{{ item.designer || '—' }}</td>
-                <td class="px-4 py-4"><PlatformBadges :platform="item.platform" /></td>
+                <td class="px-4 py-4 text-ink-500 text-[13px]">
+                  {{ item.date ? formatDateTime(item.date) : '—' }}
+                </td>
+                <td class="px-4 py-4 text-ink-500 text-[13px]">
+                  {{ item.uploadDate ? formatDateTime(item.uploadDate) : '—' }}
+                </td>
                 <td class="px-4 py-4 text-ink-600">{{ item.productionStatus || '—' }}</td>
+                <td class="px-4 py-4"><PlatformBadges :platform="item.platform" /></td>
+                <td class="px-4 py-4">
+                  <div v-if="getLinks(item).length" class="flex flex-col gap-1">
+                    <a
+                      v-for="(link, i) in getLinks(item)"
+                      :key="i"
+                      :href="link"
+                      :title="link"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      @click.stop
+                      class="inline-flex items-center gap-1.5 text-brand-600 hover:underline whitespace-nowrap"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                      {{ getLinks(item).length > 1 ? `Dropbox ${i + 1}` : 'Buka Dropbox' }}
+                    </a>
+                  </div>
+                  <span v-else class="text-ink-300">—</span>
+                </td>
                 <td class="px-4 py-4 text-right text-ink-700 font-medium tabular-nums">
                   {{ item.price ? formatPrice(item.price) : '—' }}
                 </td>
@@ -169,10 +202,27 @@
                     {{ isSold(item.id) ? 'Terjual' : 'Belum Terjual' }}
                   </span>
                 </td>
+
+                <!-- Aksi: hanya catat penjualan (klik di sini tidak membuka detail) -->
+                <td class="px-4 py-4" @click.stop>
+                  <div class="flex items-center justify-center">
+                    <button
+                      @click="recordSale(item.id)"
+                      class="p-1.5 rounded-lg hover:bg-ok-100 text-ok-600 transition"
+                      title="Catat penjualan"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                      </svg>
+                    </button>
+                  </div>
+                </td>
+
+                <td class="px-4 py-4 text-ink-500">{{ item.note || '—' }}</td>
               </tr>
 
               <tr v-if="filteredItems.length === 0">
-                <td colspan="9" class="px-4 py-16 text-center text-ink-400">
+                <td colspan="14" class="px-4 py-16 text-center text-ink-400">
                   <template v-if="items.length === 0">
                     Belum ada produk di kategori ini. Klik <strong>Tambah Produk</strong> untuk menambahkan yang pertama.
                   </template>
@@ -369,10 +419,11 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useProducts, formatPrice, nowLocal, normalizeUrl } from '../composables/useProducts'
+import { useProducts, formatPrice, formatDateTime, nowLocal, normalizeUrl } from '../composables/useProducts'
 import { useOptions } from '../composables/useOptions'
 import { fileToCompressedDataUrl } from '../utils/imageFile'
-import { cleanLinks } from '../utils/links'
+import { getLinks, cleanLinks } from '../utils/links'
+import { splitPlatforms } from '../utils/platforms'
 import PlatformBadges from '../components/PlatformBadges.vue'
 import OptionSelect from '../components/OptionSelect.vue'
 import PlatformPicker from '../components/PlatformPicker.vue'
@@ -466,6 +517,11 @@ function goBack() {
 
 function goToProduct(id) {
   router.push(`/produk/${id}`)
+}
+
+// Tombol centang: buka halaman detail + langsung tampilkan form catat penjualan
+function recordSale(id) {
+  router.push({ path: `/produk/${id}`, query: { jual: 1 } })
 }
 
 // ========== TAMBAH PRODUK ==========

@@ -15,13 +15,29 @@ const mobileOpen = ref(false)
 const showLogoutConfirm = ref(false)
 const kategoriOpen = ref(false)
 
+// Mode ciut (icon-only) — hanya berlaku di desktop. Di mobile, sidebar
+// selalu tampil penuh sebagai overlay, jadi collapsed diabaikan di sana.
+const collapsed = ref(false)
+const isCollapsed = computed(() => collapsed.value && !mobileOpen.value)
+
+function toggleCollapsed() {
+  collapsed.value = !collapsed.value
+  // Kalau lagi ciut, submenu Kategori tidak ada tempat untuk ditampilkan
+  if (collapsed.value) kategoriOpen.value = false
+}
+
 // Auto buka submenu kalau sedang di halaman kategori / produk
 const isKategoriRelated = computed(() => {
   return route.path.startsWith('/kategori') || route.path.startsWith('/produk')
 })
 
 watch(isKategoriRelated, (val) => {
-  if (val) kategoriOpen.value = true
+  if (val) {
+    // Halaman ini punya submenu (Kategori) -> pastikan sidebar terbuka
+    // supaya submenu-nya kelihatan, lalu buka submenu-nya.
+    collapsed.value = false
+    kategoriOpen.value = true
+  }
 }, { immediate: true })
 
 // Ambil daftar kategori (Style) secara dinamis
@@ -68,6 +84,16 @@ function isParentActive(item) {
   return route.path.startsWith('/kategori')
 }
 
+// Kalau sidebar sedang ciut, klik "Kategori" langsung ke /kategori
+// (tidak ada tempat untuk menampilkan submenu-nya).
+function onKategoriClick() {
+  if (isCollapsed.value) {
+    router.push('/kategori')
+  } else {
+    kategoriOpen.value = !kategoriOpen.value
+  }
+}
+
 function handleResize() {
   if (window.innerWidth >= 1024) mobileOpen.value = false
 }
@@ -98,22 +124,58 @@ function logout() {
     <!-- ==================== SIDEBAR ==================== -->
     <aside
       :class="[
-        'bg-sidebar text-white h-screen flex flex-col shrink-0 w-64 z-50 transition-transform duration-300',
+        'bg-sidebar text-white h-screen flex flex-col shrink-0 z-50 transition-all duration-300',
         'hidden lg:flex',
-        mobileOpen ? '!flex fixed inset-y-0 left-0 shadow-sidebar' : '',
+        isCollapsed ? 'lg:w-20' : 'lg:w-64',
+        'w-64',
+        mobileOpen ? '!flex fixed inset-y-0 left-0 shadow-sidebar !w-64' : '',
       ]"
     >
-      <!-- Logo -->
-      <div class="h-16 flex items-center gap-2.5 px-4 border-b border-white/10">
+      <!-- Logo + toggle collapse -->
+      <div
+        :class="[
+          'h-16 flex items-center border-b border-white/10 shrink-0',
+          isCollapsed ? 'justify-center px-2' : 'gap-2.5 px-4'
+        ]"
+      >
         <img
           src="/favicon.png"
           alt="Designer Orders"
           class="w-8 h-8 rounded-lg object-contain shrink-0"
         />
-        <div class="min-w-0 flex-1">
+        <div v-if="!isCollapsed" class="min-w-0 flex-1">
           <p class="font-semibold text-[13.5px] leading-tight truncate">Designer Orders</p>
           <p class="text-[11.5px] text-white/60 leading-tight mt-0.5 truncate">Ruang kerja produksi</p>
         </div>
+
+        <!-- Tombol ciutkan: hanya muncul saat sidebar terbuka, di posisi semula (sebelah logo) -->
+        <button
+          v-if="!isCollapsed && !mobileOpen"
+          type="button"
+          @click="toggleCollapsed"
+          class="hidden lg:flex w-7 h-7 items-center justify-center rounded-lg text-white/60 hover:bg-white/10 hover:text-white transition shrink-0 ml-auto"
+          aria-label="Ciutkan sidebar"
+          title="Ciutkan sidebar"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M15 18l-6-6 6-6" />
+          </svg>
+        </button>
+      </div>
+
+      <!-- Tombol buka: hanya muncul saat sidebar ciut, di baris sendiri tepat di atas ikon Ringkasan -->
+      <div v-if="isCollapsed && !mobileOpen" class="px-2.5 pt-2 shrink-0">
+        <button
+          type="button"
+          @click="toggleCollapsed"
+          class="hidden lg:flex w-full items-center justify-center px-0 py-2.5 rounded-xl text-white/60 hover:bg-white/10 hover:text-white transition"
+          aria-label="Buka sidebar"
+          title="Buka sidebar"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 18l6-6-6-6" />
+          </svg>
+        </button>
       </div>
 
       <!-- Menu -->
@@ -123,38 +185,47 @@ function logout() {
           <router-link
             v-if="!m.children"
             :to="m.to"
-            class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-white/80 hover:bg-white/10 hover:text-white transition"
-            :class="isActive(m.to) ? '!bg-white !text-brand-700 font-semibold shadow-sm' : ''"
+            :title="isCollapsed ? m.label : ''"
+            class="flex items-center px-3 py-2.5 rounded-xl text-white/80 hover:bg-white/10 hover:text-white transition"
+            :class="[
+              isActive(m.to) ? '!bg-white !text-brand-700 font-semibold shadow-sm' : '',
+              isCollapsed ? 'justify-center px-0' : 'gap-3'
+            ]"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0">
               <path :d="m.icon" />
             </svg>
-            <span>{{ m.label }}</span>
+            <span v-if="!isCollapsed" class="truncate">{{ m.label }}</span>
           </router-link>
 
           <!-- Menu Kategori (submenu dinamis = daftar kategori) -->
           <div v-else>
             <button
               type="button"
-              @click="kategoriOpen = !kategoriOpen"
-              class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-white/80 hover:bg-white/10 hover:text-white transition"
-              :class="isParentActive(m) || kategoriOpen ? '!bg-white/15 !text-white font-semibold' : ''"
+              @click="onKategoriClick"
+              :title="isCollapsed ? m.label : ''"
+              class="w-full flex items-center px-3 py-2.5 rounded-xl text-white/80 hover:bg-white/10 hover:text-white transition"
+              :class="[
+                isParentActive(m) || kategoriOpen ? '!bg-white/15 !text-white font-semibold' : '',
+                isCollapsed ? 'justify-center px-0' : 'gap-3'
+              ]"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0">
                 <path :d="m.icon" />
               </svg>
-              <span class="flex-1 text-left">{{ m.label }}</span>
+              <span v-if="!isCollapsed" class="flex-1 text-left truncate">{{ m.label }}</span>
               <svg
+                v-if="!isCollapsed"
                 width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                class="transition-transform duration-200"
+                class="transition-transform duration-200 shrink-0"
                 :class="kategoriOpen ? 'rotate-180' : ''"
               >
                 <path d="M6 9l6 6 6-6" />
               </svg>
             </button>
 
-            <!-- Submenu: daftar kategori langsung -->
-            <div v-show="kategoriOpen" class="mt-1 ml-3 pl-3 border-l border-white/20 space-y-0.5">
+            <!-- Submenu: daftar kategori langsung (disembunyikan saat sidebar ciut) -->
+            <div v-show="kategoriOpen && !isCollapsed" class="mt-1 ml-3 pl-3 border-l border-white/20 space-y-0.5">
               <!-- Link Semua Kategori (opsional, bisa dihapus kalau tidak mau) -->
               <router-link
                 to="/kategori"
@@ -191,15 +262,17 @@ function logout() {
         <button
           type="button"
           @click="askLogout"
-          class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13.5px] text-white/80 hover:bg-white/10 hover:text-white transition"
+          :title="isCollapsed ? 'Keluar' : ''"
+          class="w-full flex items-center px-3 py-2.5 rounded-xl text-[13.5px] text-white/80 hover:bg-white/10 hover:text-white transition"
+          :class="isCollapsed ? 'justify-center px-0' : 'gap-3'"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0">
             <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" />
           </svg>
-          <span>Keluar</span>
+          <span v-if="!isCollapsed">Keluar</span>
         </button>
 
-        <p class="px-3 pt-3 text-[12px] text-white/50">Ruang kerja produksi desain</p>
+        <p v-if="!isCollapsed" class="px-3 pt-3 text-[12px] text-white/50">Ruang kerja produksi desain</p>
       </div>
     </aside>
 
