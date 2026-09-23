@@ -76,7 +76,7 @@ export function useAuth() {
 
   async function login(usernameInput, password) {
     try {
-      const data = await apiCall('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) })
+      const data = await apiCall('/auth/login', { method: 'POST', body: JSON.stringify({ username: usernameInput, password }) })
       applySession(data)
       return { ok: true }
     } catch (e) {

@@ -114,7 +114,7 @@ async function submit() {
 
       <!-- Order dari produk katalog: Kategori/Style ikut produk -->
       <!-- Paket cuma wajib kalau produknya memang punya paket. Produk yang dijual satuan (tanpa paket) lewati field ini. -->
-      <label v-if="selectedProduct.packages?.length" class="block sm:col-span-2">
+      <label v-if="selectedProduct?.packages?.length" class="block sm:col-span-2">
         <span class="text-[13px] font-medium text-ink-700">Paket *</span>
         <select v-model="form.package" required class="input">
           <option value="" disabled>Pilih paket</option>
@@ -123,7 +123,7 @@ async function submit() {
           </option>
         </select>
       </label>
-      <p v-else class="text-[12px] text-ink-400 sm:col-span-2">
+      <p v-else-if="selectedProduct" class="text-[12px] text-ink-400 sm:col-span-2">
         Produk ini dijual satuan (tanpa paket).
       </p>
     </div>
