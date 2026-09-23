@@ -4,59 +4,104 @@ const STORAGE_KEY = 'designer-orders:dropdown-options'
 
 // Dropdown yang bisa diatur dari halaman Pengaturan.
 // usedIn = tempat dropdown ini muncul, ditampilkan di kartu Pengaturan.
+// scope = 'produk' tampil di tab "Pilihan Produk", 'tugas' di tab "Pilihan Tugas"
 export const OPTION_GROUPS = [
   {
     id: 'kategori',
     key: 'style',
     label: 'Kategori',
     description: 'Kategori produk yang dipakai di halaman Kategori. Datanya sama dengan Style.',
-    usedIn: ['Halaman Kategori']
+    usedIn: ['Halaman Kategori'],
+    scope: 'produk'
   },
   {
     id: 'style',
     key: 'style',
     label: 'Style',
-    description: 'Gaya utama produk, mis. Casual atau Fantasy.',
-    usedIn: ['Form produk', 'Filter list']
+    description: 'Gaya utama produk, mis. VRoid atau VRChat.',
+    usedIn: ['Form produk', 'Filter list'],
+    scope: 'produk'
   },
   {
     id: 'substyle',
     key: 'substyle',
     label: 'Substyle',
     description: 'Gaya turunan, mis. Daily outfit atau Cyber.',
-    usedIn: ['Form produk']
+    usedIn: ['Form produk'],
+    scope: 'produk'
   },
   {
     id: 'designer',
     key: 'designer',
     label: 'Designer',
-    description: 'Nama designer yang mengerjakan produk.',
-    usedIn: ['Form produk']
+    description: 'Nama designer di luar anggota tim (anggota tim otomatis muncul di dropdown Designer).',
+    usedIn: ['Form produk'],
+    scope: 'produk'
   },
   {
     id: 'productionStatus',
     key: 'productionStatus',
     label: 'Status Produksi',
-    description: 'Tahap produksi, mis. Preview atau Done.',
-    usedIn: ['Form produk']
+    description: 'Tahap produksi produk, mis. Preview atau Done.',
+    usedIn: ['Form produk'],
+    scope: 'produk'
   },
   {
     id: 'platform',
     key: 'platform',
     label: 'Platform',
     description: 'Tempat produk dijual. Tulis satu platform per pilihan; produk boleh memilih lebih dari satu.',
-    usedIn: ['Form produk', 'Filter list', 'Catat Penjualan']
+    usedIn: ['Form produk', 'Filter list', 'Catat Penjualan'],
+    scope: 'produk'
+  },
+  {
+    id: 'taskCategory',
+    key: 'taskCategory',
+    label: 'Kategori Tugas',
+    description: 'Jenis kerjaan/service tim, terpisah dari kategori produk jualan. Mis. Custom Avatar atau Fix Rigging.',
+    usedIn: ['Form tugas'],
+    scope: 'tugas'
+  },
+  {
+    id: 'taskSubstyle',
+    key: 'taskSubstyle',
+    label: 'Substyle Tugas',
+    description: 'Detail turunan jenis kerjaan.',
+    usedIn: ['Form tugas'],
+    scope: 'tugas'
+  },
+  {
+    id: 'taskProductionStatus',
+    key: 'taskProductionStatus',
+    label: 'Status Produksi Tugas',
+    description: 'Tahap pengerjaan tugas, terpisah dari status produksi produk.',
+    usedIn: ['Form tugas'],
+    scope: 'tugas'
+  },
+  {
+    id: 'taskDesigner',
+    key: 'taskDesigner',
+    label: 'Designer Tugas',
+    description: 'Nama designer di luar anggota tim, terpisah dari Designer produk (anggota tim otomatis muncul di dropdown ini juga).',
+    usedIn: ['Form tugas'],
+    scope: 'tugas'
   }
 ]
 
 // Pilihan awal (sebelum kamu mengubahnya di Pengaturan)
 const DEFAULTS = {
-  style: ['Casual', 'Fantasy', 'Formal'],
+  style: ['VRoid', 'VRChat', 'AR'],
   substyle: ['Daily outfit', 'Cyber'],
   designer: [],
   productionStatus: ['Preview', 'Done', 'Ready'],
-  platform: ['Etsy', 'Booth']
+  platform: ['Etsy', 'Booth'],
+  taskCategory: [],
+  taskSubstyle: [],
+  taskProductionStatus: [],
+  taskDesigner: []
 }
+
+const PLATFORM_LIKE_KEYS = ['platform']
 
 function cloneDefaults() {
   return Object.fromEntries(Object.entries(DEFAULTS).map(([k, v]) => [k, [...v]]))
@@ -112,8 +157,8 @@ export function useOptions() {
     const value = String(raw || '').trim()
     if (!value) return { ok: false, message: 'Tulis dulu pilihan yang mau ditambahkan' }
 
-    if (key === 'platform' && /[&,/+]/.test(value)) {
-      return { ok: false, message: 'Tulis satu platform saja. Produk bisa memilih lebih dari satu platform.' }
+    if (PLATFORM_LIKE_KEYS.includes(key) && /[&,/+]/.test(value)) {
+      return { ok: false, message: 'Tulis satu platform saja. Boleh dipilih lebih dari satu nanti di form.' }
     }
 
     const list = options.value[key]

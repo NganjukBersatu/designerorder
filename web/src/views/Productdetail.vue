@@ -144,6 +144,24 @@
             </dd>
           </div>
           <div class="sm:col-span-2 lg:col-span-3">
+            <dt class="text-[13px] text-ink-500 mb-1.5">Paket Produk</dt>
+            <dd v-if="product.packages && product.packages.length" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              <div
+                v-for="pk in product.packages"
+                :key="pk.id"
+                class="rounded-xl border border-ink-100 bg-cream-50 px-3.5 py-3"
+              >
+                <div class="flex items-center justify-between gap-2">
+                  <span class="font-medium text-ink-800 text-[13.5px]">{{ pk.name }}</span>
+                  <span class="text-ink-700 text-[13px] font-medium tabular-nums shrink-0">{{ formatPrice(pk.price) }}</span>
+                </div>
+                <p v-if="pk.description" class="text-[12px] text-ink-500 mt-1">{{ pk.description }}</p>
+              </div>
+            </dd>
+            <dd v-else class="text-ink-300">—</dd>
+          </div>
+
+          <div class="sm:col-span-2 lg:col-span-3">
             <dt class="text-[13px] text-ink-500 mb-0.5">Link DB</dt>
             <dd class="font-medium">
               <div v-if="links.length" class="flex flex-wrap gap-x-5 gap-y-1.5">
@@ -202,9 +220,16 @@
                 <td class="px-4 py-4 text-ink-400">{{ index + 1 }}</td>
                 <td class="px-4 py-4 font-medium text-ink-800">{{ sale.buyer }}</td>
                 <td class="px-4 py-4 text-ink-600">{{ sale.platform || '—' }}</td>
-                <td class="px-4 py-4 text-ink-700">
-                  {{ sale.paket || '—' }}
-                  <span v-if="sale.qty > 1" class="text-ink-400 tabular-nums">×{{ sale.qty }}</span>
+                <td class="px-4 py-4">
+                  <span
+                    :class="[
+                      'inline-flex items-center px-2 py-0.5 rounded-full text-[12px] font-medium',
+                      sale.package ? 'bg-cream-100 text-ink-700' : 'bg-ink-50 text-ink-500'
+                    ]"
+                  >
+                    {{ sale.package || 'Satuan' }}
+                  </span>
+                  <span v-if="sale.qty > 1" class="ml-1.5 text-ink-400 tabular-nums text-[13px]">×{{ sale.qty }}</span>
                 </td>
                 <td class="px-4 py-4 text-right text-ink-700 font-medium tabular-nums">
                   {{ formatPrice((product.price || 0) * sale.qty) }}
@@ -321,17 +346,35 @@
 
             <div>
               <label class="block text-sm font-medium text-ink-700 mb-1.5">Substyle</label>
-              <OptionSelect v-model="editForm.substyle" :options="optionsOf('substyle')" placeholder="Pilih substyle" />
+              <select
+                v-model="editForm.substyle"
+                class="w-full px-3 py-2.5 rounded-xl border border-ink-200 bg-white focus:border-brand-400 outline-none text-sm transition"
+              >
+                <option value="">Pilih substyle</option>
+                <option v-for="sub in substyleOptions" :key="sub" :value="sub">{{ sub }}</option>
+              </select>
             </div>
 
             <div>
               <label class="block text-sm font-medium text-ink-700 mb-1.5">Designer</label>
-              <OptionSelect v-model="editForm.designer" :options="optionsOf('designer')" placeholder="Pilih designer" />
+              <select
+                v-model="editForm.designer"
+                class="w-full px-3 py-2.5 rounded-xl border border-ink-200 bg-white focus:border-brand-400 outline-none text-sm transition"
+              >
+                <option value="">Pilih designer</option>
+                <option v-for="d in designerOptions" :key="d" :value="d">{{ d }}</option>
+              </select>
             </div>
 
             <div>
               <label class="block text-sm font-medium text-ink-700 mb-1.5">Status Produksi</label>
-              <OptionSelect v-model="editForm.productionStatus" :options="optionsOf('productionStatus')" placeholder="Pilih status produksi" />
+              <select
+                v-model="editForm.productionStatus"
+                class="w-full px-3 py-2.5 rounded-xl border border-ink-200 bg-white focus:border-brand-400 outline-none text-sm transition"
+              >
+                <option value="">Pilih status produksi</option>
+                <option v-for="s in productionStatusOptions" :key="s" :value="s">{{ s }}</option>
+              </select>
             </div>
 
             <div>
@@ -390,6 +433,63 @@
             <div class="sm:col-span-2">
               <label class="block text-sm font-medium text-ink-700 mb-1.5">Harga ($)</label>
               <input v-model.number="editForm.price" type="number" min="0" step="0.5" class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition" placeholder="0.00" />
+            </div>
+
+            <div class="sm:col-span-2">
+              <div class="flex items-center justify-between mb-1.5">
+                <label class="block text-sm font-medium text-ink-700">Paket Produk</label>
+                <button
+                  type="button"
+                  @click="addPackageField"
+                  class="inline-flex items-center gap-1 text-sm font-medium text-brand-600 hover:underline"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                  </svg>
+                  Tambah Paket
+                </button>
+              </div>
+              <p class="text-xs text-ink-400 mb-2">Isi paket disesuaikan dengan yang ditawarkan ke client di tiap platform jualan.</p>
+              <div class="space-y-2">
+                <div v-for="(pkg, i) in editForm.packages" :key="i" class="flex items-start gap-2 rounded-xl border border-ink-200 p-3">
+                  <div class="flex-1 space-y-2">
+                    <div class="flex gap-2">
+                      <input
+                        v-model="pkg.name"
+                        type="text"
+                        class="flex-1 px-3 py-2 rounded-lg border border-ink-200 focus:border-brand-400 outline-none text-sm transition"
+                        placeholder="Nama paket, mis. Basic"
+                      />
+                      <input
+                        v-model.number="pkg.price"
+                        type="number"
+                        min="0"
+                        step="0.5"
+                        class="w-28 px-3 py-2 rounded-lg border border-ink-200 focus:border-brand-400 outline-none text-sm transition"
+                        placeholder="Harga"
+                      />
+                    </div>
+                    <textarea
+                      v-model="pkg.description"
+                      rows="2"
+                      class="w-full px-3 py-2 rounded-lg border border-ink-200 focus:border-brand-400 outline-none text-sm transition resize-none"
+                      placeholder="Isi paket, mis. Model + texture, tanpa rig"
+                    ></textarea>
+                  </div>
+                  <button
+                    type="button"
+                    @click="removePackageField(i)"
+                    class="p-2 rounded-lg hover:bg-danger-50 text-danger-600 transition shrink-0"
+                    title="Hapus paket"
+                    aria-label="Hapus paket"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                <p v-if="editForm.packages.length === 0" class="text-[12px] text-ink-400">Belum ada paket. Klik "Tambah Paket" untuk menambahkan.</p>
+              </div>
             </div>
 
             <div class="sm:col-span-2">
@@ -476,13 +576,17 @@
             </div>
 
             <div>
-              <label class="block text-sm font-medium text-ink-700 mb-1.5">Paket</label>
+              <label class="block text-sm font-medium text-ink-700 mb-1.5">Paket (opsional)</label>
               <input
-                v-model="saleForm.paket"
+                v-model="saleForm.package"
                 type="text"
+                list="package-options"
                 class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition"
-                placeholder="Tulis nama paket"
+                :placeholder="product.packages?.length ? 'Pilih paket, atau kosongkan kalau satuan' : 'Dijual satuan, kosongkan saja'"
               />
+              <datalist id="package-options">
+                <option v-for="pk in product.packages" :key="pk.id" :value="pk.name" />
+              </datalist>
             </div>
 
             <div>
@@ -536,13 +640,25 @@ import { useProducts, formatDateTime, formatPrice, nowLocal, normalizeUrl } from
 import { fileToCompressedDataUrl } from '../utils/imageFile'
 import { getLinks, cleanLinks } from '../utils/links'
 import { useOptions } from '../composables/useOptions'
+import { useTeamMembers } from '../composables/useTeamMembers'
 import OptionSelect from '../components/OptionSelect.vue'
 import PlatformPicker from '../components/PlatformPicker.vue'
 
 const route = useRoute()
 const router = useRouter()
-const { getProduct, salesOf, totalSold, isSold, addSale, removeSale, updateSale, updateProduct, removeProduct } = useProducts()
-const { optionsOf } = useOptions()
+const { products, getProduct, salesOf, totalSold, isSold, addSale, removeSale, updateSale, updateProduct, removeProduct } = useProducts()
+const { optionsOf, mergeOptions } = useOptions()
+const { members } = useTeamMembers()
+
+const substyleOptions = computed(() =>
+  mergeOptions('substyle', [...new Set(products.value.map(p => p.substyle).filter(Boolean))].sort())
+)
+const designerOptions = computed(() =>
+  mergeOptions('designer', members.value.map(m => m.username))
+)
+const productionStatusOptions = computed(() =>
+  mergeOptions('productionStatus', [...new Set(products.value.map(p => p.productionStatus).filter(Boolean))].sort())
+)
 
 // ========== DATA ==========
 const product = computed(() => getProduct(route.params.id))
@@ -567,7 +683,7 @@ function goBack() {
 
 // ========== MODAL CATAT / EDIT PENJUALAN ==========
 const showSaleModal = ref(false)
-const saleForm = ref({ buyer: '', paket: '', platform: '', soldAt: '' })
+const saleForm = ref({ buyer: '', package: '', platform: '', soldAt: '' })
 const editingSaleId = ref(null)
 const editingSaleQty = ref(1)
 const isEditingSale = computed(() => editingSaleId.value !== null)
@@ -584,7 +700,7 @@ function toInputValue(value) {
 
 function openSaleModal() {
   editingSaleId.value = null
-  saleForm.value = { buyer: '', paket: '', platform: '', soldAt: nowLocal() }
+  saleForm.value = { buyer: '', package: '', platform: '', soldAt: nowLocal() }
   showSaleModal.value = true
 }
 
@@ -593,7 +709,7 @@ function openEditSale(sale) {
   editingSaleQty.value = sale.qty || 1
   saleForm.value = {
     buyer: sale.buyer || '',
-    paket: sale.paket || '',
+    package: sale.package || '',
     platform: sale.platform || '',
     soldAt: toInputValue(sale.soldAt)
   }
@@ -622,11 +738,7 @@ async function submitSale() {
     alert('Nama Pembeli wajib diisi')
     return
   }
-  // Paket wajib untuk penjualan baru. Saat edit boleh kosong (transaksi lama belum punya paket).
-  if (!isEditingSale.value && !saleForm.value.paket.trim()) {
-    alert('Paket wajib diisi')
-    return
-  }
+  // Paket opsional: produk yang dijual satuan (tanpa paket) boleh kosongin ini.
   if (!saleForm.value.soldAt) {
     alert('Tanggal & jam terjual wajib diisi')
     return
@@ -634,7 +746,7 @@ async function submitSale() {
 
   const data = {
     buyer: saleForm.value.buyer.trim(),
-    paket: saleForm.value.paket.trim(),
+    package: saleForm.value.package.trim(),
     platform: saleForm.value.platform.trim(),
     soldAt: saleForm.value.soldAt
   }
@@ -675,10 +787,19 @@ function openEditModal() {
     platform: p.platform || '',
     linkDbs: getLinks(p).length ? getLinks(p) : [''], // bisa lebih dari satu link
     price: p.price || 0,
-    note: p.note || ''
+    note: p.note || '',
+    packages: (p.packages || []).map((pk) => ({ ...pk }))
   }
   imageError.value = ''
   showEditModal.value = true
+}
+
+function addPackageField() {
+  editForm.value.packages.push({ name: '', price: 0, description: '' })
+}
+
+function removePackageField(index) {
+  editForm.value.packages.splice(index, 1)
 }
 
 function closeEditModal() {
@@ -732,7 +853,8 @@ function submitEdit() {
     linkDb: cleaned[0] || '', // link pertama, supaya kompatibel dengan data lama
     linkDbs: cleaned,
     price: editForm.value.price || 0,
-    note: editForm.value.note.trim()
+    note: editForm.value.note.trim(),
+    packages: editForm.value.packages
   })
   closeEditModal()
 }

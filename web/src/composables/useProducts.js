@@ -49,7 +49,7 @@ function flattenSales(productList) {
 }
 
 // ========== FETCH ==========
-async function fetchProducts() {
+export async function fetchProducts() {
   loading.value = true
   error.value = null
   try {
@@ -64,8 +64,10 @@ async function fetchProducts() {
   }
 }
 
-// Muat otomatis begitu composable ini pertama kali dipakai
-fetchProducts()
+// Muat otomatis begitu composable ini pertama kali dipakai, tapi cuma kalau
+// sudah ada token (mis. refresh halaman waktu masih login). Kalau belum
+// login, useAuth yang akan memanggil fetchProducts() setelah login sukses.
+if (getToken()) fetchProducts()
 
 // ========== HELPER FORMAT ==========
 export function formatDateTime(dateStr) {

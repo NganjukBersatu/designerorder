@@ -73,8 +73,12 @@
           </div>
         </div>
 
-        <h1 class="text-[26px] font-semibold text-ink-900 tracking-tight">Selamat datang kembali</h1>
-        <p class="text-sm text-ink-500 mt-1.5 mb-8">Masuk untuk membuka dashboard.</p>
+        <h1 class="text-[26px] font-semibold text-ink-900 tracking-tight">
+          {{ mode === 'login' ? 'Selamat datang kembali' : 'Buat tim baru' }}
+        </h1>
+        <p class="text-sm text-ink-500 mt-1.5 mb-8">
+          {{ mode === 'login' ? 'Masuk untuk membuka dashboard.' : 'Bikin workspace tim, akun ini otomatis jadi owner-nya.' }}
+        </p>
 
         <form @submit.prevent="submit" class="space-y-5" novalidate>
           <!-- Pesan error -->
@@ -88,6 +92,18 @@
               <path d="M12 8v4M12 16h.01" />
             </svg>
             <span>{{ error }}</span>
+          </div>
+
+          <!-- Nama tim (cuma pas daftar) -->
+          <div v-if="mode === 'register'">
+            <label for="teamName" class="block text-sm font-medium text-ink-700 mb-1.5">Nama tim</label>
+            <input
+              id="teamName"
+              v-model="teamNameInput"
+              type="text"
+              class="w-full px-3.5 py-3 rounded-xl border border-ink-200 bg-white text-sm text-ink-900 placeholder:text-ink-300 focus:border-brand-400 focus:ring-4 focus:ring-brand-400/15 outline-none transition"
+              placeholder="mis. Client A Studio"
+            />
           </div>
 
           <!-- Username -->
@@ -169,9 +185,20 @@
               <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-opacity="0.3" stroke-width="3" />
               <path d="M21 12a9 9 0 00-9-9" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
             </svg>
-            {{ loading ? 'Memeriksa...' : 'Masuk' }}
+            {{ loading ? 'Memeriksa...' : mode === 'login' ? 'Masuk' : 'Buat tim & masuk' }}
           </button>
         </form>
+
+        <p class="text-center text-sm text-ink-500 mt-6">
+          <template v-if="mode === 'login'">
+            Belum punya tim?
+            <button type="button" class="font-medium text-brand-600 hover:underline" @click="toggleMode">Buat tim baru</button>
+          </template>
+          <template v-else>
+            Sudah punya akun?
+            <button type="button" class="font-medium text-brand-600 hover:underline" @click="toggleMode">Masuk di sini</button>
+          </template>
+        </p>
       </div>
     </main>
   </div>
@@ -184,14 +211,22 @@ import { useAuth } from '../composables/useAuth'
 
 const route = useRoute()
 const router = useRouter()
-const { login } = useAuth()
+const { login, register } = useAuth()
 
+const mode = ref('login') // 'login' | 'register'
+const teamNameInput = ref('')
 const username = ref('')
 const password = ref('')
 const showPassword = ref(false)
 const loading = ref(false)
 const error = ref('')
 const capsLock = ref(false)
+
+function toggleMode() {
+  mode.value = mode.value === 'login' ? 'register' : 'login'
+  error.value = ''
+  password.value = ''
+}
 
 function checkCapsLock(e) {
   capsLock.value = e.getModifierState ? e.getModifierState('CapsLock') : false
@@ -212,9 +247,15 @@ async function submit() {
     error.value = 'Isi username dan kata sandi'
     return
   }
+  if (mode.value === 'register' && !teamNameInput.value.trim()) {
+    error.value = 'Isi nama tim'
+    return
+  }
 
   loading.value = true
-  const result = await login(username.value, password.value)
+  const result = mode.value === 'login'
+    ? await login(username.value, password.value)
+    : await register(teamNameInput.value, username.value, password.value)
   loading.value = false
 
   if (!result.ok) {
