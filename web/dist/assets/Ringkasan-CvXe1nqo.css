@@ -1,0 +1,1 @@
+@media print{aside,header,.print-hidden{display:none!important}html,body,#app,.h-screen,.overflow-hidden,.overflow-y-auto{height:auto!important;overflow:visible!important}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}main{padding:0!important}}

@@ -1,0 +1,18 @@
+From 8df965d7d702e1cb6060eeaa807f3496cd1135a2 Mon Sep 17 00:00:00 2001
+From: "qwen.ai[bot]" <qwenlm-intl@service.alibaba.com>
+Date: Wed, 23 Sep 2026 13:24:47 +0000
+Subject: [PATCH] fix: rename Useproducts.js -> useProducts.js agar sesuai
+ import (perbaiki build Vite)
+
+---
+ web/src/composables/{Useproducts.js => useProducts.js} | 0
+ 1 file changed, 0 insertions(+), 0 deletions(-)
+ rename web/src/composables/{Useproducts.js => useProducts.js} (100%)
+
+diff --git a/web/src/composables/Useproducts.js b/web/src/composables/useProducts.js
+similarity index 100%
+rename from web/src/composables/Useproducts.js
+rename to web/src/composables/useProducts.js
+-- 
+2.39.5
+

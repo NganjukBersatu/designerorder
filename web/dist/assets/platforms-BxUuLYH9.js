@@ -1,0 +1,1 @@
+function i(t){if(!t)return[];const r=String(t).trim();return/^both$/i.test(r)?["Etsy","Booth"]:r.split(/\s*(?:&|,|\/|\+|\bdan\b|\band\b)\s*/i).map(n=>n.trim()).filter(Boolean)}function o(t){return(t||[]).join(" & ")}export{o as j,i as s};
