@@ -15,7 +15,8 @@ const tasks = ref([])
 const loading = ref(true)
 const errorMsg = ref('')
 const status = ref('all')
-const owner = ref('mine') // 'mine' | 'all'
+const owner = ref('mine')
+const search = ref('')
 const showCreate = ref(false)
 const editingTask = ref(null)
 
@@ -49,6 +50,29 @@ const counts = computed(() => ({
   Done: tasks.value.filter(t => t.status === 'Done').length,
 }))
 
+const filteredTasks = computed(() => {
+  const q = search.value.trim().toLowerCase()
+  if (!q) return tasks.value
+
+  return tasks.value.filter(t => {
+    const haystack = [
+      t.title,
+      t.clientName,
+      t.designer,
+      t.username,
+      t.style,
+      t.substyle,
+      t.note,
+      t.status,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase()
+
+    return haystack.includes(q)
+  })
+})
+
 function openCreate() {
   editingTask.value = null
   showCreate.value = true
@@ -75,7 +99,6 @@ async function remove(task) {
   }
 }
 
-// Cepat ganti status langsung dari list (klik badge)
 async function cycleStatus(task) {
   const next = { Pending: 'Progress', Progress: 'Done', Done: 'Pending' }[task.status]
   try {
@@ -89,24 +112,10 @@ async function cycleStatus(task) {
 
 <template>
   <div class="space-y-4">
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-      <div class="flex flex-col sm:flex-row gap-3 flex-1">
-        <select
-          v-model="owner"
-          class="rounded-lg border border-ink-200 px-3 py-2 text-[13.5px] focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none"
-        >
-          <option value="mine">Tugas saya</option>
-          <option value="all">Semua tim</option>
-        </select>
-        <select
-          v-model="status"
-          class="rounded-lg border border-ink-200 px-3 py-2 text-[13.5px] focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none"
-        >
-          <option value="all">Semua status</option>
-          <option value="Pending">Menunggu</option>
-          <option value="Progress">Dikerjakan</option>
-          <option value="Done">Selesai</option>
-        </select>
+    <!-- Header + tombol tambah -->
+    <div class="flex items-center justify-between gap-3">
+      <div class="text-[13.5px] text-ink-500">
+        <!-- bisa dikosongkan atau taruh breadcrumb -->
       </div>
       <button
         type="button"
@@ -133,6 +142,55 @@ async function cycleStatus(task) {
       </div>
     </div>
 
+    <!-- ===== SEARCH + FILTER (satu baris) ===== -->
+    <div class="flex flex-col sm:flex-row gap-3">
+      <!-- Search -->
+      <div class="relative flex-1">
+        <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-ink-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+        </div>
+        <input
+          v-model="search"
+          type="text"
+          placeholder="Cari tugas, klien, designer, style..."
+          class="w-full pl-10 pr-10 py-2.5 rounded-xl border border-ink-200 bg-white text-[13.5px] placeholder:text-ink-400 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none transition"
+        />
+        <button
+          v-if="search"
+          type="button"
+          class="absolute inset-y-0 right-0 pr-3.5 flex items-center text-ink-400 hover:text-ink-600"
+          @click="search = ''"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <!-- Filter Owner -->
+      <select
+        v-model="owner"
+        class="rounded-xl border border-ink-200 px-3 py-2.5 text-[13.5px] bg-white focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none min-w-[140px]"
+      >
+        <option value="mine">Tugas saya</option>
+        <option value="all">Semua tim</option>
+      </select>
+
+      <!-- Filter Status -->
+      <select
+        v-model="status"
+        class="rounded-xl border border-ink-200 px-3 py-2.5 text-[13.5px] bg-white focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none min-w-[140px]"
+      >
+        <option value="all">Semua status</option>
+        <option value="Pending">Menunggu</option>
+        <option value="Progress">Dikerjakan</option>
+        <option value="Done">Selesai</option>
+      </select>
+    </div>
+
+    <!-- List tugas -->
     <div class="bg-white rounded-card shadow-card overflow-hidden">
       <div v-if="loading" class="p-6 space-y-3">
         <div v-for="i in 5" :key="i" class="h-10 rounded-lg bg-ink-100 animate-pulse" />
@@ -141,8 +199,13 @@ async function cycleStatus(task) {
         <p class="text-danger-600 text-[13.5px] mb-3">{{ errorMsg }}</p>
         <button class="px-4 py-2 rounded-lg bg-brand-500 text-white text-[13px]" @click="load">Coba lagi</button>
       </div>
-      <div v-else-if="tasks.length === 0" class="p-10 text-center text-[13.5px] text-ink-400">
-        Belum ada tugas yang cocok. Klik <strong>+ Tugas baru</strong> buat mulai catat kerjaan.
+      <div v-else-if="filteredTasks.length === 0" class="p-10 text-center text-[13.5px] text-ink-400">
+        <template v-if="search">
+          Tidak ada tugas yang cocok dengan "<strong>{{ search }}</strong>".
+        </template>
+        <template v-else>
+          Belum ada tugas yang cocok. Klik <strong>+ Tugas baru</strong> buat mulai catat kerjaan.
+        </template>
       </div>
       <div v-else class="overflow-x-auto">
         <table class="w-full text-left">
@@ -156,7 +219,7 @@ async function cycleStatus(task) {
             </tr>
           </thead>
           <tbody class="divide-y divide-ink-100 text-[13.5px]">
-            <tr v-for="t in tasks" :key="t.id" class="hover:bg-ink-50 transition">
+            <tr v-for="t in filteredTasks" :key="t.id" class="hover:bg-ink-50 transition">
               <td class="px-4 py-3">
                 <div class="flex items-center gap-3">
                   <div class="w-9 h-9 shrink-0 rounded-lg overflow-hidden border border-ink-100 bg-cream-100 flex items-center justify-center">
