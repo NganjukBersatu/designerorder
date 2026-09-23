@@ -40,6 +40,11 @@ function normalizeStatus(status) {
   return STATUS_MAP[key] || 'Pending'
 }
 
+async function ownsProduct(productId, teamId) {
+  const result = await pool.query('SELECT id FROM products WHERE id = $1 AND team_id = $2', [productId, teamId])
+  return result.rows.length > 0
+}
+
 function mapRow(r) {
   return {
     id: r.id,
@@ -49,6 +54,7 @@ function mapRow(r) {
     characterType: r.character_type,
     style: r.style,
     package: r.package,
+    productId: r.product_id,
     buyerName: r.buyer_name,
     buyerReference: r.buyer_reference,
     storeName: r.store_name,
@@ -65,7 +71,8 @@ router.get('/', async (req, res) => {
   try {
     const { search, status } = req.query
     const where = []
-    const params = []
+    const params = [req.user.teamId]
+    where.push(`team_id = $1`)
 
     if (search) {
       params.push(`%${search}%`)
@@ -115,7 +122,10 @@ router.get('/', async (req, res) => {
 // GET /api/orders/:id
 router.get('/:id', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM orders WHERE id = $1', [req.params.id])
+    const result = await pool.query(
+      'SELECT * FROM orders WHERE id = $1 AND team_id = $2',
+      [req.params.id, req.user.teamId]
+    )
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'Pesanan tidak ditemukan' })
     }
@@ -135,6 +145,7 @@ router.post('/', validateBody(orderFieldsCreate), async (req, res) => {
     characterType,
     style,
     package: pkg,
+    productId,
     buyerName,
     buyerReference,
     storeName,
@@ -143,20 +154,29 @@ router.post('/', validateBody(orderFieldsCreate), async (req, res) => {
     price,
   } = req.body
 
+  if (!buyerName) {
+    return res.status(400).json({ message: 'Nama pembeli wajib diisi' })
+  }
+  if (productId && !(await ownsProduct(productId, req.user.teamId))) {
+    return res.status(404).json({ message: 'Produk tidak ditemukan' })
+  }
+
   try {
     const result = await pool.query(
       `INSERT INTO orders
-        (order_date, designer_name, category, character_type, style, package,
+        (team_id, order_date, designer_name, category, character_type, style, package, product_id,
          buyer_name, buyer_reference, store_name, status, completion_date, price)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
        RETURNING *`,
       [
+        req.user.teamId,
         orderDate || new Date().toISOString().slice(0, 10),
         designerName || 'Unknown',
         category || 'Custom',
         characterType || '-',
         style || '-',
         pkg || null,
+        productId || null,
         buyerName,
         buyerReference || null,
         storeName || null,
@@ -181,6 +201,7 @@ router.patch('/:id', validateBody(orderFieldsUpdate), async (req, res) => {
     characterType,
     style,
     package: pkg,
+    productId,
     buyerName,
     buyerReference,
     storeName,
@@ -188,6 +209,10 @@ router.patch('/:id', validateBody(orderFieldsUpdate), async (req, res) => {
     completionDate,
     price,
   } = req.body
+
+  if (productId && !(await ownsProduct(productId, req.user.teamId))) {
+    return res.status(404).json({ message: 'Produk tidak ditemukan' })
+  }
 
   try {
     const result = await pool.query(
@@ -198,14 +223,15 @@ router.patch('/:id', validateBody(orderFieldsUpdate), async (req, res) => {
         character_type   = COALESCE($4, character_type),
         style            = COALESCE($5, style),
         package          = COALESCE($6, package),
-        buyer_name       = COALESCE($7, buyer_name),
-        buyer_reference  = COALESCE($8, buyer_reference),
-        store_name       = COALESCE($9, store_name),
-        status           = COALESCE($10, status),
-        completion_date  = COALESCE($11, completion_date),
-        price            = COALESCE($12, price),
+        product_id       = COALESCE($7, product_id),
+        buyer_name       = COALESCE($8, buyer_name),
+        buyer_reference  = COALESCE($9, buyer_reference),
+        store_name       = COALESCE($10, store_name),
+        status           = COALESCE($11, status),
+        completion_date  = COALESCE($12, completion_date),
+        price            = COALESCE($13, price),
         updated_at       = now()
-       WHERE id = $13
+       WHERE id = $14 AND team_id = $15
        RETURNING *`,
       [
         orderDate || null,
@@ -214,6 +240,7 @@ router.patch('/:id', validateBody(orderFieldsUpdate), async (req, res) => {
         characterType || null,
         style || null,
         pkg !== undefined ? pkg : null,
+        productId !== undefined ? productId : null,
         buyerName || null,
         buyerReference !== undefined ? buyerReference : null,
         storeName !== undefined ? storeName : null,
@@ -221,6 +248,7 @@ router.patch('/:id', validateBody(orderFieldsUpdate), async (req, res) => {
         completionDate !== undefined ? completionDate : null,
         price !== undefined ? price : null,
         req.params.id,
+        req.user.teamId,
       ]
     )
 
@@ -238,8 +266,8 @@ router.patch('/:id', validateBody(orderFieldsUpdate), async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const result = await pool.query(
-      'DELETE FROM orders WHERE id = $1 RETURNING id',
-      [req.params.id]
+      'DELETE FROM orders WHERE id = $1 AND team_id = $2 RETURNING id',
+      [req.params.id, req.user.teamId]
     )
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'Pesanan tidak ditemukan' })

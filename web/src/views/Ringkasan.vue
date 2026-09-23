@@ -3,7 +3,8 @@ import { ref, computed, onMounted } from 'vue'
 import { api } from '../utils/api.js'
 import { amount, monthLabel } from '../utils/format.js'
 import StatusBadge from '../components/StatusBadge.vue'
-import { useProducts, formatDateTime } from '../composables/useProducts'
+import { useProducts, formatDateTime, formatPrice } from '../composables/useProducts'
+import { useOptions } from '../composables/useOptions'
 
 // ========== PESANAN (data dari API) ==========
 const loading = ref(true)
@@ -84,6 +85,24 @@ const topProducts = computed(() =>
 
 const maxUnits = computed(() => Math.max(...topProducts.value.map((p) => p.units), 1))
 
+// Ringkasan per kategori (dulu ada di halaman Detail Kategori, dipindah ke sini)
+const { optionsOf } = useOptions()
+
+const categoryStats = computed(() => {
+  const names = new Set(optionsOf('style'))
+  for (const p of products.value) {
+    const s = (p.style || '').trim()
+    if (s) names.add(s)
+  }
+
+  return [...names].map((name) => {
+    const items = products.value.filter((p) => (p.style || '').trim() === name)
+    const units = items.reduce((sum, p) => sum + totalSold(p.id), 0)
+    const revenue = items.reduce((sum, p) => sum + totalSold(p.id) * (p.price || 0), 0)
+    return { name, count: items.length, units, revenue }
+  }).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+})
+
 // 6 penjualan terbaru dari semua produk
 const recentSales = computed(() =>
   [...validSales.value]
@@ -129,7 +148,7 @@ function downloadCsv() {
       'Penjualan produk',
       formatDateTime(s.soldAt),
       s.buyer,
-      s.product.name,
+      `${s.product.name} (${s.package || 'Satuan'})`,
       s.qty,
       saleValue(s),
       s.platform || '',
@@ -435,6 +454,26 @@ function printReport() {
         </div>
       </div>
 
+      <!-- Ringkasan per kategori -->
+      <div v-if="categoryStats.length" class="bg-white rounded-card shadow-card p-5">
+        <h2 class="text-[15px] font-semibold text-ink-900 mb-4">Ringkasan per kategori</h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <router-link
+            v-for="c in categoryStats"
+            :key="c.name"
+            :to="`/kategori/${encodeURIComponent(c.name)}`"
+            class="rounded-xl border border-ink-100 p-4 hover:bg-ink-50 transition"
+          >
+            <p class="text-[13.5px] font-medium text-ink-800 mb-2">{{ c.name }}</p>
+            <div class="flex items-center justify-between text-[12px] text-ink-500">
+              <span>{{ c.count }} produk</span>
+              <span>{{ c.units }} unit terjual</span>
+            </div>
+            <p class="text-[13px] font-semibold text-ink-900 mt-1.5">{{ formatPrice(c.revenue) }}</p>
+          </router-link>
+        </div>
+      </div>
+
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <!-- Produk terlaris -->
         <div class="bg-white rounded-card shadow-card p-5">
@@ -574,6 +613,7 @@ function printReport() {
                 <th class="px-4 py-3 font-medium whitespace-nowrap">Tanggal &amp; jam</th>
                 <th class="px-4 py-3 font-medium whitespace-nowrap">Pembeli</th>
                 <th class="px-4 py-3 font-medium whitespace-nowrap">Produk</th>
+                <th class="px-4 py-3 font-medium whitespace-nowrap">Paket</th>
                 <th class="px-4 py-3 font-medium whitespace-nowrap">Platform</th>
                 <th class="px-4 py-3 font-medium text-right whitespace-nowrap">Jumlah</th>
                 <th class="px-4 py-3 font-medium text-right whitespace-nowrap">Total</th>
@@ -586,6 +626,7 @@ function printReport() {
                 <td class="px-4 py-3 text-ink-600">
                   <router-link :to="`/produk/${s.productId}`" class="hover:text-brand-600 transition">{{ s.product.name }}</router-link>
                 </td>
+                <td class="px-4 py-3 text-ink-600">{{ s.package || 'Satuan' }}</td>
                 <td class="px-4 py-3 text-ink-600">{{ s.platform || '—' }}</td>
                 <td class="px-4 py-3 text-right tabular-nums text-ink-700">{{ s.qty }}</td>
                 <td class="px-4 py-3 text-right tabular-nums text-ink-700 font-medium">{{ amount(saleValue(s)) }}</td>

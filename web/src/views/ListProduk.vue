@@ -304,17 +304,38 @@
 
             <div>
               <label class="block text-sm font-medium text-ink-700 mb-1.5">Substyle</label>
-              <OptionSelect v-model="form.substyle" :options="optionsOf('substyle')" placeholder="Pilih substyle" />
+              <select
+                v-model="form.substyle"
+                class="w-full px-3 py-2.5 rounded-xl border border-ink-200 bg-white focus:border-brand-400 outline-none text-sm transition"
+              >
+                <option value="">Pilih substyle</option>
+                <option v-for="sub in substyleOptions" :key="sub" :value="sub">{{ sub }}</option>
+              </select>
+              <p v-if="!substyleOptions.length" class="text-[12px] text-ink-400 mt-1">
+                Belum ada pilihan substyle, tambahkan dulu di halaman Pengaturan.
+              </p>
             </div>
 
             <div>
               <label class="block text-sm font-medium text-ink-700 mb-1.5">Designer</label>
-              <OptionSelect v-model="form.designer" :options="optionsOf('designer')" placeholder="Pilih designer" />
+              <select
+                v-model="form.designer"
+                class="w-full px-3 py-2.5 rounded-xl border border-ink-200 bg-white focus:border-brand-400 outline-none text-sm transition"
+              >
+                <option value="">Pilih designer</option>
+                <option v-for="d in designerOptions" :key="d" :value="d">{{ d }}</option>
+              </select>
             </div>
 
             <div>
               <label class="block text-sm font-medium text-ink-700 mb-1.5">Status Produksi</label>
-              <OptionSelect v-model="form.productionStatus" :options="optionsOf('productionStatus')" placeholder="Pilih status produksi" />
+              <select
+                v-model="form.productionStatus"
+                class="w-full px-3 py-2.5 rounded-xl border border-ink-200 bg-white focus:border-brand-400 outline-none text-sm transition"
+              >
+                <option value="">Pilih status produksi</option>
+                <option v-for="s in productionStatusOptions" :key="s" :value="s">{{ s }}</option>
+              </select>
             </div>
 
             <div>
@@ -430,6 +451,7 @@ import { fileToCompressedDataUrl } from '../utils/imageFile'
 import { getLinks, cleanLinks } from '../utils/links'
 import { splitPlatforms } from '../utils/platforms'
 import { useOptions } from '../composables/useOptions'
+import { useTeamMembers } from '../composables/useTeamMembers'
 import OptionSelect from '../components/OptionSelect.vue'
 import PlatformPicker from '../components/PlatformPicker.vue'
 import PlatformBadges from '../components/PlatformBadges.vue'
@@ -438,6 +460,15 @@ const route = useRoute()
 const router = useRouter()
 const { products, addProduct, totalSold, isSold } = useProducts()
 const { optionsOf, mergeOptions } = useOptions()
+const { members } = useTeamMembers()
+
+// Designer diambil dari anggota tim + pilihan manual yang sudah diatur di Pengaturan
+const designerOptions = computed(() =>
+  mergeOptions('designer', members.value.map(m => m.username))
+)
+const productionStatusOptions = computed(() =>
+  mergeOptions('productionStatus', [...new Set(products.value.map(p => p.productionStatus).filter(Boolean))].sort())
+)
 
 // ========== NAVIGASI ==========
 function goToDetail(id) {

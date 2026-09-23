@@ -3,6 +3,7 @@
 // Sekarang data diambil dari API (bukan disimpan di memory lagi), jadi tidak
 // hilang saat halaman di-refresh.
 import { ref } from 'vue'
+import { getToken, setToken } from '../utils/api.js'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
 
@@ -12,11 +13,19 @@ const loading = ref(false)
 const error = ref(null)
 
 async function request(path, options = {}) {
+  const token = getToken()
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     ...options,
   })
   const body = await res.json().catch(() => ({}))
+  if (res.status === 401) {
+    setToken('')
+    if (!location.pathname.startsWith('/login')) location.href = '/login'
+  }
   if (!res.ok) {
     throw new Error(body.message || 'Terjadi kesalahan pada server')
   }
@@ -34,7 +43,7 @@ function flattenSales(productList) {
 }
 
 // ========== FETCH ==========
-async function fetchProducts() {
+export async function fetchProducts() {
   loading.value = true
   error.value = null
   try {
@@ -49,8 +58,10 @@ async function fetchProducts() {
   }
 }
 
-// Muat otomatis begitu composable ini pertama kali dipakai
-fetchProducts()
+// Muat otomatis begitu composable ini pertama kali dipakai, tapi cuma kalau
+// sudah ada token (mis. refresh halaman waktu masih login). Kalau belum
+// login, useAuth yang akan memanggil fetchProducts() setelah login sukses.
+if (getToken()) fetchProducts()
 
 // ========== HELPER FORMAT ==========
 export function formatDateTime(dateStr) {
