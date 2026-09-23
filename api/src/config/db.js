@@ -27,8 +27,7 @@ export const testConnection = async () => {
   }
 }
 
-// Membuat tabel-tabel otomatis kalau belum ada, jadi tidak perlu
-// jalankan migrasi manual - cukup pastikan .env sudah diisi dengan benar.
+// Membuat tabel-tabel otomatis kalau belum ada
 export const ensureSchema = async () => {
   // ===== Tim & anggota (multi-tenant: satu tim = satu workspace client) =====
   await pool.query(`
@@ -50,8 +49,11 @@ export const ensureSchema = async () => {
     );
   `)
 
-  // Migrasi otomatis: kalau tabel users sudah dibuat sebelum role 'admin' ada,
-  // constraint lama cuma izinkan owner/member. Ganti supaya 'admin' valid juga.
+  // Migrasi otomatis: pastikan kolom role ada, lalu perbarui constraint-nya
+  await pool.query(`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'owner';
+  `)
+
   await pool.query(`
     DO $$
     BEGIN
@@ -84,14 +86,9 @@ export const ensureSchema = async () => {
     );
   `)
 
-  // Setiap pesanan & produk milik satu tim, supaya data antar tim/client
-  // tidak saling kelihatan. Nullable karena data lama (sebelum multi-tim)
-  // belum tentu punya pemilik tim.
   await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS team_id INTEGER REFERENCES teams(id) ON DELETE CASCADE;`)
 
-  // Migrasi otomatis: kalau tabel "orders" dibuat sebelum perubahan ini
-  // (masih punya kolom lama total_order INTEGER), ganti jadi package VARCHAR
-  // tanpa menghapus data yang sudah ada. Aman dijalankan berkali-kali.
+  // Migrasi otomatis: ganti total_order jadi package jika masih pakai kolom lama
   await pool.query(`
     DO $$
     BEGIN
@@ -106,7 +103,7 @@ export const ensureSchema = async () => {
     END $$;
   `)
 
-  // ===== Produk (halaman /produk, /kategori) =====
+  // ===== Produk =====
   await pool.query(`
     CREATE TABLE IF NOT EXISTS products (
       id SERIAL PRIMARY KEY,
@@ -128,21 +125,16 @@ export const ensureSchema = async () => {
     );
   `)
 
-  // Migrasi otomatis: tambahkan kolom order_id kalau tabel products sudah
-  // dibuat sebelum relasi ini ada. Aman dijalankan berkali-kali.
   await pool.query(`
     ALTER TABLE products ADD COLUMN IF NOT EXISTS order_id INTEGER REFERENCES orders(id) ON DELETE SET NULL;
   `)
 
-  // Pesanan bisa mengambil datanya dari produk yang sudah ada di katalog
-  // (Kategori/Style ikut produk), jadi orders juga butuh product_id.
   await pool.query(`
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS product_id INTEGER REFERENCES products(id) ON DELETE SET NULL;
   `)
 
   await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS team_id INTEGER REFERENCES teams(id) ON DELETE CASCADE;`)
 
-  // Link DB (Dropbox dkk) — satu produk bisa punya beberapa link
   await pool.query(`
     CREATE TABLE IF NOT EXISTS product_links (
       id SERIAL PRIMARY KEY,
@@ -152,9 +144,6 @@ export const ensureSchema = async () => {
     );
   `)
 
-  // Paket per produk (mis. Basic / Full) — isinya beda-beda sesuai yang
-  // ditawarkan ke client di tiap platform jualan. Dipakai lagi saat catat
-  // penjualan, jadi tidak perlu ketik ulang nama & harga paketnya.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS product_packages (
       id SERIAL PRIMARY KEY,
@@ -166,7 +155,6 @@ export const ensureSchema = async () => {
     );
   `)
 
-  // Riwayat penjualan produk (halaman Detail Produk)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS sales (
       id SERIAL PRIMARY KEY,
@@ -182,10 +170,7 @@ export const ensureSchema = async () => {
     );
   `)
 
-  // ===== Tugas (kerjaan/service internal anggota tim, di luar produk yang dijual) =====
-  // Self-assign: siapa pun di tim bisa bikin tugas buat dirinya sendiri.
-  // Sengaja diketikin (VARCHAR) bukan FK style/opsi, karena datanya independen
-  // dari katalog produk — cukup nempel ke user yang bikin dan status kerjaannya.
+  // ===== Tugas (Tasks) =====
   await pool.query(`
     CREATE TABLE IF NOT EXISTS tasks (
       id SERIAL PRIMARY KEY,
@@ -208,12 +193,9 @@ export const ensureSchema = async () => {
     );
   `)
 
-  // Migrasi otomatis: tugas gak butuh platform (bukan buat dijual), dan butuh
-  // designer kalau tabelnya sudah kebuat sebelum kolom ini ada.
   await pool.query(`ALTER TABLE tasks DROP COLUMN IF EXISTS platform;`)
   await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS designer VARCHAR(150);`)
 
-  // Sama seperti product_links, tapi buat tugas — satu tugas bisa punya beberapa Link DB.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS task_links (
       id SERIAL PRIMARY KEY,
@@ -222,13 +204,28 @@ export const ensureSchema = async () => {
       position INTEGER NOT NULL DEFAULT 0
     );
   `)
-  // Seed akun admin default kalau tabel users masih kosong
+
+  // ===== Seed akun admin default kalau tabel users masih kosong =====
   const { rows } = await pool.query('SELECT COUNT(*)::int AS count FROM users')
   if (rows[0].count === 0) {
+    // Pastikan ada minimal satu tim default di tabel teams
+    let teamResult = await pool.query('SELECT id FROM teams LIMIT 1')
+    let teamId
+
+    if (teamResult.rows.length === 0) {
+      const newTeam = await pool.query(
+        'INSERT INTO teams (name) VALUES ($1) RETURNING id',
+        ['Default Team']
+      )
+      teamId = newTeam.rows[0].id
+    } else {
+      teamId = teamResult.rows[0].id
+    }
+
     const defaultHash = await bcrypt.hash('admin123', 10)
     await pool.query(
-      'INSERT INTO users (username, password_hash) VALUES ($1, $2)',
-      ['admin', defaultHash]
+      'INSERT INTO users (team_id, username, password_hash, role) VALUES ($1, $2, $3, $4)',
+      [teamId, 'admin', defaultHash, 'owner']
     )
     console.log('👤 Akun default dibuat: admin / admin123 (segera ganti password)')
   }
