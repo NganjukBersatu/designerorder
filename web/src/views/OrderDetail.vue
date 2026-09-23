@@ -28,6 +28,16 @@ onMounted(load)
 
 function onSaved(updated) {
   order.value = updated
+  showToast('Perubahan berhasil disimpan')
+}
+
+// --- Toast notification custom (konsisten dengan halaman Semua Pesanan) ---
+const toast = ref(null) // { message, type }
+let toastTimer
+function showToast(message, type = 'success') {
+  clearTimeout(toastTimer)
+  toast.value = { message, type }
+  toastTimer = setTimeout(() => { toast.value = null }, 3000)
 }
 </script>
 
@@ -75,5 +85,37 @@ function onSaved(updated) {
         </div>
       </div>
     </template>
+
+    <!-- Toast notification custom -->
+    <Transition name="fade">
+      <div
+        v-if="toast"
+        class="fixed bottom-5 right-5 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-card-hover text-[13.5px] font-medium text-white"
+        :class="toast.type === 'error' ? 'bg-danger-600' : 'bg-brand-600'"
+      >
+        <svg v-if="toast.type === 'success'" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+          <path d="m9 11 3 3L22 4" />
+        </svg>
+        <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10" />
+          <path d="M12 8v4" />
+          <path d="M12 16h.01" />
+        </svg>
+        {{ toast.message }}
+      </div>
+    </Transition>
   </div>
 </template>
+
+<style scoped>
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
+}
+</style>

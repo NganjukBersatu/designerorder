@@ -57,6 +57,7 @@ export default {
           100: '#F7EFD2',
           500: '#C9A227',
           600: '#A9860F',
+          700: '#7A620A',
         },
         danger: {
           100: '#F5DFDA',
