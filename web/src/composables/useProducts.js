@@ -3,7 +3,7 @@
 // Sekarang data diambil dari API (bukan disimpan di memory lagi), jadi tidak
 // hilang saat halaman di-refresh.
 import { ref } from 'vue'
-import { getToken, setToken } from '../utils/api.js'
+import { getToken, setToken } from '../utils/api.js' // sesuaikan path ini kalau lokasi api.js beda
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
 
@@ -14,18 +14,24 @@ const error = ref(null)
 
 async function request(path, options = {}) {
   const token = getToken()
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    ...options,
-  })
-  const body = await res.json().catch(() => ({}))
-  if (res.status === 401) {
-    setToken('')
-    if (!location.pathname.startsWith('/login')) location.href = '/login'
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(options.headers || {}),
   }
+
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers,
+  })
+
+  const body = await res.json().catch(() => ({}))
+
+  if (res.status === 401) {
+    setToken(null)
+    throw new Error(body.message || 'Sesi berakhir, silakan login lagi')
+  }
+
   if (!res.ok) {
     throw new Error(body.message || 'Terjadi kesalahan pada server')
   }
@@ -98,9 +104,9 @@ export function nowLocal() {
 
 // ========== COMPOSABLE ==========
 export function useProducts() {
-  function getProduct(id) {
-    return products.value.find(p => p.id === Number(id)) || null
-  }
+function getProduct(id) {
+  return products.value.find(p => String(p.id) === String(id)) || null
+}
 
   async function addProduct(data) {
     await request('/products', { method: 'POST', body: JSON.stringify(data) })
@@ -118,11 +124,10 @@ export function useProducts() {
   }
 
   // Riwayat penjualan satu produk, terbaru di atas
-  function salesOf(productId) {
-    return sales.value
-      .filter(s => s.productId === Number(productId))
-      .sort((a, b) => new Date(b.soldAt) - new Date(a.soldAt))
-  }
+ function salesOf(productId) {
+  return sales.value
+    .filter(s => String(s.productId) === String(productId))
+}
 
   // Total unit terjual = jumlah qty dari semua transaksi
   function totalSold(productId) {
