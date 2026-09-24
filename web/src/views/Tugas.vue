@@ -89,16 +89,6 @@ function onSaved() {
   load()
 }
 
-async function remove(task) {
-  if (!confirm(`Hapus tugas "${task.title}"?`)) return
-  try {
-    await api.delete(`/tasks/${task.id}`)
-    load()
-  } catch (err) {
-    alert(err.message)
-  }
-}
-
 async function cycleStatus(task) {
   const next = { Pending: 'Progress', Progress: 'Done', Done: 'Pending' }[task.status]
   try {
@@ -106,6 +96,32 @@ async function cycleStatus(task) {
     load()
   } catch (err) {
     alert(err.message)
+  }
+}
+
+// ===== Konfirmasi hapus (modal sendiri, bukan bawaan browser) =====
+const taskToDelete = ref(null)
+const deleting = ref(false)
+
+function askRemove(task) {
+  taskToDelete.value = task
+}
+
+function cancelRemove() {
+  taskToDelete.value = null
+}
+
+async function confirmRemove() {
+  if (!taskToDelete.value) return
+  deleting.value = true
+  try {
+    await api.delete(`/tasks/${taskToDelete.value.id}`)
+    taskToDelete.value = null
+    load()
+  } catch (err) {
+    alert(err.message)
+  } finally {
+    deleting.value = false
   }
 }
 </script>
@@ -191,7 +207,7 @@ async function cycleStatus(task) {
     </div>
 
     <!-- List tugas -->
-    <div class="bg-white rounded-card shadow-card overflow-hidden">
+    <div class="bg-white rounded-card shadow-card border border-ink-100 overflow-hidden">
       <div v-if="loading" class="p-6 space-y-3">
         <div v-for="i in 5" :key="i" class="h-10 rounded-lg bg-ink-100 animate-pulse" />
       </div>
@@ -208,18 +224,32 @@ async function cycleStatus(task) {
         </template>
       </div>
       <div v-else class="overflow-x-auto">
-        <table class="w-full text-left">
-          <thead class="bg-ink-50 text-[11.5px] uppercase text-ink-400">
-            <tr>
-              <th class="px-4 py-3 font-medium">Tugas</th>
-              <th class="px-4 py-3 font-medium">Dikerjakan oleh</th>
-              <th class="px-4 py-3 font-medium">Tenggat</th>
-              <th class="px-4 py-3 font-medium">Status</th>
-              <th class="px-4 py-3 font-medium"></th>
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="bg-cream-100 text-ink-500 border-b border-ink-100">
+              <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap w-12 sticky left-0 z-20 bg-cream-100">No</th>
+              <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[220px]">Tugas</th>
+              <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[140px]">Untuk siapa</th>
+              <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[140px]">Dikerjakan oleh</th>
+              <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[130px]">Status Produksi</th>
+              <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[160px]">Tanggal Dibuat</th>
+              <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[170px]">Tanggal Selesai/Upload</th>
+              <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[160px]">Link DB</th>
+              <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[180px]">Catatan</th>
+              <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[110px]">Tenggat</th>
+              <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[120px]">Status</th>
+              <th class="px-4 py-3.5 text-center font-medium whitespace-nowrap w-28">Aksi</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-ink-100 text-[13.5px]">
-            <tr v-for="t in filteredTasks" :key="t.id" class="hover:bg-ink-50 transition">
+          <tbody>
+            <tr
+              v-for="(t, idx) in filteredTasks"
+              :key="t.id"
+              class="border-b border-ink-50 hover:bg-cream-50/70 transition group"
+            >
+              <td class="px-4 py-4 text-ink-400 sticky left-0 z-10 bg-white group-hover:bg-cream-50">
+                {{ idx + 1 }}
+              </td>
               <td class="px-4 py-3">
                 <div class="flex items-center gap-3">
                   <div class="w-9 h-9 shrink-0 rounded-lg overflow-hidden border border-ink-100 bg-cream-100 flex items-center justify-center">
@@ -229,27 +259,40 @@ async function cycleStatus(task) {
                     </svg>
                   </div>
                   <div class="min-w-0">
-                    <p class="font-medium text-ink-900 truncate">{{ t.title }}</p>
-                    <p class="text-[12px] text-ink-400 truncate">{{ [t.clientName, t.style, t.substyle].filter(Boolean).join(' · ') || '—' }}</p>
+                    <p class="font-medium text-ink-800 truncate">{{ t.title }}</p>
+                    <p class="text-[12px] text-ink-400 truncate">{{ [t.style, t.substyle].filter(Boolean).join(' · ') || '—' }}</p>
                   </div>
                 </div>
               </td>
-              <td class="px-4 py-3 text-ink-700">
+              <td class="px-4 py-4 text-ink-600 whitespace-nowrap">{{ t.clientName || '—' }}</td>
+              <td class="px-4 py-4 text-ink-600 whitespace-nowrap">
                 {{ t.designer || t.username }}
                 <span v-if="(t.designer || t.username) === user" class="text-ink-400">(kamu)</span>
                 <p v-if="t.designer && t.designer !== t.username" class="text-[11px] text-ink-400">dicatat oleh {{ t.username }}</p>
               </td>
-              <td class="px-4 py-3 text-ink-500">{{ t.dueDate ? shortDate(t.dueDate) : '—' }}</td>
-              <td class="px-4 py-3">
+              <td class="px-4 py-4 text-ink-600 whitespace-nowrap">{{ t.productionStatus || '—' }}</td>
+              <td class="px-4 py-4 text-ink-500 text-[13px] whitespace-nowrap">{{ t.date ? shortDate(t.date) : '—' }}</td>
+              <td class="px-4 py-4 text-ink-500 text-[13px] whitespace-nowrap">{{ t.uploadDate ? shortDate(t.uploadDate) : '—' }}</td>
+              <td class="px-4 py-4">
+                <div v-if="t.linkDbs?.length" class="flex flex-col gap-1 max-w-[220px]">
+                  <a v-for="(l, i) in t.linkDbs" :key="i" :href="l" target="_blank" class="text-brand-600 hover:underline truncate">{{ l }}</a>
+                </div>
+                <span v-else class="text-ink-300">—</span>
+              </td>
+              <td class="px-4 py-4 text-ink-500 max-w-[220px]">
+                <p class="truncate" :title="t.note || ''">{{ t.note || '—' }}</p>
+              </td>
+              <td class="px-4 py-4 text-ink-500 text-[13px] whitespace-nowrap">{{ t.dueDate ? shortDate(t.dueDate) : '—' }}</td>
+              <td class="px-4 py-4">
                 <button type="button" title="Klik buat ganti status" @click="cycleStatus(t)">
                   <StatusBadge :status="t.status" />
                 </button>
               </td>
-              <td class="px-4 py-3 text-right whitespace-nowrap">
+              <td class="px-4 py-4 text-center whitespace-nowrap">
                 <button class="text-brand-500 hover:text-brand-600 text-[12.5px] font-medium mr-3" @click="openEdit(t)">
                   Edit
                 </button>
-                <button class="text-danger-500 hover:text-danger-600 text-[12.5px] font-medium" @click="remove(t)">
+                <button class="text-danger-500 hover:text-danger-600 text-[12.5px] font-medium" @click="askRemove(t)">
                   Hapus
                 </button>
               </td>
@@ -262,5 +305,36 @@ async function cycleStatus(task) {
     <Modal v-if="showCreate" :title="editingTask ? 'Edit tugas' : 'Tugas baru'" @close="showCreate = false">
       <TaskForm :initial="editingTask" @saved="onSaved" @cancel="showCreate = false" />
     </Modal>
+
+    <!-- ===== Modal konfirmasi hapus (bukan bawaan browser) ===== -->
+    <Teleport to="body">
+      <div v-if="taskToDelete" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-ink-900/40 backdrop-blur-sm" @click="cancelRemove"></div>
+
+        <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+          <h3 class="text-base font-semibold text-ink-900 mb-1.5">Hapus tugas?</h3>
+          <p class="text-[13.5px] text-ink-500 mb-5">
+            Tugas "<strong>{{ taskToDelete.title }}</strong>" akan dihapus permanen dan tidak bisa dikembalikan.
+          </p>
+          <div class="flex items-center justify-end gap-3">
+            <button
+              type="button"
+              class="px-4 py-2.5 rounded-xl border border-ink-200 text-ink-600 hover:bg-ink-50 text-[13.5px] font-medium transition"
+              @click="cancelRemove"
+            >
+              Batal
+            </button>
+            <button
+              type="button"
+              :disabled="deleting"
+              class="px-4 py-2.5 rounded-xl bg-danger-500 hover:bg-danger-600 text-white text-[13.5px] font-medium transition disabled:opacity-60"
+              @click="confirmRemove"
+            >
+              {{ deleting ? 'Menghapus…' : 'Ya, hapus' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
