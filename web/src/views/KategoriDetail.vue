@@ -26,7 +26,6 @@
           </div>
           <p class="text-sm text-ink-500 mt-1">Semua produk dengan Style {{ name }}.</p>
         </div>
-
         <button
           type="button"
           @click="openAddModal"
@@ -100,13 +99,11 @@
                 <th class="px-4 py-3.5 text-right font-medium whitespace-nowrap min-w-[100px]">Harga</th>
                 <th class="px-4 py-3.5 text-right font-medium whitespace-nowrap w-28">Jumlah Terjual</th>
                 <th class="px-4 py-3.5 text-center font-medium whitespace-nowrap min-w-[120px]">Status Jual</th>
-                <th class="px-4 py-3.5 text-center font-medium whitespace-nowrap w-20">Aksi</th>
+                <th class="px-4 py-3.5 text-center font-medium whitespace-nowrap w-16">Aksi</th>
                 <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[140px]">Catatan</th>
               </tr>
             </thead>
-
             <tbody>
-              <!-- Klik baris → buka halaman detail produk -->
               <tr
                 v-for="(item, index) in filteredItems"
                 :key="item.id"
@@ -116,7 +113,6 @@
                 <td class="px-4 py-4 text-ink-400 sticky left-0 z-10 bg-white group-hover:bg-cream-50">
                   {{ index + 1 }}
                 </td>
-
                 <td class="px-4 py-3">
                   <div class="flex items-center gap-3">
                     <div class="w-12 h-12 shrink-0 rounded-lg overflow-hidden border border-ink-100 bg-cream-100 flex items-center justify-center">
@@ -134,7 +130,6 @@
                     <span class="font-medium text-ink-800">{{ item.name || '—' }}</span>
                   </div>
                 </td>
-
                 <td class="px-4 py-4 text-ink-600">{{ item.substyle || '—' }}</td>
                 <td class="px-4 py-4 text-ink-600">{{ item.designer || '—' }}</td>
                 <td class="px-4 py-4 text-ink-500 text-[13px]">
@@ -180,9 +175,9 @@
                   </span>
                 </td>
 
-                <!-- Aksi: hanya catat penjualan (klik di sini tidak membuka detail) -->
-                <td class="px-4 py-4" @click.stop>
-                  <div class="flex items-center justify-center">
+                <!-- Aksi -->
+                <td class="px-4 py-4 text-center relative" @click.stop>
+                  <div class="flex items-center justify-center gap-1">
                     <button
                       @click="recordSale(item.id)"
                       class="p-1.5 rounded-lg hover:bg-ok-100 text-ok-600 transition"
@@ -192,7 +187,42 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
                       </svg>
                     </button>
+                    <button
+                      type="button"
+                      class="p-1.5 rounded-lg hover:bg-ink-100 text-ink-500 transition"
+                      title="Aksi lain"
+                      aria-label="Aksi lain"
+                      @click.stop="toggleMenu(item.id, $event)"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6h.01M12 12h.01M12 18h.01" />
+                      </svg>
+                    </button>
                   </div>
+
+                  <Teleport to="body">
+                    <div v-if="openMenuId === item.id" class="fixed inset-0 z-30" @click="closeMenu"></div>
+                    <div
+                      v-if="openMenuId === item.id"
+                      class="fixed w-36 bg-white rounded-xl shadow-lg border border-ink-100 py-1.5 z-40 text-left"
+                      :style="{ top: menuPos.top + 'px', left: menuPos.left + 'px' }"
+                    >
+                      <button
+                        type="button"
+                        class="w-full text-left px-3.5 py-2 text-[13px] text-ink-700 hover:bg-cream-50 transition"
+                        @click.stop="editProduct(item)"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        class="w-full text-left px-3.5 py-2 text-[13px] text-danger-600 hover:bg-danger-50 transition"
+                        @click.stop="askRemove(item)"
+                      >
+                        Hapus
+                      </button>
+                    </div>
+                  </Teleport>
                 </td>
 
                 <td class="px-4 py-4 text-ink-500">{{ item.note || '—' }}</td>
@@ -230,7 +260,6 @@
     <Teleport to="body">
       <div v-if="showAddModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
         <div class="absolute inset-0 bg-ink-900/40 backdrop-blur-sm" @click="closeAddModal"></div>
-
         <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
           <div class="flex items-center justify-between px-6 py-4 border-b border-ink-100">
             <h2 class="text-lg font-semibold text-ink-900">Tambah Produk</h2>
@@ -256,7 +285,6 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
                 </div>
-
                 <div class="flex flex-col items-start gap-2">
                   <div class="flex flex-wrap items-center gap-2">
                     <label class="inline-flex items-center px-3.5 py-2 rounded-xl border border-ink-200 text-ink-700 hover:bg-ink-50 text-sm font-medium transition cursor-pointer">
@@ -296,11 +324,13 @@
 
             <div>
               <label class="block text-sm font-medium text-ink-700 mb-1.5">Substyle</label>
-              <CustomSelect
+              <select
                 v-model="addForm.substyle"
-                :options="substyleOptions"
-                placeholder="Pilih substyle"
-              />
+                class="w-full px-3 py-2.5 rounded-xl border border-ink-200 bg-white focus:border-brand-400 outline-none text-sm transition"
+              >
+                <option value="">Pilih substyle</option>
+                <option v-for="sub in substyleOptions" :key="sub" :value="sub">{{ sub }}</option>
+              </select>
               <p v-if="!substyleOptions.length" class="text-[12px] text-ink-400 mt-1">
                 Belum ada pilihan substyle, tambahkan dulu di halaman Pengaturan.
               </p>
@@ -308,20 +338,24 @@
 
             <div>
               <label class="block text-sm font-medium text-ink-700 mb-1.5">Designer</label>
-              <CustomSelect
+              <select
                 v-model="addForm.designer"
-                :options="designerOptions"
-                placeholder="Pilih designer"
-              />
+                class="w-full px-3 py-2.5 rounded-xl border border-ink-200 bg-white focus:border-brand-400 outline-none text-sm transition"
+              >
+                <option value="">Pilih designer</option>
+                <option v-for="d in designerOptions" :key="d" :value="d">{{ d }}</option>
+              </select>
             </div>
 
             <div>
               <label class="block text-sm font-medium text-ink-700 mb-1.5">Status Produksi</label>
-              <CustomSelect
+              <select
                 v-model="addForm.productionStatus"
-                :options="productionStatusOptions"
-                placeholder="Pilih status produksi"
-              />
+                class="w-full px-3 py-2.5 rounded-xl border border-ink-200 bg-white focus:border-brand-400 outline-none text-sm transition"
+              >
+                <option value="">Pilih status produksi</option>
+                <option v-for="s in productionStatusOptions" :key="s" :value="s">{{ s }}</option>
+              </select>
             </div>
 
             <div>
@@ -405,6 +439,218 @@
         </div>
       </div>
     </Teleport>
+
+    <!-- ==================== MODAL EDIT PRODUK ==================== -->
+    <Teleport to="body">
+      <div v-if="showEditModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-ink-900/40 backdrop-blur-sm" @click="closeEditModal"></div>
+        <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+          <div class="flex items-center justify-between px-6 py-4 border-b border-ink-100">
+            <h2 class="text-lg font-semibold text-ink-900">Edit Produk</h2>
+            <button
+              @click="closeEditModal"
+              class="p-1.5 rounded-lg hover:bg-ink-100 text-ink-500 transition"
+              aria-label="Tutup"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          <div class="px-6 py-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <!-- Gambar produk -->
+            <div class="sm:col-span-2">
+              <label class="block text-sm font-medium text-ink-700 mb-1.5">Gambar Produk</label>
+              <div class="flex items-center gap-4">
+                <div class="w-24 h-24 shrink-0 rounded-xl overflow-hidden border border-ink-200 bg-cream-100 flex items-center justify-center">
+                  <img v-if="editForm.image" :src="editForm.image" alt="Pratinjau gambar" class="w-full h-full object-cover" />
+                  <svg v-else xmlns="http://www.w3.org/2000/svg" class="w-7 h-7 text-ink-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <div class="flex flex-col items-start gap-2">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <label class="inline-flex items-center px-3.5 py-2 rounded-xl border border-ink-200 text-ink-700 hover:bg-ink-50 text-sm font-medium transition cursor-pointer">
+                      {{ editForm.image ? 'Ganti Gambar' : 'Pilih Gambar' }}
+                      <input type="file" accept="image/*" class="hidden" @change="onPickEditImage" />
+                    </label>
+                    <button
+                      v-if="editForm.image"
+                      type="button"
+                      @click="editForm.image = ''"
+                      class="px-3.5 py-2 rounded-xl text-danger-600 hover:bg-danger-50 text-sm font-medium transition"
+                    >
+                      Hapus Gambar
+                    </button>
+                  </div>
+                  <p v-if="editImageError" class="text-xs text-danger-600">{{ editImageError }}</p>
+                  <p v-else class="text-xs text-ink-400">JPG, PNG, atau WEBP. Ukuran otomatis diperkecil.</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="sm:col-span-2">
+              <label class="block text-sm font-medium text-ink-700 mb-1.5">Nama Produk</label>
+              <input v-model="editForm.name" type="text" class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition" placeholder="Nama produk" />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-ink-700 mb-1.5">Style</label>
+              <input
+                :value="name"
+                type="text"
+                disabled
+                class="w-full px-3 py-2.5 rounded-xl border border-ink-200 bg-cream-100 text-ink-500 text-sm cursor-not-allowed"
+              />
+              <p class="text-xs text-ink-400 mt-1">Style mengikuti kategori {{ name }}.</p>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-ink-700 mb-1.5">Substyle</label>
+              <select
+                v-model="editForm.substyle"
+                class="w-full px-3 py-2.5 rounded-xl border border-ink-200 bg-white focus:border-brand-400 outline-none text-sm transition"
+              >
+                <option value="">Pilih substyle</option>
+                <option v-for="sub in substyleOptions" :key="sub" :value="sub">{{ sub }}</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-ink-700 mb-1.5">Designer</label>
+              <select
+                v-model="editForm.designer"
+                class="w-full px-3 py-2.5 rounded-xl border border-ink-200 bg-white focus:border-brand-400 outline-none text-sm transition"
+              >
+                <option value="">Pilih designer</option>
+                <option v-for="d in designerOptions" :key="d" :value="d">{{ d }}</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-ink-700 mb-1.5">Status Produksi</label>
+              <select
+                v-model="editForm.productionStatus"
+                class="w-full px-3 py-2.5 rounded-xl border border-ink-200 bg-white focus:border-brand-400 outline-none text-sm transition"
+              >
+                <option value="">Pilih status produksi</option>
+                <option v-for="s in productionStatusOptions" :key="s" :value="s">{{ s }}</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-ink-700 mb-1.5">Tanggal Dibuat</label>
+              <input v-model="editForm.date" type="datetime-local" class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition" />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-ink-700 mb-1.5">Tanggal Upload ke Platform</label>
+              <input v-model="editForm.uploadDate" type="datetime-local" class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition" />
+            </div>
+
+            <div class="sm:col-span-2">
+              <label class="block text-sm font-medium text-ink-700 mb-1.5">Platform</label>
+              <PlatformPicker v-model="editForm.platform" :options="optionsOf('platform')" />
+            </div>
+
+            <div class="sm:col-span-2">
+              <div class="flex items-center justify-between mb-1.5">
+                <label class="block text-sm font-medium text-ink-700">Link DB</label>
+                <button
+                  type="button"
+                  @click="editForm.linkDbs.push('')"
+                  class="inline-flex items-center gap-1 text-sm font-medium text-brand-600 hover:underline"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                  </svg>
+                  Tambah Link
+                </button>
+              </div>
+              <div class="space-y-2">
+                <div v-for="(link, i) in editForm.linkDbs" :key="i" class="flex items-center gap-2">
+                  <input
+                    v-model="editForm.linkDbs[i]"
+                    type="text"
+                    class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition"
+                    :placeholder="`https://www.dropbox.com/... (link ${i + 1})`"
+                  />
+                  <button
+                    v-if="editForm.linkDbs.length > 1"
+                    type="button"
+                    @click="editForm.linkDbs.splice(i, 1)"
+                    class="p-2 rounded-lg hover:bg-danger-50 text-danger-600 transition"
+                    title="Hapus link"
+                    aria-label="Hapus link"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="sm:col-span-2">
+              <label class="block text-sm font-medium text-ink-700 mb-1.5">Harga ($)</label>
+              <input v-model.number="editForm.price" type="number" min="0" step="0.5" class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition" placeholder="0.00" />
+            </div>
+
+            <div class="sm:col-span-2">
+              <label class="block text-sm font-medium text-ink-700 mb-1.5">Catatan</label>
+              <textarea v-model="editForm.note" rows="2" class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition resize-none" placeholder="Catatan tambahan..."></textarea>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-ink-100 bg-cream-50 rounded-b-2xl">
+            <button
+              @click="closeEditModal"
+              class="px-4 py-2.5 rounded-xl border border-ink-200 text-ink-600 hover:bg-white text-sm font-medium transition"
+            >
+              Batal
+            </button>
+            <button
+              @click="submitEdit"
+              :disabled="savingEdit"
+              class="px-5 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium transition shadow-sm disabled:opacity-60"
+            >
+              {{ savingEdit ? 'Menyimpan…' : 'Simpan Perubahan' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- ==================== MODAL KONFIRMASI HAPUS ==================== -->
+    <Teleport to="body">
+      <div v-if="productToDelete" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-ink-900/40 backdrop-blur-sm" @click="cancelRemove"></div>
+        <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+          <h3 class="text-base font-semibold text-ink-900 mb-1.5">Hapus produk?</h3>
+          <p class="text-[13.5px] text-ink-500 mb-5">
+            Produk "<strong>{{ productToDelete.name }}</strong>" akan dihapus permanen dan tidak bisa dikembalikan.
+          </p>
+          <div class="flex items-center justify-end gap-3">
+            <button
+              type="button"
+              class="px-4 py-2.5 rounded-xl border border-ink-200 text-ink-600 hover:bg-ink-50 text-[13.5px] font-medium transition"
+              @click="cancelRemove"
+            >
+              Batal
+            </button>
+            <button
+              type="button"
+              :disabled="deleting"
+              class="px-4 py-2.5 rounded-xl bg-danger-500 hover:bg-danger-600 text-white text-[13.5px] font-medium transition disabled:opacity-60"
+              @click="confirmRemove"
+            >
+              {{ deleting ? 'Menghapus…' : 'Ya, hapus' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -420,11 +666,11 @@ import { splitPlatforms } from '../utils/platforms'
 import PlatformBadges from '../components/PlatformBadges.vue'
 import OptionSelect from '../components/OptionSelect.vue'
 import PlatformPicker from '../components/PlatformPicker.vue'
-import CustomSelect from '../components/CustomSelect.vue'
 
 const route = useRoute()
 const router = useRouter()
-const { products, totalSold, isSold, addProduct } = useProducts()
+
+const { products, totalSold, isSold, addProduct, updateProduct, removeProduct } = useProducts()
 const { optionsOf, mergeOptions } = useOptions()
 const { members } = useTeamMembers()
 
@@ -438,17 +684,13 @@ const productionStatusOptions = computed(() =>
   mergeOptions('productionStatus', [...new Set(products.value.map(p => p.productionStatus).filter(Boolean))].sort())
 )
 
-const NONE = '__none' // produk di kategori ini yang belum punya Substyle
+const NONE = '__none'
 
 // ========== DATA KATEGORI ==========
-// Kategori = Style. Nama kategori diambil dari alamat halaman (/kategori/:name).
 const name = computed(() => String(route.params.name || ''))
-
 const items = computed(() =>
   products.value.filter(p => (p.style || '').trim() === name.value)
 )
-
-// Kategori tetap ada walau kosong, selama Style-nya masih terdaftar di Pengaturan
 const categoryExists = computed(
   () => items.value.length > 0 || optionsOf('style').includes(name.value)
 )
@@ -457,7 +699,6 @@ const categoryExists = computed(
 const activeSub = ref('all')
 const searchQuery = ref('')
 
-// Buka dari kartu Substyle di halaman Kategori (?substyle=...) atau saat pindah kategori
 watch(
   () => [route.params.name, route.query.substyle],
   () => {
@@ -470,7 +711,6 @@ watch(
 
 const substyleChips = computed(() => {
   const chips = [{ key: 'all', label: 'Semua', count: items.value.length }]
-
   const subs = new Map()
   let none = 0
   for (const p of items.value) {
@@ -478,23 +718,19 @@ const substyleChips = computed(() => {
     if (sub) subs.set(sub, (subs.get(sub) || 0) + 1)
     else none++
   }
-
   const sorted = [...subs.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
   for (const [label, count] of sorted) chips.push({ key: label, label, count })
   if (none && subs.size) chips.push({ key: NONE, label: 'Tanpa substyle', count: none })
-
   return chips
 })
 
 const filteredItems = computed(() => {
   let result = items.value
-
   if (activeSub.value === NONE) {
     result = result.filter(p => !(p.substyle || '').trim())
   } else if (activeSub.value !== 'all') {
     result = result.filter(p => (p.substyle || '').trim() === activeSub.value)
   }
-
   const q = searchQuery.value.toLowerCase().trim()
   if (q) {
     result = result.filter(p =>
@@ -506,7 +742,6 @@ const filteredItems = computed(() => {
       (p.note || '').toLowerCase().includes(q)
     )
   }
-
   return result
 })
 
@@ -514,14 +749,56 @@ const filteredItems = computed(() => {
 function goBack() {
   router.push('/kategori')
 }
-
 function goToProduct(id) {
   router.push(`/produk/${id}`)
 }
-
-// Tombol centang: buka halaman detail + langsung tampilkan form catat penjualan
 function recordSale(id) {
+  closeMenu()
   router.push({ path: `/produk/${id}`, query: { jual: 1 } })
+}
+
+// ========== MENU TITIK TIGA ==========
+const openMenuId = ref(null)
+const menuPos = ref({ top: 0, left: 0 })
+
+function toggleMenu(id, event) {
+  if (openMenuId.value === id) {
+    openMenuId.value = null
+    return
+  }
+  const rect = event.currentTarget.getBoundingClientRect()
+  menuPos.value = {
+    top: rect.bottom + 4,
+    left: rect.right - 144,
+  }
+  openMenuId.value = id
+}
+function closeMenu() {
+  openMenuId.value = null
+}
+
+// ========== KONFIRMASI HAPUS ==========
+const productToDelete = ref(null)
+const deleting = ref(false)
+
+function askRemove(item) {
+  closeMenu()
+  productToDelete.value = item
+}
+function cancelRemove() {
+  productToDelete.value = null
+}
+async function confirmRemove() {
+  if (!productToDelete.value) return
+  deleting.value = true
+  try {
+    await removeProduct(productToDelete.value.id)
+    productToDelete.value = null
+  } catch (err) {
+    alert(err.message)
+  } finally {
+    deleting.value = false
+  }
 }
 
 // ========== TAMBAH PRODUK ==========
@@ -550,14 +827,13 @@ function openAddModal() {
   addImageError.value = ''
   showAddModal.value = true
 }
-
 function closeAddModal() {
   showAddModal.value = false
 }
 
 async function onPickAddImage(e) {
   const file = e.target.files?.[0]
-  e.target.value = '' // supaya file yang sama bisa dipilih ulang
+  e.target.value = ''
   if (!file) return
   try {
     addForm.value.image = await fileToCompressedDataUrl(file)
@@ -572,13 +848,11 @@ function submitAdd() {
     alert('Nama Produk wajib diisi')
     return
   }
-
   const cleaned = cleanLinks(addForm.value.linkDbs, normalizeUrl)
-
   addProduct({
     image: addForm.value.image,
     name: addForm.value.name.trim(),
-    style: name.value, // dikunci mengikuti kategori yang sedang dibuka
+    style: name.value,
     substyle: addForm.value.substyle.trim(),
     designer: addForm.value.designer.trim(),
     date: addForm.value.date,
@@ -590,7 +864,86 @@ function submitAdd() {
     price: addForm.value.price || 0,
     note: addForm.value.note.trim()
   })
-
   closeAddModal()
+}
+
+// ========== EDIT PRODUK ==========
+const showEditModal = ref(false)
+const editImageError = ref('')
+const savingEdit = ref(false)
+const editingId = ref(null)
+const editForm = ref(emptyAddForm())
+
+function editProduct(item) {
+  closeMenu()
+  editingId.value = item.id
+
+  // Ambil link dari getLinks agar konsisten
+  const links = getLinks(item)
+  editForm.value = {
+    image: item.image || '',
+    name: item.name || '',
+    substyle: item.substyle || '',
+    designer: item.designer || '',
+    date: item.date || '',
+    uploadDate: item.uploadDate || '',
+    productionStatus: item.productionStatus || '',
+    platform: item.platform || '',
+    linkDbs: links.length ? [...links] : [''],
+    price: item.price ?? 0,
+    note: item.note || ''
+  }
+  editImageError.value = ''
+  showEditModal.value = true
+}
+
+function closeEditModal() {
+  showEditModal.value = false
+  editingId.value = null
+}
+
+async function onPickEditImage(e) {
+  const file = e.target.files?.[0]
+  e.target.value = ''
+  if (!file) return
+  try {
+    editForm.value.image = await fileToCompressedDataUrl(file)
+    editImageError.value = ''
+  } catch (err) {
+    editImageError.value = err.message
+  }
+}
+
+async function submitEdit() {
+  if (!editForm.value.name.trim()) {
+    alert('Nama Produk wajib diisi')
+    return
+  }
+  if (!editingId.value) return
+
+  savingEdit.value = true
+  try {
+    const cleaned = cleanLinks(editForm.value.linkDbs, normalizeUrl)
+    await updateProduct(editingId.value, {
+      image: editForm.value.image,
+      name: editForm.value.name.trim(),
+      style: name.value, // tetap mengikuti kategori
+      substyle: editForm.value.substyle.trim(),
+      designer: editForm.value.designer.trim(),
+      date: editForm.value.date,
+      uploadDate: editForm.value.uploadDate,
+      productionStatus: editForm.value.productionStatus.trim(),
+      platform: editForm.value.platform.trim(),
+      linkDb: cleaned[0] || '',
+      linkDbs: cleaned,
+      price: editForm.value.price || 0,
+      note: editForm.value.note.trim()
+    })
+    closeEditModal()
+  } catch (err) {
+    alert(err.message || 'Gagal menyimpan perubahan')
+  } finally {
+    savingEdit.value = false
+  }
 }
 </script>

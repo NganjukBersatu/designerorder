@@ -12,7 +12,78 @@ body {
   @apply bg-cream text-ink-900 antialiased;
 }
 
-/* Scrollbar halus */
+/* Dark mode body */
+html.dark body {
+  background-color: #121C1A;
+  color: #F4F6F5;
+}
+
+/* ===== Dark mode global untuk konten app ===== */
+html.dark {
+  color-scheme: dark;
+}
+
+/* Background halaman / area konten */
+html.dark .bg-cream,
+html.dark .bg-cream-50,
+html.dark .bg-cream-100,
+html.dark .bg-cream-200 {
+  background-color: #121C1A !important;
+}
+
+/* Kartu putih → gelap */
+html.dark .bg-white {
+  background-color: #1A2422 !important;
+}
+
+/* Teks */
+html.dark .text-ink-900,
+html.dark .text-ink-800 {
+  color: #F4F6F5 !important;
+}
+
+html.dark .text-ink-700,
+html.dark .text-ink-600 {
+  color: #C6D1CD !important;
+}
+
+html.dark .text-ink-500,
+html.dark .text-ink-400 {
+  color: #869A95 !important;
+}
+
+html.dark .text-ink-300 {
+  color: #647A75 !important;
+}
+
+/* Border */
+html.dark .border-ink-100,
+html.dark .border-ink-50,
+html.dark .border-ink-200 {
+  border-color: #2D3D3A !important;
+}
+
+/* Input / select / textarea */
+html.dark input,
+html.dark select,
+html.dark textarea {
+  background-color: #141C1A !important;
+  border-color: #2D3D3A !important;
+  color: #F4F6F5 !important;
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: #647A75 !important;
+}
+
+/* Header putih di layout (kalau masih putih) */
+html.dark header.bg-white {
+  background-color: #182422 !important;
+  border-color: #2D3D3A !important;
+}
+
+/* Scrollbar */
 * {
   scrollbar-width: thin;
   scrollbar-color: theme('colors.ink.300') transparent;
@@ -34,6 +105,18 @@ body {
 
 *::-webkit-scrollbar-thumb:hover {
   background-color: theme('colors.ink.400');
+}
+
+html.dark * {
+  scrollbar-color: #4F6360 transparent;
+}
+
+html.dark *::-webkit-scrollbar-thumb {
+  background-color: #4F6360;
+}
+
+html.dark *::-webkit-scrollbar-thumb:hover {
+  background-color: #647A75;
 }
 
 /* Focus ring */
