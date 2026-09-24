@@ -15,6 +15,26 @@ const search = ref('')
 const status = ref('all')
 const showCreate = ref(false)
 
+// --- Statistik status (kartu ringkasan, seperti di halaman Tugas) ---
+const stats = ref({ pending: 0, progress: 0, done: 0 })
+
+async function loadStats() {
+  try {
+    const [pending, progress, done] = await Promise.all([
+      api.get('/orders?status=Pending&page=1&limit=1'),
+      api.get('/orders?status=Progress&page=1&limit=1'),
+      api.get('/orders?status=Done&page=1&limit=1'),
+    ])
+    stats.value = {
+      pending: pending.pagination?.total ?? 0,
+      progress: progress.pagination?.total ?? 0,
+      done: done.pagination?.total ?? 0,
+    }
+  } catch {
+    // statistik bukan data kritikal, diamkan saja kalau gagal
+  }
+}
+
 // --- Dropdown status custom ---
 const statusOptions = [
   { value: 'all', label: 'Semua status' },
@@ -78,12 +98,14 @@ watch(search, () => {
 watch(status, resetAndLoad)
 watch(page, load)
 onMounted(load)
+onMounted(loadStats)
 
 // Fungsi remove() lama sudah digantikan askDelete() + confirmDelete() di atas
 
 function onCreated() {
   showCreate.value = false
   resetAndLoad()
+  loadStats()
 }
 
 // --- Konfirmasi hapus custom (ganti confirm() bawaan browser) ---
@@ -105,6 +127,7 @@ async function confirmDelete() {
     } else {
       load()
     }
+    loadStats()
   } catch (err) {
     showToast(err.message || 'Gagal menghapus pesanan', 'error')
   } finally {
@@ -130,50 +153,8 @@ function goToPage(p) {
 
 <template>
   <div class="space-y-4">
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-      <div class="flex flex-col sm:flex-row gap-3 flex-1">
-        <input
-          v-model="search"
-          type="search"
-          placeholder="Cari pembeli, kategori, atau toko..."
-          class="w-full sm:w-72 rounded-lg border border-ink-200 px-3 py-2 text-[13.5px] focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none"
-        />
-        <div ref="statusDropdownRef" class="relative w-full sm:w-44">
-          <button
-            type="button"
-            class="w-full flex items-center justify-between rounded-lg border border-ink-200 pl-3 pr-2.5 py-2 text-[13.5px] text-ink-700 bg-white hover:border-ink-300 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none cursor-pointer transition"
-            @click="statusOpen = !statusOpen"
-          >
-            <span>{{ statusLabel }}</span>
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-              class="text-ink-400 transition-transform"
-              :class="{ 'rotate-180': statusOpen }"
-            >
-              <path d="m6 9 6 6 6-6" />
-            </svg>
-          </button>
-
-          <div
-            v-if="statusOpen"
-            class="absolute z-10 mt-1.5 w-full rounded-lg border border-ink-100 bg-white shadow-card-hover overflow-hidden py-1"
-          >
-            <button
-              v-for="opt in statusOptions"
-              :key="opt.value"
-              type="button"
-              class="w-full text-left px-3 py-2 text-[13.5px] transition"
-              :class="opt.value === status
-                ? 'bg-brand-50 text-brand-700 font-medium'
-                : 'text-ink-700 hover:bg-ink-50'"
-              @click="selectStatus(opt.value)"
-            >
-              {{ opt.label }}
-            </button>
-          </div>
-        </div>
-      </div>
+    <!-- Tombol tambah, berdiri sendiri di baris atas (seperti halaman Tugas) -->
+    <div class="flex justify-end">
       <button
         type="button"
         class="px-4 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-[13.5px] font-medium transition shrink-0"
@@ -181,6 +162,67 @@ function goToPage(p) {
       >
         + Pesanan baru
       </button>
+    </div>
+
+    <!-- Kartu statistik status pesanan -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div class="bg-white rounded-card shadow-card border border-ink-100 px-5 py-4">
+        <p class="text-[12.5px] text-ink-400">Menunggu</p>
+        <p class="text-2xl font-semibold text-ink-900 mt-1 tabular-nums">{{ stats.pending }}</p>
+      </div>
+      <div class="bg-white rounded-card shadow-card border border-ink-100 px-5 py-4">
+        <p class="text-[12.5px] text-ink-400">Dikerjakan</p>
+        <p class="text-2xl font-semibold text-ink-900 mt-1 tabular-nums">{{ stats.progress }}</p>
+      </div>
+      <div class="bg-white rounded-card shadow-card border border-ink-100 px-5 py-4">
+        <p class="text-[12.5px] text-ink-400">Selesai</p>
+        <p class="text-2xl font-semibold text-ink-900 mt-1 tabular-nums">{{ stats.done }}</p>
+      </div>
+    </div>
+
+    <!-- Search & filter status -->
+    <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+      <input
+        v-model="search"
+        type="search"
+        placeholder="Cari pembeli, kategori, atau toko..."
+        class="w-full sm:w-72 rounded-lg border border-ink-200 px-3 py-2 text-[13.5px] focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none"
+      />
+      <div ref="statusDropdownRef" class="relative w-full sm:w-44">
+        <button
+          type="button"
+          class="w-full flex items-center justify-between rounded-lg border border-ink-200 pl-3 pr-2.5 py-2 text-[13.5px] text-ink-700 bg-white hover:border-ink-300 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none cursor-pointer transition"
+          @click="statusOpen = !statusOpen"
+        >
+          <span>{{ statusLabel }}</span>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+            class="text-ink-400 transition-transform"
+            :class="{ 'rotate-180': statusOpen }"
+          >
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </button>
+
+        <div
+          v-if="statusOpen"
+          class="absolute z-10 mt-1.5 w-full rounded-lg border border-ink-100 bg-white shadow-card-hover overflow-hidden py-1"
+        >
+          <button
+            v-for="opt in statusOptions"
+            :key="opt.value"
+            type="button"
+            class="w-full text-left px-3 py-2 text-[13.5px] transition"
+            :class="opt.value === status
+              ? 'bg-brand-50 text-brand-700 font-medium'
+              : 'text-ink-700 hover:bg-ink-50'"
+            @click="selectStatus(opt.value)"
+          >
+            {{ opt.label }}
+          </button>
+        </div>
+      </div>
     </div>
 
     <div class="bg-white rounded-card shadow-card-hover border border-ink-100 overflow-hidden">
@@ -196,26 +238,35 @@ function goToPage(p) {
       </div>
       <template v-else>
         <div class="overflow-x-auto">
-          <table class="w-full text-left">
-            <thead class="bg-ink-50 border-b border-ink-200 text-[11.5px] uppercase tracking-wide text-ink-500">
-              <tr>
-                <th class="px-5 py-3.5 font-semibold">Pesanan</th>
-                <th class="px-5 py-3.5 font-semibold">Pembeli</th>
-                <th class="px-5 py-3.5 font-semibold">Tanggal</th>
-                <th class="px-5 py-3.5 font-semibold">Harga</th>
-                <th class="px-5 py-3.5 font-semibold">Status</th>
-                <th class="px-5 py-3.5 font-semibold"></th>
+          <table class="w-full text-left text-sm">
+            <thead>
+              <tr class="bg-cream-100 text-ink-500 border-b border-ink-100">
+                <th class="px-5 py-3.5 text-left font-medium whitespace-nowrap w-12">No</th>
+                <th class="px-5 py-3.5 text-left font-medium whitespace-nowrap">Kategori</th>
+                <th class="px-5 py-3.5 text-left font-medium whitespace-nowrap">Jenis Karakter</th>
+                <th class="px-5 py-3.5 text-left font-medium whitespace-nowrap">Style</th>
+                <th class="px-5 py-3.5 text-left font-medium whitespace-nowrap">Designer</th>
+                <th class="px-5 py-3.5 text-left font-medium whitespace-nowrap">Platform</th>
+                <th class="px-5 py-3.5 text-left font-medium whitespace-nowrap">Pembeli</th>
+                <th class="px-5 py-3.5 text-left font-medium whitespace-nowrap">Tanggal</th>
+                <th class="px-5 py-3.5 text-left font-medium whitespace-nowrap">Harga</th>
+                <th class="px-5 py-3.5 text-left font-medium whitespace-nowrap">Status</th>
+                <th class="px-5 py-3.5 text-right font-medium whitespace-nowrap">Aksi</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-ink-100 text-[13.5px]">
-              <tr v-for="o in orders" :key="o.id" class="hover:bg-ink-50 transition">
-                <td class="px-5 py-4">
-                  <p class="font-medium text-ink-900">{{ o.category }}</p>
-                  <p class="text-[12px] text-ink-400 mt-0.5">{{ o.characterType }} · {{ o.style }}</p>
+              <tr v-for="(o, index) in orders" :key="o.id" class="hover:bg-ink-50 transition">
+                <td class="px-5 py-4 text-ink-400 tabular-nums">
+                  {{ pagination ? (pagination.page - 1) * pagination.limit + index + 1 : index + 1 }}
                 </td>
+                <td class="px-5 py-4 text-ink-800 whitespace-nowrap">{{ o.category || '—' }}</td>
+                <td class="px-5 py-4 text-ink-600 whitespace-nowrap">{{ o.characterType || '—' }}</td>
+                <td class="px-5 py-4 text-ink-600 whitespace-nowrap">{{ o.style || '—' }}</td>
+                <td class="px-5 py-4 text-ink-600 whitespace-nowrap">{{ o.designerName || '—' }}</td>
+                <td class="px-5 py-4 text-ink-600 whitespace-nowrap">{{ o.storeName || '—' }}</td>
                 <td class="px-5 py-4">
                   <p class="text-ink-800">{{ o.buyerName }}</p>
-                  <p class="text-[12px] text-ink-400 mt-0.5">{{ o.storeName || o.buyerReference || '—' }}</p>
+                  <p class="text-[12px] text-ink-400 mt-0.5">{{ o.buyerReference || '—' }}</p>
                 </td>
                 <td class="px-5 py-4 text-ink-500">{{ shortDate(o.orderDate) }}</td>
                 <td class="px-5 py-4 font-medium text-ink-900">{{ amount(o.price) }}</td>
@@ -223,27 +274,16 @@ function goToPage(p) {
                 <td class="px-5 py-4 text-right whitespace-nowrap">
                   <button
                     type="button"
-                    class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-brand-600 hover:bg-brand-50 text-[12.5px] font-medium transition mr-1.5"
+                    class="text-brand-600 hover:underline text-[12.5px] font-medium transition mr-3"
                     @click="router.push(`/orders/${o.id}`)"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4Z" />
-                    </svg>
                     Edit
                   </button>
                   <button
                     type="button"
-                    class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-danger-500 hover:bg-danger-100 text-[12.5px] font-medium transition"
+                    class="text-danger-500 hover:underline text-[12.5px] font-medium transition"
                     @click="askDelete(o)"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M3 6h18" />
-                      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                      <path d="M10 11v6" />
-                      <path d="M14 11v6" />
-                      <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-                    </svg>
                     Hapus
                   </button>
                 </td>

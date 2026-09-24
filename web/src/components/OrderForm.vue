@@ -4,6 +4,7 @@ import { api } from '../utils/api.js'
 import { useProducts } from '../composables/useProducts'
 import { useOptions } from '../composables/useOptions'
 import OptionSelect from './OptionSelect.vue'
+import CustomSelect from './CustomSelect.vue'
 
 const props = defineProps({
   initial: { type: Object, default: null },
@@ -16,6 +17,12 @@ const errorMsg = ref('')
 
 const { products } = useProducts()
 const { optionsOf } = useOptions()
+
+const STATUS_OPTIONS = [
+  { value: 'Pending', label: 'Menunggu' },
+  { value: 'Progress', label: 'Dikerjakan' },
+  { value: 'Done', label: 'Selesai' },
+]
 
 const form = reactive({
   orderDate: props.initial?.orderDate?.slice(0, 10) || new Date().toISOString().slice(0, 10),
@@ -33,6 +40,18 @@ const form = reactive({
   price: props.initial?.price || '',
 })
 
+// Label yang ditampilkan di dropdown custom (Menunggu / Dikerjakan / Selesai),
+// tapi form.status tetap menyimpan value asli (Pending / Progress / Done) untuk dikirim ke API.
+const statusLabel = computed({
+  get() {
+    return STATUS_OPTIONS.find(o => o.value === form.status)?.label || ''
+  },
+  set(label) {
+    form.status = STATUS_OPTIONS.find(o => o.label === label)?.value || form.status
+  },
+})
+const statusLabels = STATUS_OPTIONS.map(o => o.label)
+
 // Produk yang lagi dipilih. Kalau ada, Kategori/Jenis Karakter/Style tidak
 // perlu ditanya ulang lagi ke user karena datanya sudah ada di produk.
 const selectedProduct = computed(() => products.value.find(p => p.id === Number(form.productId)) || null)
@@ -46,6 +65,43 @@ function onPickProduct() {
   form.style = product.style || ''
   if (!form.price) form.price = product.price || form.price
 }
+
+// Label yang ditampilkan di dropdown custom "Ambil dari produk", supaya
+// tampilannya bukan <select> bawaan browser lagi. form.productId tetap
+// menyimpan id produk asli (dipakai submit() & onPickProduct()).
+const PRODUCT_NONE_LABEL = '— Pesanan custom, tidak dari katalog —'
+function productLabelOf(p) {
+  return `${p.name} (${p.style || 'Tanpa kategori'})`
+}
+const productLabels = computed(() => [PRODUCT_NONE_LABEL, ...products.value.map(productLabelOf)])
+const productLabel = computed({
+  get() {
+    const p = products.value.find(p => p.id === Number(form.productId))
+    return p ? productLabelOf(p) : PRODUCT_NONE_LABEL
+  },
+  set(label) {
+    const p = products.value.find(p => productLabelOf(p) === label)
+    form.productId = p ? p.id : ''
+    onPickProduct()
+  },
+})
+
+// Label dropdown custom untuk pilihan Paket produk katalog (mis. "Paket A — $12").
+// form.package tetap menyimpan nama paket asli untuk dikirim ke API.
+function packageLabelOf(pk) {
+  return `${pk.name} — $${pk.price}`
+}
+const packageLabels = computed(() => (selectedProduct.value?.packages || []).map(packageLabelOf))
+const packageLabel = computed({
+  get() {
+    const pk = selectedProduct.value?.packages?.find(pk => pk.name === form.package)
+    return pk ? packageLabelOf(pk) : ''
+  },
+  set(label) {
+    const pk = selectedProduct.value?.packages?.find(pk => packageLabelOf(pk) === label)
+    form.package = pk ? pk.name : ''
+  },
+})
 
 async function submit() {
   saving.value = true
@@ -75,10 +131,14 @@ async function submit() {
   <form class="space-y-5" @submit.prevent="submit">
     <label class="block">
       <span class="text-[13px] font-medium text-ink-700">Ambil dari produk (opsional)</span>
-      <select v-model="form.productId" @change="onPickProduct" class="input">
-        <option value="">— Pesanan custom, tidak dari katalog —</option>
-        <option v-for="p in products" :key="p.id" :value="p.id">{{ p.name }} ({{ p.style || 'Tanpa kategori' }})</option>
-      </select>
+      <div class="mt-1">
+        <CustomSelect
+          v-model="productLabel"
+          :options="productLabels"
+          :allow-empty="false"
+          placeholder="Pilih produk"
+        />
+      </div>
       <p class="text-[12px] text-ink-400 mt-1">Pilih produk supaya Kategori &amp; Style otomatis terisi.</p>
     </label>
 
@@ -116,12 +176,13 @@ async function submit() {
       <!-- Paket cuma wajib kalau produknya memang punya paket. Produk yang dijual satuan (tanpa paket) lewati field ini. -->
       <label v-if="selectedProduct?.packages?.length" class="block sm:col-span-2">
         <span class="text-[13px] font-medium text-ink-700">Paket *</span>
-        <select v-model="form.package" required class="input">
-          <option value="" disabled>Pilih paket</option>
-          <option v-for="pk in selectedProduct.packages" :key="pk.id" :value="pk.name">
-            {{ pk.name }} — ${{ pk.price }}
-          </option>
-        </select>
+        <div class="mt-1">
+          <CustomSelect
+            v-model="packageLabel"
+            :options="packageLabels"
+            placeholder="Pilih paket"
+          />
+        </div>
       </label>
       <p v-else-if="selectedProduct" class="text-[12px] text-ink-400 sm:col-span-2">
         Produk ini dijual satuan (tanpa paket).
@@ -146,11 +207,14 @@ async function submit() {
     <div class="border-t border-ink-100 pt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
       <label class="block">
         <span class="text-[13px] font-medium text-ink-700">Status *</span>
-        <select v-model="form.status" required class="input">
-          <option value="Pending">Menunggu</option>
-          <option value="Progress">Dikerjakan</option>
-          <option value="Done">Selesai</option>
-        </select>
+        <div class="mt-1">
+          <CustomSelect
+            v-model="statusLabel"
+            :options="statusLabels"
+            :allow-empty="false"
+            placeholder="Pilih status"
+          />
+        </div>
       </label>
       <label class="block">
         <span class="text-[13px] font-medium text-ink-700">Harga ($) *</span>
