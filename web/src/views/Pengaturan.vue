@@ -45,7 +45,6 @@
           group.id === 'platform' ? 'md:col-span-2' : ''
         ]"
       >
-        <!-- Penanda warna per dropdown -->
         <span class="absolute left-0 top-0 bottom-0 w-1" :class="TONES[group.id]"></span>
 
         <div class="pl-6 pr-5 pt-4 pb-3 border-b border-ink-100">
@@ -67,7 +66,6 @@
         </div>
 
         <div class="flex-1 pl-6 pr-5 py-4">
-          <!-- Daftar pilihan -->
           <div class="flex flex-wrap gap-2 mb-3">
             <span
               v-for="opt in optionsOf(group.key)"
@@ -90,7 +88,6 @@
             <span v-if="!optionsOf(group.key).length" class="text-sm text-ink-400">Belum ada pilihan.</span>
           </div>
 
-          <!-- Tambah pilihan -->
           <div class="flex items-center gap-2">
             <input
               v-model="newOption[group.id]"
@@ -138,7 +135,7 @@
       </section>
     </div>
 
-    <!-- ==================== KATEGORI: AKUN ==================== -->
+    <!-- ==================== KATEGORI: AKUN / PROFIL ==================== -->
     <div
       v-show="activeTab === 'akun'"
       id="panel-akun"
@@ -146,6 +143,36 @@
       aria-labelledby="tab-akun"
       class="max-w-2xl space-y-6"
     >
+      <!-- Kartu profil -->
+      <section class="relative bg-white rounded-card shadow-card border border-ink-100 overflow-hidden">
+        <span class="absolute left-0 top-0 bottom-0 w-1 bg-brand-500"></span>
+
+        <div class="pl-6 pr-5 py-5">
+          <div class="flex items-center gap-4">
+            <!-- Avatar -->
+            <div class="w-16 h-16 rounded-2xl bg-brand-500 flex items-center justify-center text-white text-xl font-bold shadow-sm shrink-0">
+              {{ userInitials }}
+            </div>
+
+            <div class="min-w-0 flex-1">
+              <h2 class="text-lg font-semibold text-ink-900 truncate">{{ user || '—' }}</h2>
+              <p class="text-sm text-ink-500 mt-0.5">
+                {{ roleLabel(role) }}
+                <span v-if="teamName"> · Tim {{ teamName }}</span>
+              </p>
+              <div class="flex flex-wrap items-center gap-2 mt-2">
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full bg-cream-100 text-ink-600 text-[11px] font-medium">
+                  {{ roleLabel(role) }}
+                </span>
+                <span v-if="teamName" class="inline-flex items-center px-2.5 py-1 rounded-full bg-brand-50 text-brand-700 text-[11px] font-medium">
+                  {{ teamName }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- Username -->
       <section class="relative bg-white rounded-card shadow-card border border-ink-100 overflow-hidden">
         <span class="absolute left-0 top-0 bottom-0 w-1 bg-brand-400"></span>
@@ -153,7 +180,8 @@
         <div class="pl-6 pr-5 py-4 border-b border-ink-100">
           <h2 class="text-base font-semibold text-ink-900">Username</h2>
           <p class="text-[13px] text-ink-500 mt-0.5">
-            Username yang dipakai untuk masuk. Saat ini: <span class="font-medium text-ink-700">{{ user }}</span>
+            Username yang dipakai untuk masuk. Saat ini:
+            <span class="font-medium text-ink-700">{{ user }}</span>
           </p>
         </div>
 
@@ -341,7 +369,6 @@
           <p v-if="!members.length" class="text-sm text-ink-400">Belum ada anggota.</p>
         </div>
 
-        <!-- Tambah anggota: owner & admin -->
         <div v-if="role === 'owner' || role === 'admin'" class="pl-6 pr-5 py-5 border-t border-ink-100 bg-cream-50 space-y-3">
           <h3 class="text-sm font-semibold text-ink-800">Tambah anggota</h3>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -359,7 +386,6 @@
             />
           </div>
           <div class="flex items-center justify-between gap-3">
-            <!-- Admin cuma boleh nambah anggota biasa, jadi selector role cuma muncul buat owner -->
             <select
               v-if="role === 'owner'"
               v-model="newMember.role"
@@ -386,13 +412,16 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 import { useOptions, OPTION_GROUPS } from '../composables/useOptions'
 import { useProducts } from '../composables/useProducts'
 import { splitPlatforms } from '../utils/platforms'
 import { api } from '../utils/api.js'
 
+const route = useRoute()
+const router = useRouter()
 const { user, role, teamName, changeUsername, changePassword } = useAuth()
 
 // ========== KATEGORI PENGATURAN ==========
@@ -410,7 +439,7 @@ const TABS = [
   {
     key: 'akun',
     label: 'Akun',
-    info: 'Username dan kata sandi untuk masuk ke dashboard.'
+    info: 'Profil akun, username, dan kata sandi untuk masuk ke dashboard.'
   },
   {
     key: 'tim',
@@ -422,7 +451,35 @@ const TABS = [
 const activeTab = ref('dropdown-produk')
 const activeTabInfo = computed(() => TABS.find(t => t.key === activeTab.value)?.info || '')
 
-// Warna penanda di sisi kiri tiap kartu dropdown (per id kartu, bukan per key data)
+// Buka tab dari query ?tab=akun (dari dropdown profil di header)
+watch(
+  () => route.query.tab,
+  (tab) => {
+    if (typeof tab === 'string' && TABS.some(t => t.key === tab)) {
+      activeTab.value = tab
+    }
+  },
+  { immediate: true }
+)
+
+// Sync tab ke URL biar bisa di-bookmark / dibuka dari header
+watch(activeTab, (tab) => {
+  if (route.query.tab !== tab) {
+    router.replace({ query: { ...route.query, tab } })
+  }
+})
+
+// Inisial username untuk avatar
+const userInitials = computed(() => {
+  const name = (user.value || '').trim()
+  if (!name) return 'AK'
+  const parts = name.split(/\s+/)
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[1][0]).toUpperCase()
+  }
+  return name.slice(0, 2).toUpperCase()
+})
+
 const TONES = {
   kategori: 'bg-[#8B5CF6]',
   style: 'bg-[#8B5CF6]',
@@ -440,14 +497,10 @@ const TONES = {
 const { optionsOf, addOption, removeOption, resetOptions } = useOptions()
 const { products } = useProducts()
 
-// Grup mana yang kelihatan tergantung tab aktif (Pilihan Produk vs Pilihan Tugas)
 const currentGroups = computed(() =>
   OPTION_GROUPS.filter(g => g.scope === (activeTab.value === 'dropdown-tugas' ? 'tugas' : 'produk'))
 )
 
-// newOption & optionMsg diindeks pakai group.id, bukan group.key —
-// supaya kartu Kategori dan kartu Style (yang berbagi data 'style')
-// punya input & pesan status masing-masing yang independen.
 const newOption = ref(Object.fromEntries(OPTION_GROUPS.map(g => [g.id, ''])))
 const optionMsg = ref({ id: '', ok: false, text: '' })
 
@@ -457,7 +510,6 @@ function submitOption(group) {
   if (result.ok) newOption.value[group.id] = ''
 }
 
-// Tambahkan semua nilai yang sudah dipakai di data produk ke daftar pilihan
 function importFromProducts(group) {
   const key = group.key
   const found = []
@@ -495,7 +547,7 @@ const usernameLoading = ref(false)
 const showUsernamePw = ref(false)
 
 onMounted(() => {
-  usernameForm.value.username = user.value
+  usernameForm.value.username = user.value || ''
 })
 
 async function submitUsername() {
@@ -556,10 +608,9 @@ const addMemberLoading = ref(false)
 
 const ROLE_LABELS = { owner: 'Owner', admin: 'Admin', member: 'Biasa' }
 function roleLabel(r) {
-  return ROLE_LABELS[r] || r
+  return ROLE_LABELS[r] || r || '—'
 }
 
-// owner boleh kelola siapa saja; admin cuma boleh kelola anggota biasa; biasa gak boleh kelola siapa pun
 function canManage(targetRole) {
   if (role.value === 'owner') return true
   if (role.value === 'admin') return targetRole === 'member'

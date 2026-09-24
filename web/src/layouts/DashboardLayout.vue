@@ -7,22 +7,53 @@ import { useOptions } from '../composables/useOptions'
 
 const route = useRoute()
 const router = useRouter()
-const { logout: clearSession } = useAuth()
+const { logout: clearSession, user } = useAuth()
 const { products } = useProducts()
 const { mergeOptions } = useOptions()
 
 const mobileOpen = ref(false)
 const showLogoutConfirm = ref(false)
 const kategoriOpen = ref(false)
+const profileOpen = ref(false)
 
-// Mode ciut (icon-only) — hanya berlaku di desktop. Di mobile, sidebar
-// selalu tampil penuh sebagai overlay, jadi collapsed diabaikan di sana.
+// ========== THEME (dark / light) ==========
+const isDark = ref(false)
+
+function applyTheme(dark) {
+  isDark.value = dark
+  const root = document.documentElement
+  if (dark) {
+    root.classList.add('dark')
+    localStorage.setItem('theme', 'dark')
+  } else {
+    root.classList.remove('dark')
+    localStorage.setItem('theme', 'light')
+  }
+}
+
+function toggleTheme() {
+  applyTheme(!isDark.value)
+}
+
+function initTheme() {
+  const saved = localStorage.getItem('theme')
+  if (saved === 'dark') {
+    applyTheme(true)
+  } else if (saved === 'light') {
+    applyTheme(false)
+  } else {
+    // Ikuti preferensi sistem kalau belum pernah diset
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+    applyTheme(prefersDark)
+  }
+}
+
+// Mode ciut (icon-only) — hanya berlaku di desktop
 const collapsed = ref(false)
 const isCollapsed = computed(() => collapsed.value && !mobileOpen.value)
 
 function toggleCollapsed() {
   collapsed.value = !collapsed.value
-  // Kalau lagi ciut, submenu Kategori tidak ada tempat untuk ditampilkan
   if (collapsed.value) kategoriOpen.value = false
 }
 
@@ -33,8 +64,6 @@ const isKategoriRelated = computed(() => {
 
 watch(isKategoriRelated, (val) => {
   if (val) {
-    // Halaman ini punya submenu (Kategori) -> pastikan sidebar terbuka
-    // supaya submenu-nya kelihatan, lalu buka submenu-nya.
     collapsed.value = false
     kategoriOpen.value = true
   }
@@ -48,6 +77,28 @@ const categoryList = computed(() => {
     if (s) styles.add(s)
   }
   return mergeOptions('style', [...styles].sort())
+})
+
+// Ambil username (bisa string atau object { username })
+function getUsername() {
+  const u = user?.value
+  if (!u) return ''
+  if (typeof u === 'string') return u
+  return u.username || u.name || ''
+}
+
+const userInitials = computed(() => {
+  const name = getUsername().trim()
+  if (!name) return 'AK'
+  const parts = name.split(/\s+/)
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[1][0]).toUpperCase()
+  }
+  return name.slice(0, 2).toUpperCase()
+})
+
+const displayName = computed(() => {
+  return getUsername() || 'Akun'
 })
 
 const menu = [
@@ -69,7 +120,7 @@ const menu = [
   {
     label: 'Kategori',
     icon: 'M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z',
-    children: true // penanda punya submenu dinamis
+    children: true
   },
   {
     to: '/pengaturan',
@@ -85,12 +136,9 @@ function isActive(to) {
 
 function isParentActive(item) {
   if (!item.children) return false
-  // aktif kalau sedang di /kategori/...
   return route.path.startsWith('/kategori')
 }
 
-// Kalau sidebar sedang ciut, klik "Kategori" langsung ke /kategori
-// (tidak ada tempat untuk menampilkan submenu-nya).
 function onKategoriClick() {
   if (isCollapsed.value) {
     router.push('/kategori')
@@ -102,10 +150,39 @@ function onKategoriClick() {
 function handleResize() {
   if (window.innerWidth >= 1024) mobileOpen.value = false
 }
-onMounted(() => window.addEventListener('resize', handleResize))
-onUnmounted(() => window.removeEventListener('resize', handleResize))
+
+function handleClickOutside(e) {
+  if (profileOpen.value && !e.target.closest('[data-profile-menu]')) {
+    profileOpen.value = false
+  }
+}
+
+onMounted(() => {
+  initTheme()
+  window.addEventListener('resize', handleResize)
+  document.addEventListener('click', handleClickOutside)
+})
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
+  document.removeEventListener('click', handleClickOutside)
+})
+
+function toggleProfile() {
+  profileOpen.value = !profileOpen.value
+}
+
+function goToProfile() {
+  profileOpen.value = false
+  router.push({ path: '/pengaturan', query: { tab: 'akun' } })
+}
+
+function goToSettings() {
+  profileOpen.value = false
+  router.push('/pengaturan')
+}
 
 function askLogout() {
+  profileOpen.value = false
   showLogoutConfirm.value = true
 }
 
@@ -118,7 +195,7 @@ function logout() {
 </script>
 
 <template>
-  <div class="flex h-screen overflow-hidden bg-cream">
+  <div class="flex h-screen overflow-hidden bg-cream dark:bg-ink-950">
     <!-- Overlay mobile -->
     <div
       v-if="mobileOpen"
@@ -153,7 +230,6 @@ function logout() {
           <p class="text-[11.5px] text-white/60 leading-tight mt-0.5 truncate">Ruang kerja produksi</p>
         </div>
 
-        <!-- Tombol ciutkan: hanya muncul saat sidebar terbuka, di posisi semula (sebelah logo) -->
         <button
           v-if="!isCollapsed && !mobileOpen"
           type="button"
@@ -168,7 +244,7 @@ function logout() {
         </button>
       </div>
 
-      <!-- Tombol buka: hanya muncul saat sidebar ciut, di baris sendiri tepat di atas ikon Ringkasan -->
+      <!-- Tombol buka (saat sidebar ciut) -->
       <div v-if="isCollapsed && !mobileOpen" class="px-2.5 pt-2 shrink-0">
         <button
           type="button"
@@ -186,7 +262,6 @@ function logout() {
       <!-- Menu -->
       <nav class="flex-1 overflow-y-auto py-3 px-2.5 space-y-1 text-[13.5px]">
         <template v-for="m in menu" :key="m.label">
-          <!-- Menu biasa -->
           <router-link
             v-if="!m.children"
             :to="m.to"
@@ -203,7 +278,6 @@ function logout() {
             <span v-if="!isCollapsed" class="truncate">{{ m.label }}</span>
           </router-link>
 
-          <!-- Menu Kategori (submenu dinamis = daftar kategori) -->
           <div v-else>
             <button
               type="button"
@@ -229,9 +303,7 @@ function logout() {
               </svg>
             </button>
 
-            <!-- Submenu: daftar kategori langsung (disembunyikan saat sidebar ciut) -->
             <div v-show="kategoriOpen && !isCollapsed" class="mt-1 ml-3 pl-3 border-l border-white/20 space-y-0.5">
-              <!-- Link Semua Kategori (opsional, bisa dihapus kalau tidak mau) -->
               <router-link
                 to="/kategori"
                 class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] text-white/70 hover:bg-white/10 hover:text-white transition"
@@ -241,7 +313,6 @@ function logout() {
                 Semua Kategori
               </router-link>
 
-              <!-- Daftar kategori dinamis -->
               <router-link
                 v-for="cat in categoryList"
                 :key="cat"
@@ -253,7 +324,6 @@ function logout() {
                 {{ cat }}
               </router-link>
 
-              <!-- Kalau belum ada kategori sama sekali -->
               <p v-if="!categoryList.length" class="px-3 py-2 text-[12px] text-white/40">
                 Belum ada kategori
               </p>
@@ -262,7 +332,7 @@ function logout() {
         </template>
       </nav>
 
-      <!-- Footer sidebar: keluar akun -->
+      <!-- Footer sidebar -->
       <div class="px-2.5 py-3 border-t border-white/10">
         <button
           type="button"
@@ -284,10 +354,10 @@ function logout() {
     <!-- ==================== KONTEN ==================== -->
     <div class="flex-1 flex flex-col overflow-hidden min-w-0">
       <!-- Header -->
-      <header class="h-16 flex items-center gap-3 px-4 sm:px-6 bg-white border-b border-ink-100 shrink-0">
+      <header class="h-16 flex items-center gap-3 px-4 sm:px-6 bg-white dark:bg-ink-900 border-b border-ink-100 dark:border-ink-800 shrink-0">
         <button
           type="button"
-          class="lg:hidden w-9 h-9 flex items-center justify-center rounded-xl text-ink-600 hover:bg-ink-100 transition shrink-0"
+          class="lg:hidden w-9 h-9 flex items-center justify-center rounded-xl text-ink-600 dark:text-ink-300 hover:bg-ink-100 dark:hover:bg-ink-800 transition shrink-0"
           @click="mobileOpen = true"
           aria-label="Buka menu"
         >
@@ -299,21 +369,106 @@ function logout() {
         </button>
 
         <div class="min-w-0 flex-1">
-          <h1 class="text-[16px] sm:text-[18px] font-semibold text-ink-900 truncate">
+          <h1 class="text-[16px] sm:text-[18px] font-semibold text-ink-900 dark:text-white truncate">
             {{ route.meta.title }}
           </h1>
-          <p class="text-[12px] text-ink-400 truncate hidden sm:block">
+          <p class="text-[12px] text-ink-400 dark:text-ink-500 truncate hidden sm:block">
             {{ route.meta.subtitle }}
           </p>
         </div>
 
-        <div class="w-9 h-9 rounded-full bg-brand-500 flex items-center justify-center text-white font-semibold text-sm shrink-0 shadow-sm">
-          AK
+        <!-- Tombol dark / light mode -->
+        <button
+          type="button"
+          @click="toggleTheme"
+          class="w-9 h-9 flex items-center justify-center rounded-xl text-ink-500 dark:text-ink-300 hover:bg-ink-100 dark:hover:bg-ink-800 transition shrink-0"
+          :aria-label="isDark ? 'Mode terang' : 'Mode gelap'"
+          :title="isDark ? 'Mode terang' : 'Mode gelap'"
+        >
+          <!-- Ikon matahari (tampil saat dark mode → klik untuk ke light) -->
+          <svg v-if="isDark" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="4" />
+            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+          </svg>
+          <!-- Ikon bulan (tampil saat light mode → klik untuk ke dark) -->
+          <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
+          </svg>
+        </button>
+
+        <!-- Avatar + dropdown profil -->
+        <div class="relative shrink-0" data-profile-menu>
+          <button
+            type="button"
+            @click.stop="toggleProfile"
+            class="w-9 h-9 rounded-full bg-brand-500 flex items-center justify-center text-white font-semibold text-sm shadow-sm hover:bg-brand-600 transition focus:outline-none focus:ring-2 focus:ring-brand-400/40"
+            :aria-expanded="profileOpen"
+            aria-haspopup="true"
+            title="Profil akun"
+          >
+            {{ userInitials }}
+          </button>
+
+          <Transition
+            enter-active-class="transition duration-150 ease-out"
+            enter-from-class="opacity-0 scale-95 -translate-y-1"
+            enter-to-class="opacity-100 scale-100 translate-y-0"
+            leave-active-class="transition duration-100 ease-in"
+            leave-from-class="opacity-100 scale-100 translate-y-0"
+            leave-to-class="opacity-0 scale-95 -translate-y-1"
+          >
+            <div
+              v-if="profileOpen"
+              class="absolute right-0 top-full mt-2 w-56 bg-white dark:bg-ink-900 rounded-xl shadow-lg border border-ink-100 dark:border-ink-800 py-1.5 z-50 origin-top-right"
+            >
+              <div class="px-3.5 py-2.5 border-b border-ink-100 dark:border-ink-800">
+                <p class="text-sm font-semibold text-ink-900 dark:text-white truncate">{{ displayName }}</p>
+                <p class="text-[12px] text-ink-400 mt-0.5">Akun aktif</p>
+              </div>
+
+              <button
+                type="button"
+                @click="goToProfile"
+                class="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-[13.5px] text-ink-700 dark:text-ink-200 hover:bg-cream-50 dark:hover:bg-ink-800 transition text-left"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="text-ink-400 shrink-0">
+                  <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
+                  <circle cx="12" cy="7" r="4" />
+                </svg>
+                Profil akun
+              </button>
+
+              <button
+                type="button"
+                @click="goToSettings"
+                class="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-[13.5px] text-ink-700 dark:text-ink-200 hover:bg-cream-50 dark:hover:bg-ink-800 transition text-left"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="text-ink-400 shrink-0">
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
+                </svg>
+                Pengaturan
+              </button>
+
+              <div class="border-t border-ink-100 dark:border-ink-800 my-1"></div>
+
+              <button
+                type="button"
+                @click="askLogout"
+                class="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-[13.5px] text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-900/30 transition text-left"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="shrink-0">
+                  <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" />
+                </svg>
+                Keluar
+              </button>
+            </div>
+          </Transition>
         </div>
       </header>
 
       <!-- Main content -->
-      <main class="flex-1 overflow-y-auto p-4 sm:p-6 bg-cream">
+      <main class="flex-1 overflow-y-auto p-4 sm:p-6 bg-cream dark:bg-ink-950">
         <router-view />
       </main>
     </div>
@@ -326,15 +481,15 @@ function logout() {
           @click="showLogoutConfirm = false"
         ></div>
 
-        <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
-          <h2 class="text-lg font-semibold text-ink-900 mb-1">Keluar dari akun?</h2>
-          <p class="text-sm text-ink-500 mb-6">Kamu perlu masuk lagi untuk mengakses dashboard.</p>
+        <div class="relative bg-white dark:bg-ink-900 rounded-2xl shadow-xl w-full max-w-sm p-6 border border-transparent dark:border-ink-800">
+          <h2 class="text-lg font-semibold text-ink-900 dark:text-white mb-1">Keluar dari akun?</h2>
+          <p class="text-sm text-ink-500 dark:text-ink-400 mb-6">Kamu perlu masuk lagi untuk mengakses dashboard.</p>
 
           <div class="flex justify-end gap-3">
             <button
               type="button"
               @click="showLogoutConfirm = false"
-              class="px-4 py-2.5 rounded-xl border border-ink-200 text-ink-600 hover:bg-ink-50 text-sm font-medium transition"
+              class="px-4 py-2.5 rounded-xl border border-ink-200 dark:border-ink-700 text-ink-600 dark:text-ink-300 hover:bg-ink-50 dark:hover:bg-ink-800 text-sm font-medium transition"
             >
               Batal
             </button>
