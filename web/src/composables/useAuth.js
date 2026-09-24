@@ -14,6 +14,10 @@ import { fetchOptions } from './useOptions'
 
 const USER_KEY = 'auth_user'
 
+// Sama seperti utils/api.js: di dev pakai proxy Vite ('/api'),
+// di production pakai URL publik backend dari VITE_API_URL.
+const API_BASE = import.meta.env.VITE_API_URL || '/api'
+
 function readJSON(key) {
   try {
     return JSON.parse(localStorage.getItem(key))
@@ -36,7 +40,7 @@ function fail(message) {
 }
 
 async function apiCall(path, options) {
-  const res = await fetch(`/api${path}`, {
+  const res = await fetch(`${API_BASE}${path}`, {
     headers: {
       'Content-Type': 'application/json',
       ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
