@@ -2,9 +2,15 @@ import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import { pool } from '../config/db.js'
 import { requireAuth } from '../middleware/auth.js'
+import { validateBody } from '../middleware/validate.js'
 
 const router = Router()
 router.use(requireAuth)
+
+const memberFieldsCreate = {
+  username: { required: true, type: 'string', min: 3, max: 50, label: 'Username' },
+  password: { required: true, type: 'string', min: 8, max: 100, label: 'Kata sandi' },
+}
 
 function mapMember(u) {
   return { id: u.id, username: u.username, role: u.role, createdAt: u.created_at }
@@ -38,7 +44,7 @@ function canManage(requesterRole, targetRole) {
 }
 
 // POST /api/team/members
-router.post('/members', async (req, res) => {
+router.post('/members', validateBody(memberFieldsCreate), async (req, res) => {
   const uname = normalizeUsername(req.body.username)
   const { password } = req.body
   const requestedRole = req.body.role === 'owner' || req.body.role === 'admin' ? req.body.role : 'member'
@@ -49,12 +55,6 @@ router.post('/members', async (req, res) => {
         ? 'Anggota biasa tidak bisa menambah anggota'
         : 'Admin cuma bisa menambah anggota biasa, bukan admin/owner'
     })
-  }
-  if (!uname || !password) {
-    return res.status(400).json({ message: 'Username dan kata sandi wajib diisi' })
-  }
-  if (password.length < 8) {
-    return res.status(400).json({ message: 'Kata sandi minimal 8 karakter' })
   }
 
   try {

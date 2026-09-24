@@ -150,6 +150,13 @@ function getProduct(id) {
     await fetchProducts()
   }
 
+  async function updateSale(saleId, data, productId) {
+    // productId dibutuhkan karena endpoint di-nest di bawah /products/:id/sales/:saleId
+    const pid = productId ?? sales.value.find(s => s.id === saleId)?.productId
+    await request(`/products/${pid}/sales/${saleId}`, { method: 'PATCH', body: JSON.stringify(data) })
+    await fetchProducts()
+  }
+
   return {
     products,
     sales,
@@ -164,6 +171,7 @@ function getProduct(id) {
     totalSold,
     isSold,
     addSale,
-    removeSale
+    removeSale,
+    updateSale
   }
 }

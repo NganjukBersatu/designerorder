@@ -1,6 +1,5 @@
-import { ref, watch } from 'vue'
-
-const STORAGE_KEY = 'designer-orders:dropdown-options'
+import { ref } from 'vue'
+import { api, getToken } from '../utils/api.js'
 
 // Dropdown yang bisa diatur dari halaman Pengaturan.
 // usedIn = tempat dropdown ini muncul, ditampilkan di kartu Pengaturan.
@@ -107,35 +106,44 @@ function cloneDefaults() {
   return Object.fromEntries(Object.entries(DEFAULTS).map(([k, v]) => [k, [...v]]))
 }
 
-function load() {
-  const base = cloneDefaults()
+// Satu state bersama untuk semua halaman, dimulai dari pilihan awal sebelum data tim dimuat
+const options = ref(cloneDefaults())
+
+// Muat pilihan dropdown milik tim dari backend (dipanggil sekali setelah login,
+// dan otomatis di bawah kalau sudah ada token tersimpan, mis. refresh halaman).
+export async function fetchOptions() {
   try {
-    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null')
-    if (saved && typeof saved === 'object') {
-      for (const key of Object.keys(base)) {
-        if (Array.isArray(saved[key])) base[key] = saved[key].filter(v => typeof v === 'string')
-      }
+    const res = await api.get('/options')
+    const merged = cloneDefaults()
+    for (const key of Object.keys(merged)) {
+      if (Array.isArray(res.data?.[key])) merged[key] = res.data[key]
     }
-  } catch {
-    // data rusak / storage tidak tersedia: pakai pilihan awal
+    options.value = merged
+  } catch (err) {
+    console.error('Gagal memuat pilihan dropdown:', err.message)
   }
-  return base
 }
 
-// Satu state bersama untuk semua halaman
-const options = ref(load())
+if (getToken()) fetchOptions()
 
-watch(
-  options,
-  value => {
+// Simpan ke backend dengan debounce, supaya perubahan beruntun (mis. impor banyak
+// pilihan sekaligus lewat resetOptions/addOption) tidak kirim satu request per pilihan.
+let saveTimer = null
+const pendingKeys = new Set()
+function scheduleSave(key) {
+  pendingKeys.add(key)
+  clearTimeout(saveTimer)
+  saveTimer = setTimeout(async () => {
+    const keys = [...pendingKeys]
+    pendingKeys.clear()
+    const payload = Object.fromEntries(keys.map((k) => [k, options.value[k]]))
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(value))
-    } catch {
-      // abaikan jika storage penuh / diblokir
+      await api.patch('/options', payload)
+    } catch (err) {
+      console.error('Gagal menyimpan pilihan dropdown:', err.message)
     }
-  },
-  { deep: true }
-)
+  }, 400)
+}
 
 export function useOptions() {
   const optionsOf = key => options.value[key] || []
@@ -167,15 +175,18 @@ export function useOptions() {
     }
 
     list.push(value)
+    scheduleSave(key)
     return { ok: true, message: `"${value}" ditambahkan` }
   }
 
   function removeOption(key, value) {
     options.value[key] = options.value[key].filter(v => v !== value)
+    scheduleSave(key)
   }
 
   function resetOptions(key) {
     options.value[key] = [...DEFAULTS[key]]
+    scheduleSave(key)
   }
 
   return { options, optionsOf, mergeOptions, addOption, removeOption, resetOptions }

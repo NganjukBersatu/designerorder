@@ -335,7 +335,7 @@ router.patch('/:id/sales/:saleId', validateBody(saleFieldsUpdate), async (req, r
         qty = COALESCE($2, qty),
         platform = $3,
         package = $4,
-        total = $5,
+        total = COALESCE($5, total),
         sold_at = COALESCE($6, sold_at),
         updated_at = now()
        WHERE id = $7 AND product_id = $8
