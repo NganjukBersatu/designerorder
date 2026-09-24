@@ -1,7 +1,26 @@
 import { Router } from 'express'
 import { pool } from '../config/db.js'
+import { validateBody } from '../middleware/validate.js'
 
 const router = Router()
+
+const taskFieldsCreate = {
+  title: { required: true, type: 'string', min: 1, max: 255, label: 'Judul tugas' },
+  clientName: { type: 'string', max: 150, label: 'Nama klien' },
+  designer: { type: 'string', max: 150, label: 'Designer' },
+  style: { type: 'string', max: 100, label: 'Kategori' },
+  substyle: { type: 'string', max: 100, label: 'Substyle' },
+  date: { type: 'date', label: 'Tanggal' },
+  uploadDate: { type: 'date', label: 'Tanggal upload' },
+  dueDate: { type: 'date', label: 'Tenggat' },
+  productionStatus: { type: 'string', max: 100, label: 'Status produksi' },
+  linkDbs: { type: 'array', itemType: 'string', label: 'Daftar link DB' },
+  note: { type: 'string', max: 5000, label: 'Catatan' },
+}
+
+const taskFieldsUpdate = Object.fromEntries(
+  Object.entries(taskFieldsCreate).map(([key, rule]) => [key, { ...rule, required: false }])
+)
 
 const STATUS_MAP = {
   menunggu: 'Pending',
@@ -94,15 +113,11 @@ router.get('/', async (req, res) => {
 })
 
 // POST /api/tasks — self-assign, selalu buat diri sendiri
-router.post('/', async (req, res) => {
+router.post('/', validateBody(taskFieldsCreate), async (req, res) => {
   const {
     image, title, clientName, designer, style, substyle, date, uploadDate,
     productionStatus, linkDbs, status, dueDate, note,
   } = req.body
-
-  if (!title?.trim()) {
-    return res.status(400).json({ message: 'Judul tugas wajib diisi' })
-  }
 
   const client = await pool.connect()
   try {
@@ -136,7 +151,7 @@ router.post('/', async (req, res) => {
 })
 
 // PATCH /api/tasks/:id — pemilik tugas, atau owner/admin tim, boleh ubah
-router.patch('/:id', async (req, res) => {
+router.patch('/:id', validateBody(taskFieldsUpdate), async (req, res) => {
   const {
     image, title, clientName, designer, style, substyle, date, uploadDate,
     productionStatus, linkDbs, status, dueDate, note,

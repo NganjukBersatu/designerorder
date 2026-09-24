@@ -10,6 +10,7 @@ import { ref, computed } from 'vue'
 import { getToken, setToken } from '../utils/api.js'
 import { fetchProducts } from './useProducts'
 import { useTeamMembers } from './useTeamMembers'
+import { fetchOptions } from './useOptions'
 
 const USER_KEY = 'auth_user'
 
@@ -53,6 +54,7 @@ function applySession({ token, user, teamName }) {
   writeJSON(USER_KEY, currentUser.value)
   fetchProducts()
   useTeamMembers().fetchMembers()
+  fetchOptions()
 }
 
 export function validateUsername(value) {
