@@ -296,13 +296,11 @@
 
             <div>
               <label class="block text-sm font-medium text-ink-700 mb-1.5">Substyle</label>
-              <select
+              <CustomSelect
                 v-model="addForm.substyle"
-                class="w-full px-3 py-2.5 rounded-xl border border-ink-200 bg-white focus:border-brand-400 outline-none text-sm transition"
-              >
-                <option value="">Pilih substyle</option>
-                <option v-for="sub in substyleOptions" :key="sub" :value="sub">{{ sub }}</option>
-              </select>
+                :options="substyleOptions"
+                placeholder="Pilih substyle"
+              />
               <p v-if="!substyleOptions.length" class="text-[12px] text-ink-400 mt-1">
                 Belum ada pilihan substyle, tambahkan dulu di halaman Pengaturan.
               </p>
@@ -310,24 +308,20 @@
 
             <div>
               <label class="block text-sm font-medium text-ink-700 mb-1.5">Designer</label>
-              <select
+              <CustomSelect
                 v-model="addForm.designer"
-                class="w-full px-3 py-2.5 rounded-xl border border-ink-200 bg-white focus:border-brand-400 outline-none text-sm transition"
-              >
-                <option value="">Pilih designer</option>
-                <option v-for="d in designerOptions" :key="d" :value="d">{{ d }}</option>
-              </select>
+                :options="designerOptions"
+                placeholder="Pilih designer"
+              />
             </div>
 
             <div>
               <label class="block text-sm font-medium text-ink-700 mb-1.5">Status Produksi</label>
-              <select
+              <CustomSelect
                 v-model="addForm.productionStatus"
-                class="w-full px-3 py-2.5 rounded-xl border border-ink-200 bg-white focus:border-brand-400 outline-none text-sm transition"
-              >
-                <option value="">Pilih status produksi</option>
-                <option v-for="s in productionStatusOptions" :key="s" :value="s">{{ s }}</option>
-              </select>
+                :options="productionStatusOptions"
+                placeholder="Pilih status produksi"
+              />
             </div>
 
             <div>
@@ -426,6 +420,7 @@ import { splitPlatforms } from '../utils/platforms'
 import PlatformBadges from '../components/PlatformBadges.vue'
 import OptionSelect from '../components/OptionSelect.vue'
 import PlatformPicker from '../components/PlatformPicker.vue'
+import CustomSelect from '../components/CustomSelect.vue'
 
 const route = useRoute()
 const router = useRouter()
