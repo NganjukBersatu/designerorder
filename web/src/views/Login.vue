@@ -39,9 +39,11 @@
 
       <!-- Logo -->
       <div class="relative flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl bg-gold-500 flex items-center justify-center text-brand-900 text-sm font-bold shrink-0">
-          DO
-        </div>
+        <img
+          src="/favicon.png"
+          alt="Designer Orders"
+          class="w-10 h-10 rounded-xl object-cover shrink-0"
+        />
         <div>
           <p class="font-semibold text-[15px] leading-tight">Designer Orders</p>
           <p class="text-[12px] text-white/60 leading-tight mt-0.5">Ruang kerja produksi</p>
@@ -64,9 +66,11 @@
       <div class="w-full max-w-[380px]">
         <!-- Logo (mobile saja) -->
         <div class="lg:hidden flex items-center gap-3 mb-10">
-          <div class="w-10 h-10 rounded-xl bg-gold-500 flex items-center justify-center text-brand-900 text-sm font-bold shrink-0">
-            DO
-          </div>
+          <img
+            src="/favicon.png"
+            alt="Designer Orders"
+            class="w-10 h-10 rounded-xl object-cover shrink-0"
+          />
           <div>
             <p class="font-semibold text-[15px] leading-tight text-ink-900">Designer Orders</p>
             <p class="text-[12px] text-ink-500 leading-tight mt-0.5">Ruang kerja produksi</p>
