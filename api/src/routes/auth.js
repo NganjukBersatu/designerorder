@@ -5,6 +5,11 @@ import { pool } from '../config/db.js'
 import { signToken, requireAuth } from '../middleware/auth.js'
 
 const router = Router()
+perbaikan7
+// Batas ukuran foto profil (data URL base64) supaya kolom TEXT & payload
+// JSON-nya tidak kebablasan. ~2MB base64 cukup buat foto persegi kecil
+// yang sudah dikompres di frontend.
+const MAX_PHOTO_LENGTH = 2_000_000
 
 // Batasi percobaan login/register supaya tidak gampang dibrute-force
 const authLimiter = rateLimit({
@@ -14,9 +19,17 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
   message: { message: 'Terlalu banyak percobaan, coba lagi beberapa menit lagi' },
 })
+main
 
 function mapUser(u) {
-  return { id: u.id, username: u.username, role: u.role, teamId: u.team_id }
+  return {
+    id: u.id,
+    username: u.username,
+    role: u.role,
+    teamId: u.team_id,
+    displayName: u.display_name || '',
+    photo: u.photo || '',
+  }
 }
 
 function normalizeUsername(v) {
@@ -139,6 +152,52 @@ router.patch('/me', requireAuth, async (req, res) => {
   } catch (err) {
     console.error(err)
     res.status(500).json({ message: 'Gagal memperbarui akun', error: err.message })
+  }
+})
+
+// PATCH /api/auth/profile — ganti nama tampilan dan/atau foto profil.
+// Sengaja dipisah dari /me: ini cuma tampilan (bukan kredensial login),
+// jadi tidak perlu konfirmasi kata sandi seperti ganti username/password.
+router.patch('/profile', requireAuth, async (req, res) => {
+  const { displayName, photo } = req.body
+
+  if (displayName !== undefined && displayName !== null && String(displayName).length > 150) {
+    return res.status(400).json({ message: 'Nama tampilan maksimal 150 karakter' })
+  }
+  if (photo && String(photo).length > MAX_PHOTO_LENGTH) {
+    return res.status(400).json({ message: 'Ukuran foto terlalu besar, coba foto lain' })
+  }
+
+  const fields = []
+  const values = []
+  let i = 1
+
+  if (displayName !== undefined) {
+    fields.push(`display_name = $${i++}`)
+    values.push(String(displayName || '').trim() || null)
+  }
+  if (photo !== undefined) {
+    fields.push(`photo = $${i++}`)
+    values.push(photo || null)
+  }
+
+  if (!fields.length) {
+    return res.status(400).json({ message: 'Tidak ada perubahan untuk disimpan' })
+  }
+
+  try {
+    values.push(req.user.id)
+    const result = await pool.query(
+      `UPDATE users SET ${fields.join(', ')} WHERE id = $${i} RETURNING *`,
+      values
+    )
+    const user = result.rows[0]
+    if (!user) return res.status(404).json({ message: 'Akun tidak ditemukan' })
+
+    res.json({ user: mapUser(user) })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ message: 'Gagal memperbarui profil', error: err.message })
   }
 })
 

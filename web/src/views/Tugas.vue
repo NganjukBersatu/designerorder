@@ -129,32 +129,45 @@ async function confirmRemove() {
 <template>
   <div class="space-y-4">
     <!-- Header + tombol tambah -->
-    <div class="flex items-center justify-between gap-3">
-      <div class="text-[13.5px] text-ink-500">
-        <!-- bisa dikosongkan atau taruh breadcrumb -->
-      </div>
+    <div class="flex items-center justify-end gap-3">
       <button
         type="button"
-        class="px-4 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-[13.5px] font-medium transition shrink-0"
+        class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-[13.5px] font-medium transition shrink-0 shadow-sm"
         @click="openCreate"
       >
-        + Tugas baru
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+        Tugas baru
       </button>
     </div>
 
     <!-- Ringkasan status -->
     <div class="grid grid-cols-3 gap-3">
-      <div class="bg-white rounded-card shadow-card p-4">
-        <p class="text-[12px] text-ink-400">Menunggu</p>
-        <p class="text-[20px] font-semibold text-ink-900 mt-0.5">{{ counts.Pending }}</p>
+      <div class="bg-white rounded-card shadow-card p-4 flex items-center justify-between">
+        <div>
+          <p class="text-[12px] text-ink-400">Menunggu</p>
+          <p class="text-[20px] font-semibold text-ink-900 mt-0.5">{{ counts.Pending }}</p>
+        </div>
+        <div class="w-9 h-9 rounded-lg bg-amber-50 flex items-center justify-center text-amber-500 shrink-0">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" /></svg>
+        </div>
       </div>
-      <div class="bg-white rounded-card shadow-card p-4">
-        <p class="text-[12px] text-ink-400">Dikerjakan</p>
-        <p class="text-[20px] font-semibold text-ink-900 mt-0.5">{{ counts.Progress }}</p>
+      <div class="bg-white rounded-card shadow-card p-4 flex items-center justify-between">
+        <div>
+          <p class="text-[12px] text-ink-400">Dikerjakan</p>
+          <p class="text-[20px] font-semibold text-ink-900 mt-0.5">{{ counts.Progress }}</p>
+        </div>
+        <div class="w-9 h-9 rounded-lg bg-sky-50 flex items-center justify-center text-sky-500 shrink-0">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20a8 8 0 100-16 8 8 0 000 16z" /><path d="M12 8v4l3 2" /></svg>
+        </div>
       </div>
-      <div class="bg-white rounded-card shadow-card p-4">
-        <p class="text-[12px] text-ink-400">Selesai</p>
-        <p class="text-[20px] font-semibold text-ink-900 mt-0.5">{{ counts.Done }}</p>
+      <div class="bg-white rounded-card shadow-card p-4 flex items-center justify-between">
+        <div>
+          <p class="text-[12px] text-ink-400">Selesai</p>
+          <p class="text-[20px] font-semibold text-ink-900 mt-0.5">{{ counts.Done }}</p>
+        </div>
+        <div class="w-9 h-9 rounded-lg bg-ok-50 flex items-center justify-center text-ok-600 shrink-0">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+        </div>
       </div>
     </div>
 
@@ -204,6 +217,10 @@ async function confirmRemove() {
         <option value="Progress">Dikerjakan</option>
         <option value="Done">Selesai</option>
       </select>
+
+      <span v-if="!loading" class="hidden sm:flex items-center text-[12.5px] text-ink-400 whitespace-nowrap">
+        {{ filteredTasks.length }} tugas
+      </span>
     </div>
 
     <!-- List tugas -->
@@ -215,12 +232,25 @@ async function confirmRemove() {
         <p class="text-danger-600 text-[13.5px] mb-3">{{ errorMsg }}</p>
         <button class="px-4 py-2 rounded-lg bg-brand-500 text-white text-[13px]" @click="load">Coba lagi</button>
       </div>
-      <div v-else-if="filteredTasks.length === 0" class="p-10 text-center text-[13.5px] text-ink-400">
+      <div v-else-if="filteredTasks.length === 0" class="flex flex-col items-center text-center py-14">
+        <div class="w-12 h-12 rounded-full bg-cream-100 flex items-center justify-center mb-3">
+          <svg class="w-6 h-6 text-ink-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" /></svg>
+        </div>
         <template v-if="search">
-          Tidak ada tugas yang cocok dengan "<strong>{{ search }}</strong>".
+          <p class="text-[13.5px] font-medium text-ink-700">Tidak ada yang cocok</p>
+          <p class="text-[12px] text-ink-400 mt-1 max-w-[260px]">Tidak ditemukan tugas untuk "<strong class="text-ink-600">{{ search }}</strong>".</p>
         </template>
         <template v-else>
-          Belum ada tugas yang cocok. Klik <strong>+ Tugas baru</strong> buat mulai catat kerjaan.
+          <p class="text-[13.5px] font-medium text-ink-700">Belum ada tugas</p>
+          <p class="text-[12px] text-ink-400 mt-1 max-w-[260px]">Klik "Tugas baru" untuk mulai mencatat kerjaan.</p>
+          <button
+            type="button"
+            class="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-[12.5px] font-medium transition"
+            @click="openCreate"
+          >
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+            Tugas baru
+          </button>
         </template>
       </div>
       <div v-else class="overflow-x-auto">
@@ -228,7 +258,12 @@ async function confirmRemove() {
           <thead>
             <tr class="bg-cream-100 text-ink-500 border-b border-ink-100">
               <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap w-12 sticky left-0 z-20 bg-cream-100">No</th>
-              <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[220px]">Tugas</th>
+              <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[220px]">
+                <div class="flex items-center gap-3">
+                  <span class="w-9 shrink-0"></span>
+                  <span>Tugas</span>
+                </div>
+              </th>
               <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[140px]">Untuk siapa</th>
               <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[140px]">Dikerjakan oleh</th>
               <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[130px]">Status Produksi</th>
@@ -245,9 +280,9 @@ async function confirmRemove() {
             <tr
               v-for="(t, idx) in filteredTasks"
               :key="t.id"
-              class="border-b border-ink-50 hover:bg-cream-50/70 transition group"
+              class="border-b border-ink-50 hover:bg-ink-500/5 transition group"
             >
-              <td class="px-4 py-4 text-ink-400 sticky left-0 z-10 bg-white group-hover:bg-cream-50">
+              <td class="px-4 py-4 text-ink-400 sticky left-0 z-10 bg-white group-hover:bg-cream-50/60">
                 {{ idx + 1 }}
               </td>
               <td class="px-4 py-3">
@@ -319,7 +354,7 @@ async function confirmRemove() {
           <div class="flex items-center justify-end gap-3">
             <button
               type="button"
-              class="px-4 py-2.5 rounded-xl border border-ink-200 text-ink-600 hover:bg-ink-50 text-[13.5px] font-medium transition"
+              class="px-4 py-2.5 rounded-xl border border-ink-200 text-ink-600 hover:bg-ink-500/5 text-[13.5px] font-medium transition"
               @click="cancelRemove"
             >
               Batal

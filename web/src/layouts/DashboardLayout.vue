@@ -4,12 +4,16 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 import { useProducts } from '../composables/useProducts'
 import { useOptions } from '../composables/useOptions'
+import { useAppSettings } from '../composables/useAppSettings'
+import { useProfile } from '../composables/useProfile'
 
 const route = useRoute()
 const router = useRouter()
 const { logout: clearSession, user } = useAuth()
 const { products } = useProducts()
 const { mergeOptions } = useOptions()
+const { settings } = useAppSettings()
+const { profile, displayNameOrUsername } = useProfile()
 
 const mobileOpen = ref(false)
 const showLogoutConfirm = ref(false)
@@ -88,7 +92,7 @@ function getUsername() {
 }
 
 const userInitials = computed(() => {
-  const name = getUsername().trim()
+  const name = (displayNameOrUsername.value || '').trim()
   if (!name) return 'AK'
   const parts = name.split(/\s+/)
   if (parts.length >= 2) {
@@ -97,9 +101,7 @@ const userInitials = computed(() => {
   return name.slice(0, 2).toUpperCase()
 })
 
-const displayName = computed(() => {
-  return getUsername() || 'Akun'
-})
+const displayName = computed(() => displayNameOrUsername.value)
 
 const menu = [
   {
@@ -222,12 +224,12 @@ function logout() {
       >
         <img
           src="/favicon.png"
-          alt="Designer Orders"
+          :alt="settings.appName"
           class="w-8 h-8 rounded-lg object-contain shrink-0"
         />
         <div v-if="!isCollapsed" class="min-w-0 flex-1">
-          <p class="font-semibold text-[13.5px] leading-tight truncate">Designer Orders</p>
-          <p class="text-[11.5px] text-white/60 leading-tight mt-0.5 truncate">Ruang kerja produksi</p>
+          <p class="font-semibold text-[13.5px] leading-tight truncate">{{ settings.appName }}</p>
+          <p class="text-[11.5px] text-white/60 leading-tight mt-0.5 truncate">{{ settings.appTagline }}</p>
         </div>
 
         <button
@@ -347,7 +349,7 @@ function logout() {
           <span v-if="!isCollapsed">Keluar</span>
         </button>
 
-        <p v-if="!isCollapsed" class="px-3 pt-3 text-[12px] text-white/50">Ruang kerja produksi desain</p>
+        <p v-if="!isCollapsed" class="px-3 pt-3 text-[12px] text-white/50">{{ settings.appTagline }} desain</p>
       </div>
     </aside>
 
@@ -401,12 +403,13 @@ function logout() {
           <button
             type="button"
             @click.stop="toggleProfile"
-            class="w-9 h-9 rounded-full bg-brand-500 flex items-center justify-center text-white font-semibold text-sm shadow-sm hover:bg-brand-600 transition focus:outline-none focus:ring-2 focus:ring-brand-400/40"
+            class="w-9 h-9 rounded-full bg-brand-500 flex items-center justify-center text-white font-semibold text-sm shadow-sm hover:bg-brand-600 transition focus:outline-none focus:ring-2 focus:ring-brand-400/40 overflow-hidden"
             :aria-expanded="profileOpen"
             aria-haspopup="true"
             title="Profil akun"
           >
-            {{ userInitials }}
+            <img v-if="profile.photo" :src="profile.photo" alt="" class="w-full h-full object-cover" />
+            <span v-else>{{ userInitials }}</span>
           </button>
 
           <Transition
