@@ -5,7 +5,6 @@ import { pool } from '../config/db.js'
 import { signToken, requireAuth } from '../middleware/auth.js'
 
 const router = Router()
-perbaikan7
 // Batas ukuran foto profil (data URL base64) supaya kolom TEXT & payload
 // JSON-nya tidak kebablasan. ~2MB base64 cukup buat foto persegi kecil
 // yang sudah dikompres di frontend.
@@ -19,7 +18,6 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
   message: { message: 'Terlalu banyak percobaan, coba lagi beberapa menit lagi' },
 })
-main
 
 function mapUser(u) {
   return {
