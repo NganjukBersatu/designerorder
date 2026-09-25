@@ -103,6 +103,8 @@ const categoryStats = computed(() => {
   }).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
 })
 
+const maxCategoryRevenue = computed(() => Math.max(...categoryStats.value.map((c) => c.revenue), 1))
+
 // 6 penjualan terbaru dari semua produk
 const recentSales = computed(() =>
   [...validSales.value]
@@ -168,17 +170,43 @@ function downloadCsv() {
 function printReport() {
   window.print()
 }
+
+// ========== TURUNAN UNTUK LAYOUT BARU ==========
+
+// Status pesanan sebagai satu bar tersegmentasi + legenda, gantinya 3 bar terpisah
+const statusSegments = computed(() => {
+  if (!summary.value) return []
+  const total = summary.value.totalOrders || 0
+  const rows = [
+    { key: 'pending', label: 'Menunggu', count: summary.value.pendingOrders, bar: 'bg-amber-400', dot: 'bg-amber-400' },
+    { key: 'progress', label: 'Dikerjakan', count: summary.value.progressOrders, bar: 'bg-sky-400', dot: 'bg-sky-400' },
+    { key: 'done', label: 'Selesai', count: summary.value.doneOrders, bar: 'bg-ok-500', dot: 'bg-ok-500' },
+  ]
+  return rows.map((r) => ({ ...r, pct: total ? Math.round((r.count / total) * 100) : 0 }))
+})
+
+// Rata-rata nilai per pesanan, pelengkap kartu KPI
+const avgOrderValue = computed(() => {
+  if (!summary.value || !summary.value.totalOrders) return 0
+  return summary.value.totalRevenue / summary.value.totalOrders
+})
+
+// Bulan dengan pendapatan tertinggi, untuk disorot pada grafik batang
+const peakMonth = computed(() => {
+  if (!summary.value || !summary.value.monthlyRevenue?.length) return null
+  return summary.value.monthlyRevenue.reduce((a, b) => (b.revenue > a.revenue ? b : a))
+})
 </script>
 
 <template>
-  <div class="space-y-8">
+  <div class="space-y-9">
     <!-- ==================== TOOLBAR BULAN & EKSPOR (tidak ikut dicetak) ==================== -->
     <div class="print-hidden bg-white rounded-card shadow-card border border-ink-100 p-4 flex flex-wrap items-center gap-3">
       <div class="flex items-center gap-2">
         <button
           type="button"
           @click="setMonth(shiftMonth(selectedMonth, -1))"
-          class="w-10 h-10 flex items-center justify-center rounded-xl border border-ink-200 text-ink-600 hover:bg-ink-50 transition"
+          class="w-10 h-10 flex items-center justify-center rounded-xl border border-ink-200 text-ink-600 hover:bg-ink-500/5 transition"
           aria-label="Bulan sebelumnya"
         >
           <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 19l-7-7 7-7" /></svg>
@@ -195,7 +223,7 @@ function printReport() {
         <button
           type="button"
           @click="setMonth(shiftMonth(selectedMonth, 1))"
-          class="w-10 h-10 flex items-center justify-center rounded-xl border border-ink-200 text-ink-600 hover:bg-ink-50 transition"
+          class="w-10 h-10 flex items-center justify-center rounded-xl border border-ink-200 text-ink-600 hover:bg-ink-500/5 transition"
           aria-label="Bulan berikutnya"
         >
           <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7" /></svg>
@@ -205,7 +233,7 @@ function printReport() {
           v-if="!isCurrentMonth"
           type="button"
           @click="setMonth(currentMonthKey)"
-          class="px-3 py-2.5 rounded-xl text-sm font-medium text-brand-600 hover:bg-ink-50 transition"
+          class="px-3 py-2.5 rounded-xl text-sm font-medium text-brand-600 hover:bg-ink-500/5 transition"
         >
           Bulan ini
         </button>
@@ -215,7 +243,7 @@ function printReport() {
         <button
           type="button"
           @click="downloadCsv"
-          class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-ink-200 text-ink-700 hover:bg-ink-50 text-sm font-medium transition"
+          class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-ink-200 text-ink-700 hover:bg-ink-500/5 text-sm font-medium transition"
         >
           <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" /></svg>
           Unduh CSV
@@ -242,7 +270,7 @@ function printReport() {
       </router-link>
       <router-link
         to="/kategori"
-        class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-ink-200 text-ink-700 hover:bg-ink-50 text-[13px] font-medium transition"
+        class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-ink-200 text-ink-700 hover:bg-ink-500/5 text-[13px] font-medium transition"
       >
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14" /></svg>
         Tambah produk
@@ -250,11 +278,15 @@ function printReport() {
     </div>
 
     <!-- ==================== PESANAN DESAIN ==================== -->
-    <section class="space-y-6">
-      <h2 class="text-[13px] font-medium text-ink-500">Pesanan desain</h2>
+    <section class="space-y-5">
+      <div class="flex items-center gap-3">
+        <h2 class="text-[13px] font-medium text-ink-500 shrink-0">Pesanan desain</h2>
+        <div class="h-px flex-1 bg-ink-100"></div>
+      </div>
 
-      <div v-if="loading" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div v-for="i in 4" :key="i" class="h-24 rounded-card bg-white shadow-card animate-pulse" />
+      <div v-if="loading" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:auto-rows-[92px]">
+        <div class="lg:col-span-2 lg:row-span-2 h-44 lg:h-auto rounded-card bg-white shadow-card animate-pulse" />
+        <div v-for="i in 4" :key="i" class="h-24 lg:h-auto rounded-card bg-white shadow-card animate-pulse" />
       </div>
 
       <div v-else-if="errorMsg" class="bg-white rounded-card shadow-card p-6 text-center">
@@ -263,30 +295,74 @@ function printReport() {
       </div>
 
       <template v-else-if="summary">
-        <!-- Kartu statistik -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div class="bg-white rounded-card shadow-card p-4">
-            <p class="text-[12px] text-ink-400">Total pesanan</p>
-            <p class="text-[22px] font-semibold text-ink-900 mt-1">{{ summary.totalOrders }}</p>
+        <!-- Kartu KPI: pendapatan total jadi sorotan, sisanya melengkapi di sampingnya -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 lg:grid-rows-2 gap-4">
+          <div class="sm:col-span-2 lg:row-span-2 bg-brand-500 rounded-card p-5 flex flex-col justify-between text-white relative overflow-hidden">
+            <div class="absolute -right-6 -top-6 w-28 h-28 rounded-full bg-white/10"></div>
+            <div class="absolute -right-2 top-14 w-16 h-16 rounded-full bg-white/10"></div>
+            <div class="flex items-start justify-between relative">
+              <p class="text-[12.5px] text-white/75">Pendapatan total</p>
+              <div class="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" /></svg>
+              </div>
+            </div>
+            <p class="text-[32px] font-semibold leading-tight relative">{{ amount(summary.totalRevenue) }}</p>
+            <div class="flex items-center gap-2 text-[12px] text-white/75 relative">
+              <span class="w-1.5 h-1.5 rounded-full bg-white/75"></span>
+              {{ amount(summary.monthRevenue) }} bulan ini
+            </div>
           </div>
-          <div class="bg-white rounded-card shadow-card p-4">
-            <p class="text-[12px] text-ink-400">Pendapatan total</p>
-            <p class="text-[22px] font-semibold text-ink-900 mt-1">{{ amount(summary.totalRevenue) }}</p>
+
+          <div class="bg-white rounded-card shadow-card p-4 flex flex-col justify-between">
+            <div class="flex items-start justify-between">
+              <p class="text-[12px] text-ink-400">Total pesanan</p>
+              <div class="w-7 h-7 rounded-lg bg-cream-100 flex items-center justify-center text-ink-500">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" /><rect x="9" y="3" width="6" height="4" rx="1" /></svg>
+              </div>
+            </div>
+            <p class="text-[22px] font-semibold text-ink-900">{{ summary.totalOrders }}</p>
           </div>
-          <div class="bg-white rounded-card shadow-card p-4">
-            <p class="text-[12px] text-ink-400">Sedang dikerjakan</p>
-            <p class="text-[22px] font-semibold text-ink-900 mt-1">{{ summary.progressOrders }}</p>
-            <p class="text-[11px] text-ink-400 mt-0.5">{{ summary.pendingOrders }} masih menunggu</p>
+
+          <div class="bg-white rounded-card shadow-card p-4 flex flex-col justify-between">
+            <div class="flex items-start justify-between">
+              <p class="text-[12px] text-ink-400">Sedang dikerjakan</p>
+              <div class="w-7 h-7 rounded-lg bg-cream-100 flex items-center justify-center text-ink-500">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" /></svg>
+              </div>
+            </div>
+            <div>
+              <p class="text-[22px] font-semibold text-ink-900">{{ summary.progressOrders }}</p>
+              <p class="text-[11px] text-ink-400">{{ summary.pendingOrders }} masih menunggu</p>
+            </div>
           </div>
-          <div class="bg-white rounded-card shadow-card p-4">
-            <p class="text-[12px] text-ink-400">Pendapatan bulan ini</p>
-            <p class="text-[22px] font-semibold text-ink-900 mt-1">{{ amount(summary.monthRevenue) }}</p>
+
+          <div class="bg-white rounded-card shadow-card p-4 flex flex-col justify-between">
+            <div class="flex items-start justify-between">
+              <p class="text-[12px] text-ink-400">Pendapatan bulan ini</p>
+              <div class="w-7 h-7 rounded-lg bg-cream-100 flex items-center justify-center text-ink-500">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2" /><path d="M3 9h18M8 3v3M16 3v3" /></svg>
+              </div>
+            </div>
+            <p class="text-[22px] font-semibold text-ink-900">{{ amount(summary.monthRevenue) }}</p>
+          </div>
+
+          <div class="bg-white rounded-card shadow-card p-4 flex flex-col justify-between">
+            <div class="flex items-start justify-between">
+              <p class="text-[12px] text-ink-400">Rata-rata per pesanan</p>
+              <div class="w-7 h-7 rounded-lg bg-cream-100 flex items-center justify-center text-ink-500">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V10M11 19V5M18 19v-7" /></svg>
+              </div>
+            </div>
+            <p class="text-[22px] font-semibold text-ink-900">{{ amount(avgOrderValue) }}</p>
           </div>
         </div>
 
         <!-- Status pesanan -->
         <div class="bg-white rounded-card shadow-card p-5">
-          <h2 class="text-[15px] font-semibold text-ink-900 mb-4">Status pesanan</h2>
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-[15px] font-semibold text-ink-900">Status pesanan</h2>
+            <span class="text-[12px] text-ink-400">{{ summary.totalOrders }} total</span>
+          </div>
 
           <!-- Empty state: belum ada pesanan sama sekali -->
           <div v-if="summary.totalOrders === 0" class="flex flex-col items-center text-center py-8">
@@ -307,20 +383,25 @@ function printReport() {
             </router-link>
           </div>
 
-          <div v-else class="space-y-3">
-            <div v-for="row in [
-              { status: 'Pending', count: summary.pendingOrders },
-              { status: 'Progress', count: summary.progressOrders },
-              { status: 'Done', count: summary.doneOrders },
-            ]" :key="row.status" class="flex items-center gap-3">
-              <StatusBadge :status="row.status" class="w-24 justify-center" />
-              <div class="flex-1 h-2 rounded-full bg-ink-100 overflow-hidden">
-                <div
-                  class="h-full bg-brand-500 rounded-full"
-                  :style="{ width: `${summary.totalOrders ? Math.round((row.count / summary.totalOrders) * 100) : 0}%` }"
-                />
+          <div v-else>
+            <!-- Satu bar tersegmentasi, gantinya tiga bar terpisah -->
+            <div class="flex h-3 rounded-full overflow-hidden bg-ink-100">
+              <div
+                v-for="seg in statusSegments"
+                :key="seg.key"
+                :class="seg.bar"
+                class="h-full transition-all"
+                :style="{ width: seg.pct + '%' }"
+                :title="`${seg.label}: ${seg.count}`"
+              />
+            </div>
+
+            <div class="flex flex-wrap gap-x-6 gap-y-2 mt-4">
+              <div v-for="seg in statusSegments" :key="seg.key" class="flex items-center gap-2 text-[12.5px]">
+                <span class="w-2 h-2 rounded-full" :class="seg.dot"></span>
+                <span class="text-ink-600">{{ seg.label }}</span>
+                <span class="text-ink-400">{{ seg.count }} · {{ seg.pct }}%</span>
               </div>
-              <span class="text-[12px] text-ink-500 w-16 text-right">{{ row.count }} / {{ summary.totalOrders }}</span>
             </div>
           </div>
         </div>
@@ -341,14 +422,19 @@ function printReport() {
             <p class="text-[12px] text-ink-400 mt-1 max-w-[260px]">Grafik akan mulai terisi begitu ada pesanan dengan pendapatan tercatat.</p>
           </div>
 
-          <div v-else class="flex items-end gap-2 h-40">
+          <div v-else class="flex items-end gap-2 h-44">
             <div
               v-for="m in summary.monthlyRevenue"
               :key="m.month"
-              class="flex-1 flex flex-col items-center justify-end gap-1.5"
+              class="flex-1 flex flex-col items-center justify-end gap-1.5 group"
             >
+              <span
+                class="text-[11px] font-medium text-ink-500 transition-opacity"
+                :class="peakMonth && m.month === peakMonth.month ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'"
+              >{{ amount(m.revenue) }}</span>
               <div
-                class="w-full bg-brand-400 rounded-t-md hover:bg-brand-500 transition"
+                class="w-full rounded-t-md transition-all"
+                :class="peakMonth && m.month === peakMonth.month ? 'bg-brand-500' : 'bg-brand-200 group-hover:bg-brand-400'"
                 :style="{
                   height: `${Math.max((m.revenue / Math.max(...summary.monthlyRevenue.map((x) => x.revenue), 1)) * 100, m.revenue > 0 ? 4 : 0)}%`,
                 }"
@@ -362,19 +448,27 @@ function printReport() {
         <!-- Performa kategori -->
         <div v-if="summary.categoryPerformance.length" class="bg-white rounded-card shadow-card p-5">
           <h2 class="text-[15px] font-semibold text-ink-900 mb-4">Performa kategori bulan ini</h2>
-          <div class="space-y-3">
+          <div class="space-y-4">
             <div v-for="c in summary.categoryPerformance" :key="c.category">
-              <div class="flex items-center justify-between text-[13px] mb-1">
+              <div class="flex items-center justify-between text-[13px] mb-1.5">
                 <span class="font-medium text-ink-800">{{ c.category }}</span>
                 <span
+                  class="inline-flex items-center gap-1 text-[12px] font-medium"
                   :class="c.changePercent > 0 ? 'text-ok-600' : c.changePercent < 0 ? 'text-danger-600' : 'text-ink-400'"
                 >
-                  {{ c.changePercent > 0 ? '↑' : c.changePercent < 0 ? '↓' : '→' }} {{ c.changePercent }}%
+                  {{ c.changePercent > 0 ? '↑' : c.changePercent < 0 ? '↓' : '→' }} {{ Math.abs(c.changePercent) }}%
                 </span>
               </div>
-              <div class="flex items-center justify-between text-[12px] text-ink-400">
-                <span>{{ c.orders }} order aktif</span>
-                <span>{{ amount(c.revenue) }}</span>
+              <div class="flex items-center gap-3">
+                <div class="flex-1 h-1.5 rounded-full bg-ink-100 overflow-hidden">
+                  <div
+                    class="h-full rounded-full"
+                    :class="c.changePercent < 0 ? 'bg-danger-400' : 'bg-brand-400'"
+                    :style="{ width: `${Math.min(Math.round((c.revenue / maxCategoryRevenue) * 100), 100)}%` }"
+                  />
+                </div>
+                <span class="text-[12px] text-ink-400 shrink-0">{{ c.orders }} order</span>
+                <span class="text-[12px] text-ink-600 font-medium shrink-0 w-20 text-right">{{ amount(c.revenue) }}</span>
               </div>
             </div>
           </div>
@@ -389,7 +483,7 @@ function printReport() {
               to="/orders"
               class="text-[13px] text-brand-500 hover:text-brand-600 font-medium"
             >
-              Lihat semua →
+              Lihat semua
             </router-link>
           </div>
 
@@ -416,7 +510,7 @@ function printReport() {
               v-for="o in summary.recentOrders"
               :key="o.id"
               :to="`/orders/${o.id}`"
-              class="flex items-center justify-between gap-3 py-3 hover:bg-ink-50 -mx-2 px-2 rounded-lg transition"
+              class="flex items-center justify-between gap-3 py-3 hover:bg-ink-500/5 -mx-2 px-2 rounded-lg transition"
             >
               <div class="min-w-0">
                 <p class="text-[13.5px] font-medium text-ink-900 truncate">{{ o.buyerName }}</p>
@@ -433,24 +527,46 @@ function printReport() {
     </section>
 
     <!-- ==================== PRODUK & PENJUALAN ==================== -->
-    <section class="space-y-6">
-      <h2 class="text-[13px] font-medium text-ink-500">Produk dan penjualan</h2>
+    <section class="space-y-5">
+      <div class="flex items-center gap-3">
+        <h2 class="text-[13px] font-medium text-ink-500 shrink-0">Produk dan penjualan</h2>
+        <div class="h-px flex-1 bg-ink-100"></div>
+      </div>
 
       <!-- Kartu statistik produk -->
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <router-link to="/produk" class="bg-white rounded-card shadow-card p-4 hover:bg-ink-50 transition">
-          <p class="text-[12px] text-ink-400">Total produk</p>
-          <p class="text-[22px] font-semibold text-ink-900 mt-1">{{ totalProducts }}</p>
+        <router-link to="/produk" class="bg-white rounded-card shadow-card p-4 hover:bg-ink-500/5 transition flex flex-col justify-between">
+          <div class="flex items-start justify-between">
+            <p class="text-[12px] text-ink-400">Total produk</p>
+            <div class="w-7 h-7 rounded-lg bg-cream-100 flex items-center justify-center text-ink-500">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M9 21V9" /></svg>
+            </div>
+          </div>
+          <p class="text-[22px] font-semibold text-ink-900">{{ totalProducts }}</p>
         </router-link>
-        <router-link to="/produk" class="bg-white rounded-card shadow-card p-4 hover:bg-ink-50 transition">
-          <p class="text-[12px] text-ink-400">Produk terjual</p>
-          <p class="text-[22px] font-semibold text-ink-900 mt-1">{{ soldProducts }}</p>
-          <p class="text-[11px] text-ink-400 mt-0.5">{{ unsoldProducts }} belum terjual</p>
+        <router-link to="/produk" class="bg-white rounded-card shadow-card p-4 hover:bg-ink-500/5 transition flex flex-col justify-between">
+          <div class="flex items-start justify-between">
+            <p class="text-[12px] text-ink-400">Produk terjual</p>
+            <div class="w-7 h-7 rounded-lg bg-cream-100 flex items-center justify-center text-ink-500">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+            </div>
+          </div>
+          <div>
+            <p class="text-[22px] font-semibold text-ink-900">{{ soldProducts }}</p>
+            <p class="text-[11px] text-ink-400">{{ unsoldProducts }} belum terjual</p>
+          </div>
         </router-link>
-        <div class="bg-white rounded-card shadow-card p-4">
-          <p class="text-[12px] text-ink-400">Unit terjual</p>
-          <p class="text-[22px] font-semibold text-ink-900 mt-1">{{ totalUnits }}</p>
-          <p class="text-[11px] text-ink-400 mt-0.5">dari {{ sales.length }} transaksi</p>
+        <div class="bg-white rounded-card shadow-card p-4 flex flex-col justify-between">
+          <div class="flex items-start justify-between">
+            <p class="text-[12px] text-ink-400">Unit terjual</p>
+            <div class="w-7 h-7 rounded-lg bg-cream-100 flex items-center justify-center text-ink-500">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
+            </div>
+          </div>
+          <div>
+            <p class="text-[22px] font-semibold text-ink-900">{{ totalUnits }}</p>
+            <p class="text-[11px] text-ink-400">dari {{ sales.length }} transaksi</p>
+          </div>
         </div>
       </div>
 
@@ -462,14 +578,20 @@ function printReport() {
             v-for="c in categoryStats"
             :key="c.name"
             :to="`/kategori/${encodeURIComponent(c.name)}`"
-            class="rounded-xl border border-ink-100 p-4 hover:bg-ink-50 transition"
+            class="rounded-xl border border-ink-100 p-4 hover:border-brand-200 hover:bg-ink-500/5 transition"
           >
             <p class="text-[13.5px] font-medium text-ink-800 mb-2">{{ c.name }}</p>
-            <div class="flex items-center justify-between text-[12px] text-ink-500">
+            <div class="flex items-center justify-between text-[12px] text-ink-500 mb-2">
               <span>{{ c.count }} produk</span>
               <span>{{ c.units }} unit terjual</span>
             </div>
-            <p class="text-[13px] font-semibold text-ink-900 mt-1.5">{{ formatPrice(c.revenue) }}</p>
+            <div class="h-1.5 rounded-full bg-ink-100 overflow-hidden mb-2">
+              <div
+                class="h-full rounded-full bg-brand-400"
+                :style="{ width: `${Math.min(Math.round((c.revenue / maxCategoryRevenue) * 100), 100)}%` }"
+              />
+            </div>
+            <p class="text-[13px] font-semibold text-ink-900">{{ formatPrice(c.revenue) }}</p>
           </router-link>
         </div>
       </div>
@@ -484,7 +606,7 @@ function printReport() {
               to="/produk"
               class="text-[13px] text-brand-500 hover:text-brand-600 font-medium"
             >
-              Lihat semua →
+              Lihat semua
             </router-link>
           </div>
 
@@ -509,11 +631,13 @@ function printReport() {
 
           <div v-else class="space-y-4">
             <router-link
-              v-for="p in topProducts"
+              v-for="(p, idx) in topProducts"
               :key="p.id"
               :to="`/produk/${p.id}`"
               class="flex items-center gap-3 group"
             >
+              <span class="w-5 text-[12px] font-medium text-ink-300 text-center shrink-0">{{ idx + 1 }}</span>
+
               <img
                 v-if="p.image"
                 :src="p.image"
@@ -537,9 +661,9 @@ function printReport() {
                   <span class="text-ink-500 shrink-0">{{ p.units }} unit</span>
                 </div>
                 <div class="flex items-center gap-3">
-                  <div class="flex-1 h-2 rounded-full bg-ink-100 overflow-hidden">
+                  <div class="flex-1 h-1.5 rounded-full bg-ink-100 overflow-hidden">
                     <div
-                      class="h-full bg-brand-500 rounded-full"
+                      class="h-full bg-brand-400 rounded-full"
                       :style="{ width: `${Math.round((p.units / maxUnits) * 100)}%` }"
                     />
                   </div>
@@ -572,7 +696,7 @@ function printReport() {
               v-for="s in recentSales"
               :key="s.id"
               :to="`/produk/${s.productId}`"
-              class="flex items-center justify-between gap-3 py-3 hover:bg-ink-50 -mx-2 px-2 rounded-lg transition"
+              class="flex items-center justify-between gap-3 py-3 hover:bg-ink-500/5 -mx-2 px-2 rounded-lg transition"
             >
               <div class="min-w-0">
                 <p class="text-[13.5px] font-medium text-ink-900 truncate">{{ s.buyer }}</p>

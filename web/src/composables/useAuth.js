@@ -73,6 +73,10 @@ export function useAuth() {
   const user = computed(() => currentUser.value?.username || '')
   const role = computed(() => currentUser.value?.role || '')
   const teamName = computed(() => currentUser.value?.teamName || '')
+  // Nama tampilan & foto profil (opsional, tersimpan di server) — dipakai
+  // di header/sidebar sebagai pengganti username kalau sudah diisi.
+  const displayName = computed(() => currentUser.value?.displayName || '')
+  const photo = computed(() => currentUser.value?.photo || '')
 
   async function login(usernameInput, password) {
     try {
@@ -136,15 +140,38 @@ export function useAuth() {
     }
   }
 
+  // Ganti nama tampilan dan/atau foto profil. Tidak perlu currentPassword —
+  // ini cuma tampilan, bukan kredensial login.
+  async function updateProfile({ displayName: nameInput, photo: photoInput } = {}) {
+    try {
+      const body = {}
+      if (nameInput !== undefined) body.displayName = nameInput
+      if (photoInput !== undefined) body.photo = photoInput
+
+      const data = await apiCall('/auth/profile', {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      })
+      currentUser.value = { ...currentUser.value, ...data.user }
+      writeJSON(USER_KEY, currentUser.value)
+      return { ok: true, message: 'Profil berhasil disimpan' }
+    } catch (e) {
+      return fail(e.message)
+    }
+  }
+
   return {
     isLoggedIn,
     user,
     role,
     teamName,
+    displayName,
+    photo,
     login,
     register,
     logout,
     changeUsername,
     changePassword,
+    updateProfile,
   }
 }

@@ -17,6 +17,7 @@ const showCreate = ref(false)
 
 // --- Statistik status (kartu ringkasan, seperti di halaman Tugas) ---
 const stats = ref({ pending: 0, progress: 0, done: 0 })
+const totalStats = computed(() => stats.value.pending + stats.value.progress + stats.value.done)
 
 async function loadStats() {
   try {
@@ -157,37 +158,56 @@ function goToPage(p) {
     <div class="flex justify-end">
       <button
         type="button"
-        class="px-4 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-[13.5px] font-medium transition shrink-0"
+        class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-[13.5px] font-medium transition shrink-0 shadow-sm"
         @click="showCreate = true"
       >
-        + Pesanan baru
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+        Pesanan baru
       </button>
     </div>
 
     <!-- Kartu statistik status pesanan -->
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-      <div class="bg-white rounded-card shadow-card border border-ink-100 px-5 py-4">
-        <p class="text-[12.5px] text-ink-400">Menunggu</p>
-        <p class="text-2xl font-semibold text-ink-900 mt-1 tabular-nums">{{ stats.pending }}</p>
+      <div class="bg-white rounded-card shadow-card border border-ink-100 px-5 py-4 flex items-center justify-between">
+        <div>
+          <p class="text-[12.5px] text-ink-400">Menunggu</p>
+          <p class="text-2xl font-semibold text-ink-900 mt-1 tabular-nums">{{ stats.pending }}</p>
+        </div>
+        <div class="w-9 h-9 rounded-lg bg-amber-50 flex items-center justify-center text-amber-500 shrink-0">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" /></svg>
+        </div>
       </div>
-      <div class="bg-white rounded-card shadow-card border border-ink-100 px-5 py-4">
-        <p class="text-[12.5px] text-ink-400">Dikerjakan</p>
-        <p class="text-2xl font-semibold text-ink-900 mt-1 tabular-nums">{{ stats.progress }}</p>
+      <div class="bg-white rounded-card shadow-card border border-ink-100 px-5 py-4 flex items-center justify-between">
+        <div>
+          <p class="text-[12.5px] text-ink-400">Dikerjakan</p>
+          <p class="text-2xl font-semibold text-ink-900 mt-1 tabular-nums">{{ stats.progress }}</p>
+        </div>
+        <div class="w-9 h-9 rounded-lg bg-sky-50 flex items-center justify-center text-sky-500 shrink-0">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20a8 8 0 100-16 8 8 0 000 16z" /><path d="M12 8v4l3 2" /></svg>
+        </div>
       </div>
-      <div class="bg-white rounded-card shadow-card border border-ink-100 px-5 py-4">
-        <p class="text-[12.5px] text-ink-400">Selesai</p>
-        <p class="text-2xl font-semibold text-ink-900 mt-1 tabular-nums">{{ stats.done }}</p>
+      <div class="bg-white rounded-card shadow-card border border-ink-100 px-5 py-4 flex items-center justify-between">
+        <div>
+          <p class="text-[12.5px] text-ink-400">Selesai</p>
+          <p class="text-2xl font-semibold text-ink-900 mt-1 tabular-nums">{{ stats.done }}</p>
+        </div>
+        <div class="w-9 h-9 rounded-lg bg-ok-50 flex items-center justify-center text-ok-600 shrink-0">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+        </div>
       </div>
     </div>
 
     <!-- Search & filter status -->
     <div class="flex flex-col sm:flex-row sm:items-center gap-3">
-      <input
-        v-model="search"
-        type="search"
-        placeholder="Cari pembeli, kategori, atau toko..."
-        class="w-full sm:w-72 rounded-lg border border-ink-200 px-3 py-2 text-[13.5px] focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none"
-      />
+      <div class="relative w-full sm:w-72">
+        <svg class="w-4 h-4 text-ink-300 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+        <input
+          v-model="search"
+          type="search"
+          placeholder="Cari pembeli, kategori, atau toko..."
+          class="w-full rounded-lg border border-ink-200 pl-9 pr-3 py-2 text-[13.5px] focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none"
+        />
+      </div>
       <div ref="statusDropdownRef" class="relative w-full sm:w-44">
         <button
           type="button"
@@ -216,13 +236,17 @@ function goToPage(p) {
             class="w-full text-left px-3 py-2 text-[13.5px] transition"
             :class="opt.value === status
               ? 'bg-brand-50 text-brand-700 font-medium'
-              : 'text-ink-700 hover:bg-ink-50'"
+              : 'text-ink-700 hover:bg-ink-500/5'"
             @click="selectStatus(opt.value)"
           >
             {{ opt.label }}
           </button>
         </div>
       </div>
+
+      <span v-if="pagination" class="sm:ml-auto text-[12.5px] text-ink-400">
+        {{ pagination.total }} pesanan cocok
+      </span>
     </div>
 
     <div class="bg-white rounded-card shadow-card-hover border border-ink-100 overflow-hidden">
@@ -233,8 +257,12 @@ function goToPage(p) {
         <p class="text-danger-600 text-[13.5px] mb-3">{{ errorMsg }}</p>
         <button class="px-4 py-2 rounded-lg bg-brand-500 text-white text-[13px]" @click="load">Coba lagi</button>
       </div>
-      <div v-else-if="orders.length === 0" class="p-10 text-center text-[13.5px] text-ink-400">
-        Belum ada pesanan yang cocok.
+      <div v-else-if="orders.length === 0" class="flex flex-col items-center text-center py-14">
+        <div class="w-12 h-12 rounded-full bg-cream-100 flex items-center justify-center mb-3">
+          <svg class="w-6 h-6 text-ink-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+        </div>
+        <p class="text-[13.5px] font-medium text-ink-700">Belum ada pesanan yang cocok</p>
+        <p class="text-[12px] text-ink-400 mt-1 max-w-[260px]">Coba ubah kata kunci pencarian atau filter status di atas.</p>
       </div>
       <template v-else>
         <div class="overflow-x-auto">
@@ -255,7 +283,7 @@ function goToPage(p) {
               </tr>
             </thead>
             <tbody class="divide-y divide-ink-100 text-[13.5px]">
-              <tr v-for="(o, index) in orders" :key="o.id" class="hover:bg-ink-50 transition">
+              <tr v-for="(o, index) in orders" :key="o.id" class="hover:bg-ink-500/5 transition">
                 <td class="px-5 py-4 text-ink-400 tabular-nums">
                   {{ pagination ? (pagination.page - 1) * pagination.limit + index + 1 : index + 1 }}
                 </td>
@@ -310,7 +338,7 @@ function goToPage(p) {
           <div v-if="pagination.totalPages > 1" class="flex items-center gap-1">
             <button
               type="button"
-              class="px-2.5 py-1.5 rounded-lg border border-ink-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-ink-50 transition"
+              class="px-2.5 py-1.5 rounded-lg border border-ink-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-ink-500/5 transition"
               :disabled="pagination.page <= 1"
               @click="goToPage(pagination.page - 1)"
             >
@@ -321,7 +349,7 @@ function goToPage(p) {
             </span>
             <button
               type="button"
-              class="px-2.5 py-1.5 rounded-lg border border-ink-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-ink-50 transition"
+              class="px-2.5 py-1.5 rounded-lg border border-ink-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-ink-500/5 transition"
               :disabled="pagination.page >= pagination.totalPages"
               @click="goToPage(pagination.page + 1)"
             >
@@ -347,7 +375,7 @@ function goToPage(p) {
         <div class="flex justify-end gap-2.5">
           <button
             type="button"
-            class="px-4 py-2 rounded-lg border border-ink-200 text-ink-600 text-[13.5px] font-medium hover:bg-ink-50 transition"
+            class="px-4 py-2 rounded-lg border border-ink-200 text-ink-600 text-[13.5px] font-medium hover:bg-ink-500/5 transition"
             :disabled="deleting"
             @click="deleteTarget = null"
           >

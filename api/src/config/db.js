@@ -74,6 +74,12 @@ export const ensureSchema = async () => {
     END $$;
   `)
 
+  // Migrasi otomatis: kolom profil (nama tampilan & foto), dipakai di
+  // halaman Pengaturan > Akun. Keduanya opsional — kalau kosong, frontend
+  // fallback ke username & inisial.
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name VARCHAR(150);`)
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS photo TEXT;`)
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS orders (
       id SERIAL PRIMARY KEY,

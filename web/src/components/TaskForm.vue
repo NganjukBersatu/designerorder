@@ -1,5 +1,5 @@
 <script setup>
-import { reactive, ref, computed } from 'vue'
+import { reactive, ref, computed, onMounted, onUnmounted } from 'vue'
 import { api } from '../utils/api.js'
 import { useOptions } from '../composables/useOptions'
 import { fileToCompressedDataUrl } from '../utils/imageFile'
@@ -41,6 +41,32 @@ const form = reactive({
   dueDate: props.initial?.dueDate?.slice(0, 10) || '',
   note: props.initial?.note || '',
 })
+
+// ===== Dropdown kustom (gaya sama dengan filter status di halaman Semua Pesanan) =====
+const taskStatusOptions = [
+  { value: 'Pending', label: 'Menunggu' },
+  { value: 'Progress', label: 'Dikerjakan' },
+  { value: 'Done', label: 'Selesai' },
+]
+
+const openField = ref(null) // 'designer' | 'style' | 'substyle' | 'productionStatus' | 'status' | null
+const dropdownEls = {}
+function setDropdownRef(key) {
+  return (el) => { dropdownEls[key] = el }
+}
+function toggleDropdown(key) {
+  openField.value = openField.value === key ? null : key
+}
+function onDocClick(e) {
+  const current = openField.value
+  if (!current) return
+  const el = dropdownEls[current]
+  if (el && !el.contains(e.target)) openField.value = null
+}
+onMounted(() => document.addEventListener('click', onDocClick))
+onUnmounted(() => document.removeEventListener('click', onDocClick))
+
+const statusLabel = computed(() => taskStatusOptions.find((o) => o.value === form.status)?.label || 'Pilih status')
 
 async function onPickImage(e) {
   const file = e.target.files?.[0]
@@ -111,11 +137,11 @@ async function submit() {
         </div>
         <div class="flex flex-col items-start gap-1.5">
           <div class="flex flex-wrap items-center gap-2">
-            <label class="inline-flex items-center px-3.5 py-2 rounded-xl border border-ink-200 text-ink-700 hover:bg-ink-50 text-sm font-medium transition cursor-pointer">
+            <label class="inline-flex items-center px-3.5 py-2 rounded-xl border border-ink-200 text-ink-700 hover:bg-ink-500/5 text-sm font-medium transition cursor-pointer">
               {{ form.image ? 'Ganti Gambar' : 'Pilih Gambar' }}
               <input type="file" accept="image/*" class="hidden" @change="onPickImage" />
             </label>
-            <button v-if="form.image" type="button" @click="form.image = ''" class="px-3.5 py-2 rounded-xl text-danger-600 hover:bg-danger-50 text-sm font-medium transition">
+            <button v-if="form.image" type="button" @click="form.image = ''" class="px-3.5 py-2 rounded-xl text-danger-600 hover:bg-danger-500/10 text-sm font-medium transition">
               Hapus
             </button>
           </div>
@@ -134,45 +160,167 @@ async function submit() {
         <span class="text-[13px] font-medium text-ink-700">Untuk siapa (opsional)</span>
         <input v-model="form.clientName" type="text" placeholder="Nama client / internal" class="input" />
       </label>
+
+      <!-- Designer -->
       <label class="block">
         <span class="text-[13px] font-medium text-ink-700">Designer</span>
-        <select v-model="form.designer" class="input">
-          <option value="">Pilih designer</option>
-          <option v-for="d in designerOptions" :key="d" :value="d">{{ d }}</option>
-        </select>
+        <div :ref="setDropdownRef('designer')" class="relative mt-1">
+          <button
+            type="button"
+            class="w-full flex items-center justify-between rounded-lg border border-ink-200 pl-3 pr-2.5 py-2 text-[13.5px] bg-white hover:border-ink-300 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none cursor-pointer transition"
+            @click="toggleDropdown('designer')"
+          >
+            <span :class="form.designer ? 'text-ink-900' : 'text-ink-400'">{{ form.designer || 'Pilih designer' }}</span>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-ink-400 transition-transform shrink-0" :class="{ 'rotate-180': openField === 'designer' }">
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </button>
+          <div v-if="openField === 'designer'" class="absolute z-20 mt-1.5 w-full rounded-lg border border-ink-100 bg-white shadow-card-hover overflow-hidden py-1 max-h-56 overflow-y-auto">
+            <button type="button" class="w-full text-left px-3 py-2 text-[13.5px] transition" :class="!form.designer ? 'bg-brand-50 text-brand-700 font-medium' : 'text-ink-700 hover:bg-ink-500/5'" @click="form.designer = ''; openField = null">
+              Pilih designer
+            </button>
+            <button
+              v-for="d in designerOptions"
+              :key="d"
+              type="button"
+              class="w-full text-left px-3 py-2 text-[13.5px] transition"
+              :class="d === form.designer ? 'bg-brand-50 text-brand-700 font-medium' : 'text-ink-700 hover:bg-ink-500/5'"
+              @click="form.designer = d; openField = null"
+            >
+              {{ d }}
+            </button>
+          </div>
+        </div>
       </label>
+
+      <!-- Kategori Tugas -->
       <label class="block">
         <span class="text-[13px] font-medium text-ink-700">Kategori Tugas (opsional)</span>
-        <select v-model="form.style" class="input">
-          <option value="">Tanpa kategori</option>
-          <option v-for="s in optionsOf('taskCategory')" :key="s" :value="s">{{ s }}</option>
-        </select>
+        <div :ref="setDropdownRef('style')" class="relative mt-1">
+          <button
+            type="button"
+            class="w-full flex items-center justify-between rounded-lg border border-ink-200 pl-3 pr-2.5 py-2 text-[13.5px] bg-white hover:border-ink-300 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none cursor-pointer transition"
+            @click="toggleDropdown('style')"
+          >
+            <span :class="form.style ? 'text-ink-900' : 'text-ink-400'">{{ form.style || 'Tanpa kategori' }}</span>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-ink-400 transition-transform shrink-0" :class="{ 'rotate-180': openField === 'style' }">
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </button>
+          <div v-if="openField === 'style'" class="absolute z-20 mt-1.5 w-full rounded-lg border border-ink-100 bg-white shadow-card-hover overflow-hidden py-1 max-h-56 overflow-y-auto">
+            <button type="button" class="w-full text-left px-3 py-2 text-[13.5px] transition" :class="!form.style ? 'bg-brand-50 text-brand-700 font-medium' : 'text-ink-700 hover:bg-ink-500/5'" @click="form.style = ''; openField = null">
+              Tanpa kategori
+            </button>
+            <button
+              v-for="s in optionsOf('taskCategory')"
+              :key="s"
+              type="button"
+              class="w-full text-left px-3 py-2 text-[13.5px] transition"
+              :class="s === form.style ? 'bg-brand-50 text-brand-700 font-medium' : 'text-ink-700 hover:bg-ink-500/5'"
+              @click="form.style = s; openField = null"
+            >
+              {{ s }}
+            </button>
+          </div>
+        </div>
         <p v-if="!optionsOf('taskCategory').length" class="text-[12px] text-ink-400 mt-1">
           Belum ada pilihan, tambahkan dulu di Pengaturan &gt; Kategori Tugas.
         </p>
       </label>
+
+      <!-- Substyle Tugas -->
       <label class="block">
         <span class="text-[13px] font-medium text-ink-700">Substyle Tugas (opsional)</span>
-        <select v-model="form.substyle" class="input">
-          <option value="">Tanpa substyle</option>
-          <option v-for="s in optionsOf('taskSubstyle')" :key="s" :value="s">{{ s }}</option>
-        </select>
+        <div :ref="setDropdownRef('substyle')" class="relative mt-1">
+          <button
+            type="button"
+            class="w-full flex items-center justify-between rounded-lg border border-ink-200 pl-3 pr-2.5 py-2 text-[13.5px] bg-white hover:border-ink-300 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none cursor-pointer transition"
+            @click="toggleDropdown('substyle')"
+          >
+            <span :class="form.substyle ? 'text-ink-900' : 'text-ink-400'">{{ form.substyle || 'Tanpa substyle' }}</span>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-ink-400 transition-transform shrink-0" :class="{ 'rotate-180': openField === 'substyle' }">
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </button>
+          <div v-if="openField === 'substyle'" class="absolute z-20 mt-1.5 w-full rounded-lg border border-ink-100 bg-white shadow-card-hover overflow-hidden py-1 max-h-56 overflow-y-auto">
+            <button type="button" class="w-full text-left px-3 py-2 text-[13.5px] transition" :class="!form.substyle ? 'bg-brand-50 text-brand-700 font-medium' : 'text-ink-700 hover:bg-ink-500/5'" @click="form.substyle = ''; openField = null">
+              Tanpa substyle
+            </button>
+            <button
+              v-for="s in optionsOf('taskSubstyle')"
+              :key="s"
+              type="button"
+              class="w-full text-left px-3 py-2 text-[13.5px] transition"
+              :class="s === form.substyle ? 'bg-brand-50 text-brand-700 font-medium' : 'text-ink-700 hover:bg-ink-500/5'"
+              @click="form.substyle = s; openField = null"
+            >
+              {{ s }}
+            </button>
+          </div>
+        </div>
       </label>
+
+      <!-- Status Produksi Tugas -->
       <label class="block">
         <span class="text-[13px] font-medium text-ink-700">Status Produksi Tugas (opsional)</span>
-        <select v-model="form.productionStatus" class="input">
-          <option value="">Belum diisi</option>
-          <option v-for="s in optionsOf('taskProductionStatus')" :key="s" :value="s">{{ s }}</option>
-        </select>
+        <div :ref="setDropdownRef('productionStatus')" class="relative mt-1">
+          <button
+            type="button"
+            class="w-full flex items-center justify-between rounded-lg border border-ink-200 pl-3 pr-2.5 py-2 text-[13.5px] bg-white hover:border-ink-300 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none cursor-pointer transition"
+            @click="toggleDropdown('productionStatus')"
+          >
+            <span :class="form.productionStatus ? 'text-ink-900' : 'text-ink-400'">{{ form.productionStatus || 'Belum diisi' }}</span>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-ink-400 transition-transform shrink-0" :class="{ 'rotate-180': openField === 'productionStatus' }">
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </button>
+          <div v-if="openField === 'productionStatus'" class="absolute z-20 mt-1.5 w-full rounded-lg border border-ink-100 bg-white shadow-card-hover overflow-hidden py-1 max-h-56 overflow-y-auto">
+            <button type="button" class="w-full text-left px-3 py-2 text-[13.5px] transition" :class="!form.productionStatus ? 'bg-brand-50 text-brand-700 font-medium' : 'text-ink-700 hover:bg-ink-500/5'" @click="form.productionStatus = ''; openField = null">
+              Belum diisi
+            </button>
+            <button
+              v-for="s in optionsOf('taskProductionStatus')"
+              :key="s"
+              type="button"
+              class="w-full text-left px-3 py-2 text-[13.5px] transition"
+              :class="s === form.productionStatus ? 'bg-brand-50 text-brand-700 font-medium' : 'text-ink-700 hover:bg-ink-500/5'"
+              @click="form.productionStatus = s; openField = null"
+            >
+              {{ s }}
+            </button>
+          </div>
+        </div>
       </label>
+
+      <!-- Status tugas -->
       <label class="block">
         <span class="text-[13px] font-medium text-ink-700">Status tugas *</span>
-        <select v-model="form.status" required class="input">
-          <option value="Pending">Menunggu</option>
-          <option value="Progress">Dikerjakan</option>
-          <option value="Done">Selesai</option>
-        </select>
+        <div :ref="setDropdownRef('status')" class="relative mt-1">
+          <button
+            type="button"
+            class="w-full flex items-center justify-between rounded-lg border border-ink-200 pl-3 pr-2.5 py-2 text-[13.5px] text-ink-900 bg-white hover:border-ink-300 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none cursor-pointer transition"
+            @click="toggleDropdown('status')"
+          >
+            <span>{{ statusLabel }}</span>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-ink-400 transition-transform shrink-0" :class="{ 'rotate-180': openField === 'status' }">
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </button>
+          <div v-if="openField === 'status'" class="absolute z-20 mt-1.5 w-full rounded-lg border border-ink-100 bg-white shadow-card-hover overflow-hidden py-1">
+            <button
+              v-for="opt in taskStatusOptions"
+              :key="opt.value"
+              type="button"
+              class="w-full text-left px-3 py-2 text-[13.5px] transition"
+              :class="opt.value === form.status ? 'bg-brand-50 text-brand-700 font-medium' : 'text-ink-700 hover:bg-ink-500/5'"
+              @click="form.status = opt.value; openField = null"
+            >
+              {{ opt.label }}
+            </button>
+          </div>
+        </div>
       </label>
+
       <label class="block">
         <span class="text-[13px] font-medium text-ink-700">Tenggat (opsional)</span>
         <input v-model="form.dueDate" type="date" class="input" />
@@ -209,7 +357,7 @@ async function submit() {
             v-if="form.linkDbs.length > 1"
             type="button"
             @click="removeLinkField(i)"
-            class="p-2 rounded-lg hover:bg-danger-50 text-danger-600 transition"
+            class="p-2 rounded-lg hover:bg-danger-500/10 text-danger-600 transition"
             title="Hapus link"
             aria-label="Hapus link"
           >
@@ -229,7 +377,7 @@ async function submit() {
     <p v-if="errorMsg" class="text-[13px] text-danger-600">{{ errorMsg }}</p>
 
     <div class="flex gap-3 pt-2">
-      <button type="button" class="flex-1 px-4 py-2.5 rounded-xl border border-ink-200 text-[13.5px] font-medium text-ink-700 hover:bg-ink-50 transition" @click="emit('cancel')">
+      <button type="button" class="flex-1 px-4 py-2.5 rounded-xl border border-ink-200 text-[13.5px] font-medium text-ink-700 hover:bg-ink-500/5 transition" @click="emit('cancel')">
         Batal
       </button>
       <button type="submit" :disabled="saving" class="flex-1 px-4 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-[13.5px] font-medium transition disabled:opacity-60">

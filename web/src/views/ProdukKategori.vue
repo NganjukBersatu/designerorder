@@ -21,22 +21,37 @@
 
     <!-- Ringkasan -->
     <div class="mb-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
-      <div class="relative bg-white rounded-card shadow-card border border-ink-100 overflow-hidden pl-5 pr-4 py-4">
+      <div class="relative bg-white rounded-card shadow-card border border-ink-100 overflow-hidden pl-5 pr-4 py-4 flex items-center justify-between gap-3">
         <span class="absolute left-0 top-0 bottom-0 w-1 bg-brand-400"></span>
-        <p class="text-[13px] text-ink-500 mb-1.5">Jumlah Kategori</p>
-        <p class="text-[28px] leading-none font-semibold text-ink-900">{{ categories.length }}</p>
+        <div>
+          <p class="text-[13px] text-ink-500 mb-1.5">Jumlah Kategori</p>
+          <p class="text-[28px] leading-none font-semibold text-ink-900">{{ categories.length }}</p>
+        </div>
+        <div class="w-9 h-9 rounded-lg bg-brand-50 flex items-center justify-center text-brand-500 shrink-0">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>
+        </div>
       </div>
 
-      <div class="relative bg-white rounded-card shadow-card border border-ink-100 overflow-hidden pl-5 pr-4 py-4">
+      <div class="relative bg-white rounded-card shadow-card border border-ink-100 overflow-hidden pl-5 pr-4 py-4 flex items-center justify-between gap-3">
         <span class="absolute left-0 top-0 bottom-0 w-1 bg-ok-500"></span>
-        <p class="text-[13px] text-ink-500 mb-1.5">Total Produk</p>
-        <p class="text-[28px] leading-none font-semibold text-ink-900">{{ products.length }}</p>
+        <div>
+          <p class="text-[13px] text-ink-500 mb-1.5">Total Produk</p>
+          <p class="text-[28px] leading-none font-semibold text-ink-900">{{ products.length }}</p>
+        </div>
+        <div class="w-9 h-9 rounded-lg bg-ok-50 flex items-center justify-center text-ok-600 shrink-0">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
+        </div>
       </div>
 
-      <div class="relative bg-white rounded-card shadow-card border border-ink-100 overflow-hidden pl-5 pr-4 py-4">
+      <div class="relative bg-white rounded-card shadow-card border border-ink-100 overflow-hidden pl-5 pr-4 py-4 flex items-center justify-between gap-3">
         <span class="absolute left-0 top-0 bottom-0 w-1 bg-warn-400"></span>
-        <p class="text-[13px] text-ink-500 mb-1.5">Belum Punya Style</p>
-        <p class="text-[28px] leading-none font-semibold text-ink-900">{{ uncategorizedCount }}</p>
+        <div>
+          <p class="text-[13px] text-ink-500 mb-1.5">Belum Punya Style</p>
+          <p class="text-[28px] leading-none font-semibold text-ink-900">{{ uncategorizedCount }}</p>
+        </div>
+        <div class="w-9 h-9 rounded-lg bg-warn-50 flex items-center justify-center text-warn-500 shrink-0">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01" /><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
+        </div>
       </div>
     </div>
 
@@ -84,7 +99,7 @@
                 :key="sub.label"
                 type="button"
                 @click="openCategory(cat.name, sub.label)"
-                class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-cream-100 hover:bg-ink-100 text-ink-700 text-xs font-medium transition"
+                class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-cream-100 hover:bg-ink-500/10 text-ink-700 text-xs font-medium transition"
                 :title="`Buka ${cat.name}, substyle ${sub.label}`"
               >
                 {{ sub.label }}
@@ -160,7 +175,7 @@
             <button
               type="button"
               @click="closeAddModal"
-              class="px-4 py-2 rounded-xl border border-ink-200 text-ink-700 hover:bg-ink-50 text-sm font-medium transition"
+              class="px-4 py-2 rounded-xl border border-ink-200 text-ink-700 hover:bg-ink-500/5 text-sm font-medium transition"
             >
               Batal
             </button>

@@ -150,12 +150,13 @@
         <div class="pl-6 pr-5 py-5">
           <div class="flex items-center gap-4">
             <!-- Avatar -->
-            <div class="w-16 h-16 rounded-2xl bg-brand-500 flex items-center justify-center text-white text-xl font-bold shadow-sm shrink-0">
-              {{ userInitials }}
+            <div class="w-16 h-16 rounded-2xl bg-brand-500 flex items-center justify-center text-white text-xl font-bold shadow-sm shrink-0 overflow-hidden">
+              <img v-if="profile.photo" :src="profile.photo" alt="Foto profil" class="w-full h-full object-cover" />
+              <span v-else>{{ userInitials }}</span>
             </div>
 
             <div class="min-w-0 flex-1">
-              <h2 class="text-lg font-semibold text-ink-900 truncate">{{ user || '—' }}</h2>
+              <h2 class="text-lg font-semibold text-ink-900 truncate">{{ displayNameOrUsername || '—' }}</h2>
               <p class="text-sm text-ink-500 mt-0.5">
                 {{ roleLabel(role) }}
                 <span v-if="teamName"> · Tim {{ teamName }}</span>
@@ -170,6 +171,122 @@
               </div>
             </div>
           </div>
+        </div>
+
+        <div class="pl-6 pr-5 pt-4 pb-5 border-t border-ink-100 space-y-4">
+          <div
+            v-if="profileMsg.text"
+            :class="[
+              'px-3 py-2.5 rounded-xl text-sm',
+              profileMsg.ok ? 'bg-ok-100 text-ok-700' : 'bg-danger-50 text-danger-600'
+            ]"
+            role="alert"
+          >
+            {{ profileMsg.text }}
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-ink-700 mb-1.5">Foto Profil</label>
+            <div class="flex flex-wrap items-center gap-2">
+              <label class="inline-flex items-center px-3.5 py-2 rounded-xl border border-ink-200 text-ink-700 hover:bg-ink-50 text-sm font-medium transition cursor-pointer">
+                {{ profile.photo ? 'Ganti Foto' : 'Unggah Foto' }}
+                <input type="file" accept="image/*" class="hidden" @change="onPickProfilePhoto" />
+              </label>
+              <button
+                v-if="profile.photo"
+                type="button"
+                @click="removeProfilePhoto"
+                class="px-3.5 py-2 rounded-xl text-danger-600 hover:bg-danger-50 text-sm font-medium transition"
+              >
+                Hapus Foto
+              </button>
+            </div>
+            <p class="text-xs text-ink-400 mt-1.5">JPG, PNG, atau WEBP. Hanya tersimpan di browser ini.</p>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-ink-700 mb-1.5">Nama Tampilan</label>
+            <input
+              v-model="displayNameForm"
+              type="text"
+              class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition"
+              :placeholder="user"
+            />
+            <p class="text-xs text-ink-400 mt-1.5">Tampil di header & dropdown profil. Username login tetap {{ user }}.</p>
+          </div>
+        </div>
+
+        <div class="flex justify-end pl-6 pr-5 py-4 border-t border-ink-100 bg-cream-50">
+          <button
+            type="button"
+            @click="submitProfile"
+            class="px-5 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium transition shadow-sm"
+          >
+            Simpan Profil
+          </button>
+        </div>
+      </section>
+
+      <!-- Nama Aplikasi -->
+      <section class="relative bg-white rounded-card shadow-card border border-ink-100 overflow-hidden">
+        <span class="absolute left-0 top-0 bottom-0 w-1 bg-gold-500"></span>
+
+        <div class="pl-6 pr-5 py-4 border-b border-ink-100">
+          <h2 class="text-base font-semibold text-ink-900">Nama Aplikasi</h2>
+          <p class="text-[13px] text-ink-500 mt-0.5">
+            Nama dan tagline yang tampil di sidebar serta judul tab browser.
+          </p>
+        </div>
+
+        <div class="pl-6 pr-5 py-5 space-y-4">
+          <div
+            v-if="appSettingsMsg.text"
+            :class="[
+              'px-3 py-2.5 rounded-xl text-sm',
+              appSettingsMsg.ok ? 'bg-ok-100 text-ok-700' : 'bg-danger-50 text-danger-600'
+            ]"
+            role="alert"
+          >
+            {{ appSettingsMsg.text }}
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-ink-700 mb-1.5">Nama Aplikasi</label>
+            <input
+              v-model="appSettingsForm.appName"
+              type="text"
+              class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition"
+              placeholder="mis. Designer Orders"
+            />
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-ink-700 mb-1.5">Tagline</label>
+            <input
+              v-model="appSettingsForm.appTagline"
+              type="text"
+              class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition"
+              placeholder="mis. Ruang kerja produksi"
+            />
+            <p class="text-xs text-ink-400 mt-1.5">Tampil di bawah nama aplikasi, di sidebar.</p>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between gap-3 pl-6 pr-5 py-4 border-t border-ink-100 bg-cream-50">
+          <button
+            type="button"
+            @click="resetAppName"
+            class="text-xs text-ink-500 hover:text-ink-800 transition"
+          >
+            Reset ke bawaan
+          </button>
+          <button
+            type="button"
+            @click="submitAppSettings"
+            class="px-5 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium transition shadow-sm"
+          >
+            Simpan Nama Aplikasi
+          </button>
         </div>
       </section>
 
@@ -417,6 +534,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 import { useOptions, OPTION_GROUPS } from '../composables/useOptions'
 import { useProducts } from '../composables/useProducts'
+import { useAppSettings } from '../composables/useAppSettings'
+import { useProfile } from '../composables/useProfile'
 import { splitPlatforms } from '../utils/platforms'
 import { api } from '../utils/api.js'
 
@@ -439,7 +558,7 @@ const TABS = [
   {
     key: 'akun',
     label: 'Akun',
-    info: 'Profil akun, username, dan kata sandi untuk masuk ke dashboard.'
+    info: 'Profil akun, nama aplikasi, username, dan kata sandi untuk masuk ke dashboard.'
   },
   {
     key: 'tim',
@@ -469,9 +588,12 @@ watch(activeTab, (tab) => {
   }
 })
 
-// Inisial username untuk avatar
+// ========== PROFIL (foto + nama tampilan) ==========
+const { profile, displayNameOrUsername, updateDisplayName, updatePhoto, removePhoto } = useProfile()
+
+// Inisial untuk avatar (dari nama tampilan kalau ada, kalau tidak dari username)
 const userInitials = computed(() => {
-  const name = (user.value || '').trim()
+  const name = (displayNameOrUsername.value || '').trim()
   if (!name) return 'AK'
   const parts = name.split(/\s+/)
   if (parts.length >= 2) {
@@ -479,6 +601,31 @@ const userInitials = computed(() => {
   }
   return name.slice(0, 2).toUpperCase()
 })
+
+const displayNameForm = ref(profile.value.displayName)
+const profileMsg = ref({ ok: false, text: '' })
+
+watch(
+  () => profile.value.displayName,
+  (val) => {
+    displayNameForm.value = val
+  }
+)
+
+async function onPickProfilePhoto(e) {
+  const file = e.target.files?.[0]
+  e.target.value = ''
+  if (!file) return
+  profileMsg.value = await updatePhoto(file)
+}
+
+async function removeProfilePhoto() {
+  profileMsg.value = await removePhoto()
+}
+
+async function submitProfile() {
+  profileMsg.value = await updateDisplayName(displayNameForm.value)
+}
 
 const TONES = {
   kategori: 'bg-[#8B5CF6]',
@@ -538,6 +685,36 @@ function resetGroup(group) {
   if (!confirm(`Kembalikan pilihan ${group.label} ke bawaan?`)) return
   resetOptions(group.key)
   optionMsg.value = { id: group.id, ok: true, text: 'Pilihan dikembalikan ke bawaan' }
+}
+
+// ========== NAMA APLIKASI ==========
+const { settings, updateAppSettings, resetAppSettings } = useAppSettings()
+
+const appSettingsForm = ref({
+  appName: settings.value.appName,
+  appTagline: settings.value.appTagline
+})
+const appSettingsMsg = ref({ ok: false, text: '' })
+
+function submitAppSettings() {
+  const result = updateAppSettings(appSettingsForm.value)
+  appSettingsMsg.value = result
+  if (result.ok) {
+    appSettingsForm.value = {
+      appName: settings.value.appName,
+      appTagline: settings.value.appTagline
+    }
+  }
+}
+
+function resetAppName() {
+  if (!confirm('Kembalikan nama & tagline aplikasi ke bawaan?')) return
+  const result = resetAppSettings()
+  appSettingsForm.value = {
+    appName: settings.value.appName,
+    appTagline: settings.value.appTagline
+  }
+  appSettingsMsg.value = result
 }
 
 // ========== USERNAME ==========
