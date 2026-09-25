@@ -10,8 +10,13 @@ import { ref, computed } from 'vue'
 import { getToken, setToken } from '../utils/api.js'
 import { fetchProducts } from './useProducts'
 import { useTeamMembers } from './useTeamMembers'
+import { fetchOptions } from './useOptions'
 
 const USER_KEY = 'auth_user'
+
+// Sama seperti utils/api.js: di dev pakai proxy Vite ('/api'),
+// di production pakai URL publik backend dari VITE_API_URL.
+const API_BASE = import.meta.env.VITE_API_URL || '/api'
 
 function readJSON(key) {
   try {
@@ -35,7 +40,7 @@ function fail(message) {
 }
 
 async function apiCall(path, options) {
-  const res = await fetch(`/api${path}`, {
+  const res = await fetch(`${API_BASE}${path}`, {
     headers: {
       'Content-Type': 'application/json',
       ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
@@ -53,6 +58,7 @@ function applySession({ token, user, teamName }) {
   writeJSON(USER_KEY, currentUser.value)
   fetchProducts()
   useTeamMembers().fetchMembers()
+  fetchOptions()
 }
 
 export function validateUsername(value) {

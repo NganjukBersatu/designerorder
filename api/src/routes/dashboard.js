@@ -4,9 +4,19 @@ import { pool } from '../config/db.js'
 const router = Router()
 const NAMA_BULAN = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
 
-// GET /api/dashboard/summary
+// Ambil ?month=YYYY-MM dari query, jatuh ke bulan berjalan kalau kosong/tidak valid
+function parseMonthParam(raw) {
+  if (typeof raw === 'string' && /^\d{4}-\d{2}$/.test(raw)) {
+    const monthNum = Number(raw.slice(5, 7))
+    if (monthNum >= 1 && monthNum <= 12) return `${raw}-01`
+  }
+  return new Date().toISOString().slice(0, 10)
+}
+
+// GET /api/dashboard/summary?month=YYYY-MM
 router.get('/summary', async (req, res) => {
   const teamId = req.user.teamId
+  const anchorMonth = parseMonthParam(req.query.month)
   try {
     const statusResult = await pool.query('SELECT status FROM orders WHERE team_id = $1', [teamId])
     const totalOrders = statusResult.rows.length
@@ -20,13 +30,13 @@ router.get('/summary', async (req, res) => {
     )
     const monthRevenueResult = await pool.query(`
       SELECT COALESCE(SUM(price), 0) AS total FROM orders
-      WHERE team_id = $1 AND date_trunc('month', order_date) = date_trunc('month', CURRENT_DATE)
-    `, [teamId])
+      WHERE team_id = $1 AND date_trunc('month', order_date) = date_trunc('month', $2::date)
+    `, [teamId, anchorMonth])
 
-    // Pendapatan 12 bulan terakhir
+    // Pendapatan 12 bulan terakhir, berakhir di bulan yang dipilih
     const monthlyResult = await pool.query(`
       WITH bulan AS (
-        SELECT date_trunc('month', CURRENT_DATE) - (n || ' month')::interval AS periode
+        SELECT date_trunc('month', $2::date) - (n || ' month')::interval AS periode
         FROM generate_series(11, 0, -1) AS n
       )
       SELECT
@@ -37,26 +47,26 @@ router.get('/summary', async (req, res) => {
       LEFT JOIN orders o ON date_trunc('month', o.order_date) = b.periode AND o.team_id = $1
       GROUP BY b.periode
       ORDER BY b.periode ASC
-    `, [teamId])
+    `, [teamId, anchorMonth])
     const monthlyRevenue = monthlyResult.rows.map((r) => ({
       month: new Date(r.periode).toISOString().slice(0, 7),
       revenue: Number(r.revenue),
       orders: Number(r.orders),
     }))
 
-    // Performa per kategori: bulan ini vs bulan lalu
+    // Performa per kategori: bulan yang dipilih vs bulan sebelumnya
     const categoryNowResult = await pool.query(`
       SELECT category, COALESCE(SUM(price), 0) AS revenue, COUNT(*) AS orders
       FROM orders
-      WHERE team_id = $1 AND date_trunc('month', order_date) = date_trunc('month', CURRENT_DATE)
+      WHERE team_id = $1 AND date_trunc('month', order_date) = date_trunc('month', $2::date)
       GROUP BY category
-    `, [teamId])
+    `, [teamId, anchorMonth])
     const categoryPrevResult = await pool.query(`
       SELECT category, COALESCE(SUM(price), 0) AS revenue
       FROM orders
-      WHERE team_id = $1 AND date_trunc('month', order_date) = date_trunc('month', CURRENT_DATE - interval '1 month')
+      WHERE team_id = $1 AND date_trunc('month', order_date) = date_trunc('month', $2::date - interval '1 month')
       GROUP BY category
-    `, [teamId])
+    `, [teamId, anchorMonth])
     const prevMap = Object.fromEntries(categoryPrevResult.rows.map((r) => [r.category, Number(r.revenue)]))
     const categoryPerformance = categoryNowResult.rows.map((r) => {
       const revenue = Number(r.revenue)

@@ -1,6 +1,8 @@
 // src/services/api.js (atau lokasi file api.js kamu sekarang)
 
-const BASE = '/api'
+// Di dev, '/api' diteruskan ke backend lewat proxy Vite (lihat vite.config.js).
+// Di production (frontend & backend di-deploy terpisah), set VITE_API_URL ke URL publik backend.
+const BASE = import.meta.env.VITE_API_URL || '/api'
 const TOKEN_KEY = 'auth_token'
 
 export function getToken() {

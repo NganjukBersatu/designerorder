@@ -1,14 +1,25 @@
 import { Router } from 'express'
 import bcrypt from 'bcryptjs'
+import rateLimit from 'express-rate-limit'
 import { pool } from '../config/db.js'
 import { signToken, requireAuth } from '../middleware/auth.js'
 
 const router = Router()
-
+perbaikan7
 // Batas ukuran foto profil (data URL base64) supaya kolom TEXT & payload
 // JSON-nya tidak kebablasan. ~2MB base64 cukup buat foto persegi kecil
 // yang sudah dikompres di frontend.
 const MAX_PHOTO_LENGTH = 2_000_000
+
+// Batasi percobaan login/register supaya tidak gampang dibrute-force
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 menit
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Terlalu banyak percobaan, coba lagi beberapa menit lagi' },
+})
+main
 
 function mapUser(u) {
   return {
@@ -26,7 +37,7 @@ function normalizeUsername(v) {
 }
 
 // POST /api/auth/register — bikin tim baru + akun owner pertamanya
-router.post('/register', async (req, res) => {
+router.post('/register', authLimiter, async (req, res) => {
   const { teamName, username, password } = req.body
   const uname = normalizeUsername(username)
 
@@ -69,7 +80,7 @@ router.post('/register', async (req, res) => {
 })
 
 // POST /api/auth/login
-router.post('/login', async (req, res) => {
+router.post('/login', authLimiter, async (req, res) => {
   const uname = normalizeUsername(req.body.username)
   const { password } = req.body
   if (!uname || !password) {

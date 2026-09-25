@@ -1,5 +1,9 @@
 import jwt from 'jsonwebtoken'
 
+if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
+  throw new Error('JWT_SECRET wajib diset di environment production, tidak boleh pakai default')
+}
+
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-jangan-dipakai-di-production'
 
 export function signToken(user) {
