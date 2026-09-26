@@ -138,7 +138,16 @@
                 <td class="px-4 py-4 text-ink-500 dark:text-ink-400 text-[13px]">
                   {{ item.uploadDate ? formatDateTime(item.uploadDate) : '—' }}
                 </td>
-                <td class="px-4 py-4 text-ink-600 dark:text-ink-300">{{ item.productionStatus || '—' }}</td>
+                <td class="px-4 py-4">
+                  <span
+                    v-if="item.productionStatus"
+                    class="inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-medium whitespace-nowrap"
+                    :class="productionStatusClasses(item.productionStatus)"
+                  >
+                    {{ item.productionStatus }}
+                  </span>
+                  <span v-else class="text-ink-300">—</span>
+                </td>
                 <td class="px-4 py-4"><PlatformBadges :platform="item.platform" /></td>
                 <td class="px-4 py-4">
                   <div v-if="getLinks(item).length" class="flex flex-col gap-1">
@@ -694,6 +703,33 @@ const items = computed(() =>
 const categoryExists = computed(
   () => items.value.length > 0 || optionsOf('style').includes(name.value)
 )
+
+// ========== WARNA BADGE STATUS PRODUKSI ==========
+// Status produksi adalah teks bebas (custom dari halaman Pengaturan, bukan
+// enum tetap), jadi warnanya di-generate otomatis dari nama status supaya
+// tiap status konsisten dapat warna yang sama tiap kali dirender.
+const PRODUCTION_STATUS_PALETTE = [
+  'bg-sky-100 text-sky-700 dark:bg-sky-500/10 dark:text-sky-300',
+  'bg-violet-100 text-violet-700 dark:bg-violet-500/10 dark:text-violet-300',
+  'bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300',
+  'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300',
+  'bg-rose-100 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300',
+  'bg-cyan-100 text-cyan-700 dark:bg-cyan-500/10 dark:text-cyan-300',
+  'bg-fuchsia-100 text-fuchsia-700 dark:bg-fuchsia-500/10 dark:text-fuchsia-300',
+  'bg-lime-100 text-lime-700 dark:bg-lime-500/10 dark:text-lime-300',
+  'bg-orange-100 text-orange-700 dark:bg-orange-500/10 dark:text-orange-300',
+  'bg-teal-100 text-teal-700 dark:bg-teal-500/10 dark:text-teal-300',
+]
+
+function productionStatusClasses(status) {
+  if (!status) return ''
+  let hash = 0
+  for (let i = 0; i < status.length; i++) {
+    hash = status.charCodeAt(i) + ((hash << 5) - hash)
+  }
+  const idx = Math.abs(hash) % PRODUCTION_STATUS_PALETTE.length
+  return PRODUCTION_STATUS_PALETTE[idx]
+}
 
 // ========== FILTER SUBSTYLE & PENCARIAN ==========
 const activeSub = ref('all')

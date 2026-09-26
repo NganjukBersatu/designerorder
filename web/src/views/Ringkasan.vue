@@ -33,11 +33,40 @@ function setMonth(key) {
   load()
 }
 
+// Semua pesanan pada bulan yang dipilih (data lengkap, bukan cuma "terbaru"),
+// dipakai khusus untuk ekspor CSV supaya konsisten dengan monthSales di bawah.
+const monthOrders = ref([])
+
+function monthKeyOf(value) {
+  if (!value) return ''
+  const d = new Date(value)
+  if (isNaN(d.getTime())) return ''
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`
+}
+
+async function loadMonthOrders() {
+  try {
+    // Ambil dalam jumlah besar supaya mencakup seluruh pesanan bulan terkait.
+    // Kalau nanti backend sudah mendukung filter rentang tanggal langsung
+    // (mis. /orders?dateFrom=&dateTo=), baris ini bisa disederhanakan.
+    const res = await api.get('/orders?page=1&limit=1000')
+    monthOrders.value = (res.data || []).filter(
+      (o) => monthKeyOf(o.orderDate || o.date || o.createdAt) === selectedMonth.value
+    )
+  } catch (err) {
+    monthOrders.value = []
+  }
+}
+
 async function load() {
   loading.value = true
   errorMsg.value = ''
   try {
-    summary.value = await api.get(`/dashboard/summary?month=${selectedMonth.value}`)
+    const [summaryRes] = await Promise.all([
+      api.get(`/dashboard/summary?month=${selectedMonth.value}`),
+      loadMonthOrders(),
+    ])
+    summary.value = summaryRes
   } catch (err) {
     errorMsg.value = err.message
   } finally {
@@ -113,12 +142,6 @@ const recentSales = computed(() =>
 )
 
 // ========== EKSPOR (CSV & Cetak) ==========
-function monthKeyOf(value) {
-  if (!value) return ''
-  const d = new Date(value)
-  if (isNaN(d.getTime())) return ''
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`
-}
 
 // Penjualan produk pada bulan yang sedang dipilih (data lengkap, dari useProducts)
 const monthSales = computed(() =>
@@ -132,12 +155,12 @@ const saleValue = (s) => (s.product.price || 0) * (Number(s.qty) || 0)
 function downloadCsv() {
   const rows = [['Jenis', 'Tanggal', 'Nama', 'Keterangan', 'Jumlah', 'Nilai', 'Status / Platform']]
 
-  // Pesanan terbaru yang tersedia dari ringkasan (bukan daftar penuh per bulan;
-  // untuk laporan lengkap per bulan gunakan halaman Laporan)
-  for (const o of summary?.value?.recentOrders || []) {
+  // Semua pesanan pada bulan yang dipilih (bukan cuma "terbaru"), konsisten
+  // dengan monthSales di bawah yang juga sudah terfilter per bulan.
+  for (const o of monthOrders.value) {
     rows.push([
       'Pesanan desain',
-      formatDateTime(o.createdAt || o.orderDate || o.date),
+      formatDateTime(o.orderDate || o.date || o.createdAt),
       o.buyerName || '',
       [o.category, o.characterType].filter(Boolean).join(' / '),
       1,

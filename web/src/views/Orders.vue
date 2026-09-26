@@ -60,6 +60,45 @@ function onClickOutsideStatus(e) {
 onMounted(() => document.addEventListener('click', onClickOutsideStatus))
 onUnmounted(() => document.removeEventListener('click', onClickOutsideStatus))
 
+// --- Dropdown menu aksi (titik tiga) per baris tabel, di-teleport ke <body> ---
+// supaya tidak terpotong oleh overflow-hidden container tabel
+const openActionMenu = ref(null) // order yang menu-nya sedang terbuka, null = semua tertutup
+const menuPosition = ref({ top: 0, left: 0 })
+const MENU_WIDTH = 144 // px, harus sama dengan w-36 di bawah
+
+function toggleActionMenu(order, event) {
+  if (openActionMenu.value?.id === order.id) {
+    openActionMenu.value = null
+    return
+  }
+  const rect = event.currentTarget.getBoundingClientRect()
+  menuPosition.value = {
+    top: rect.bottom + window.scrollY + 4,
+    left: rect.right + window.scrollX - MENU_WIDTH,
+  }
+  openActionMenu.value = order
+}
+
+function closeActionMenu() {
+  openActionMenu.value = null
+}
+
+function onClickOutsideActionMenu(e) {
+  if (!e.target.closest('[data-action-menu]')) {
+    closeActionMenu()
+  }
+}
+onMounted(() => {
+  document.addEventListener('click', onClickOutsideActionMenu)
+  window.addEventListener('scroll', closeActionMenu, true)
+  window.addEventListener('resize', closeActionMenu)
+})
+onUnmounted(() => {
+  document.removeEventListener('click', onClickOutsideActionMenu)
+  window.removeEventListener('scroll', closeActionMenu, true)
+  window.removeEventListener('resize', closeActionMenu)
+})
+
 // --- Pagination ---
 const page = ref(1)
 const limit = ref(10)
@@ -101,8 +140,6 @@ watch(page, load)
 onMounted(load)
 onMounted(loadStats)
 
-// Fungsi remove() lama sudah digantikan askDelete() + confirmDelete() di atas
-
 function onCreated() {
   showCreate.value = false
   resetAndLoad()
@@ -134,6 +171,31 @@ async function confirmDelete() {
   } finally {
     deleting.value = false
     deleteTarget.value = null
+  }
+}
+
+// --- Konfirmasi ubah status pesanan (tandai Dikerjakan / Selesai) ---
+const statusTarget = ref(null) // { order, newStatus } atau null kalau modal tertutup
+const updatingStatus = ref(false)
+
+function askStatusChange(order, newStatus) {
+  statusTarget.value = { order, newStatus }
+}
+
+async function confirmStatusChange() {
+  if (!statusTarget.value) return
+  const { order, newStatus } = statusTarget.value
+  updatingStatus.value = true
+  try {
+    await api.patch(`/orders/${order.id}`, { status: newStatus })
+    order.status = newStatus // update langsung di baris tabel, tanpa reload penuh
+    showToast(`Status pesanan ${order.buyerName} diubah jadi ${STATUS_LABEL[newStatus] || newStatus}`, 'success')
+    loadStats()
+  } catch (err) {
+    showToast(err.message || 'Gagal mengubah status pesanan', 'error')
+  } finally {
+    updatingStatus.value = false
+    statusTarget.value = null
   }
 }
 
@@ -199,7 +261,7 @@ function goToPage(p) {
 
     <!-- Search & filter status -->
     <div class="flex flex-col sm:flex-row sm:items-center gap-3">
-      <div class="relative w-full sm:w-72">
+      <div class="relative flex-1 min-w-0">
         <svg class="w-4 h-4 text-ink-300 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
         <input
           v-model="search"
@@ -208,7 +270,7 @@ function goToPage(p) {
           class="w-full rounded-lg border border-ink-200 pl-9 pr-3 py-2 text-[13.5px] focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none"
         />
       </div>
-      <div ref="statusDropdownRef" class="relative w-full sm:w-44">
+      <div ref="statusDropdownRef" class="relative w-full sm:w-44 shrink-0">
         <button
           type="button"
           class="w-full flex items-center justify-between rounded-lg border border-ink-200 pl-3 pr-2.5 py-2 text-[13.5px] text-ink-700 bg-white hover:border-ink-300 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none cursor-pointer transition"
@@ -244,7 +306,7 @@ function goToPage(p) {
         </div>
       </div>
 
-      <span v-if="pagination" class="sm:ml-auto text-[12.5px] text-ink-400">
+      <span v-if="pagination" class="sm:ml-2 shrink-0 text-[12.5px] text-ink-400">
         {{ pagination.total }} pesanan cocok
       </span>
     </div>
@@ -265,21 +327,21 @@ function goToPage(p) {
         <p class="text-[12px] text-ink-400 mt-1 max-w-[260px]">Coba ubah kata kunci pencarian atau filter status di atas.</p>
       </div>
       <template v-else>
-        <div class="overflow-x-auto">
+        <div class="overflow-auto max-h-[65vh]">
           <table class="w-full text-left text-sm">
             <thead>
-              <tr class="bg-cream-100 text-ink-500 border-b border-ink-100">
-                <th class="px-5 py-3.5 text-left font-medium whitespace-nowrap w-12">No</th>
-                <th class="px-5 py-3.5 text-left font-medium whitespace-nowrap">Kategori</th>
-                <th class="px-5 py-3.5 text-left font-medium whitespace-nowrap">Jenis Karakter</th>
-                <th class="px-5 py-3.5 text-left font-medium whitespace-nowrap">Style</th>
-                <th class="px-5 py-3.5 text-left font-medium whitespace-nowrap">Designer</th>
-                <th class="px-5 py-3.5 text-left font-medium whitespace-nowrap">Platform</th>
-                <th class="px-5 py-3.5 text-left font-medium whitespace-nowrap">Pembeli</th>
-                <th class="px-5 py-3.5 text-left font-medium whitespace-nowrap">Tanggal</th>
-                <th class="px-5 py-3.5 text-left font-medium whitespace-nowrap">Harga</th>
-                <th class="px-5 py-3.5 text-left font-medium whitespace-nowrap">Status</th>
-                <th class="px-5 py-3.5 text-right font-medium whitespace-nowrap">Aksi</th>
+              <tr class="text-ink-500 border-b border-ink-100">
+                <th class="sticky top-0 z-10 bg-cream-100 px-5 py-3.5 text-left font-medium whitespace-nowrap w-12">No</th>
+                <th class="sticky top-0 z-10 bg-cream-100 px-5 py-3.5 text-left font-medium whitespace-nowrap">Kategori</th>
+                <th class="sticky top-0 z-10 bg-cream-100 px-5 py-3.5 text-left font-medium whitespace-nowrap">Jenis Karakter</th>
+                <th class="sticky top-0 z-10 bg-cream-100 px-5 py-3.5 text-left font-medium whitespace-nowrap">Style</th>
+                <th class="sticky top-0 z-10 bg-cream-100 px-5 py-3.5 text-left font-medium whitespace-nowrap">Designer</th>
+                <th class="sticky top-0 z-10 bg-cream-100 px-5 py-3.5 text-left font-medium whitespace-nowrap">Platform</th>
+                <th class="sticky top-0 z-10 bg-cream-100 px-5 py-3.5 text-left font-medium whitespace-nowrap">Pembeli</th>
+                <th class="sticky top-0 z-10 bg-cream-100 px-5 py-3.5 text-left font-medium whitespace-nowrap">Tanggal</th>
+                <th class="sticky top-0 z-10 bg-cream-100 px-5 py-3.5 text-left font-medium whitespace-nowrap">Harga</th>
+                <th class="sticky top-0 z-10 bg-cream-100 px-5 py-3.5 text-left font-medium whitespace-nowrap">Status</th>
+                <th class="sticky top-0 z-10 bg-cream-100 px-5 py-3.5 text-right font-medium whitespace-nowrap">Aksi</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-ink-100 text-[13.5px]">
@@ -300,20 +362,37 @@ function goToPage(p) {
                 <td class="px-5 py-4 font-medium text-ink-900">{{ amount(o.price) }}</td>
                 <td class="px-5 py-4"><StatusBadge :status="o.status" /></td>
                 <td class="px-5 py-4 text-right whitespace-nowrap">
-                  <button
-                    type="button"
-                    class="text-brand-600 hover:underline text-[12.5px] font-medium transition mr-3"
-                    @click="router.push(`/orders/${o.id}`)"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    class="text-danger-500 hover:underline text-[12.5px] font-medium transition"
-                    @click="askDelete(o)"
-                  >
-                    Hapus
-                  </button>
+                  <div class="flex items-center justify-end gap-2.5">
+                    <button
+                      v-if="o.status !== 'Progress' && o.status !== 'Done'"
+                      type="button"
+                      class="inline-flex text-sky-500 hover:text-sky-600 transition"
+                      title="Tandai sedang dikerjakan"
+                      @click="askStatusChange(o, 'Progress')"
+                    >
+                      <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" /></svg>
+                    </button>
+                    <button
+                      v-if="o.status !== 'Done'"
+                      type="button"
+                      class="inline-flex text-ok-600 hover:text-ok-700 transition"
+                      title="Tandai selesai"
+                      @click="askStatusChange(o, 'Done')"
+                    >
+                      <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+                    </button>
+
+                    <!-- Tombol titik tiga: menunya di-teleport ke body, lihat bagian bawah template -->
+                    <button
+                      type="button"
+                      data-action-menu
+                      class="inline-flex items-center justify-center w-7 h-7 rounded-lg text-ink-400 hover:text-ink-600 hover:bg-ink-500/5 transition"
+                      title="Aksi lainnya"
+                      @click="toggleActionMenu(o, $event)"
+                    >
+                      <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" /></svg>
+                    </button>
+                  </div>
                 </td>
               </tr>
             </tbody>
@@ -393,6 +472,40 @@ function goToPage(p) {
       </div>
     </Modal>
 
+    <!-- Modal konfirmasi ubah status -->
+    <Modal
+      v-if="statusTarget"
+      :title="statusTarget.newStatus === 'Done' ? 'Tandai selesai?' : 'Tandai sedang dikerjakan?'"
+      @close="statusTarget = null"
+    >
+      <div class="space-y-5">
+        <p class="text-[13.5px] text-ink-600">
+          Status pesanan <span class="font-medium text-ink-900">{{ statusTarget.order.category }}</span>
+          untuk <span class="font-medium text-ink-900">{{ statusTarget.order.buyerName }}</span>
+          akan diubah jadi
+          <span class="font-medium text-ink-900">{{ STATUS_LABEL[statusTarget.newStatus] || statusTarget.newStatus }}</span>.
+        </p>
+        <div class="flex justify-end gap-2.5">
+          <button
+            type="button"
+            class="px-4 py-2 rounded-lg border border-ink-200 text-ink-600 text-[13.5px] font-medium hover:bg-ink-500/5 transition"
+            :disabled="updatingStatus"
+            @click="statusTarget = null"
+          >
+            Batal
+          </button>
+          <button
+            type="button"
+            class="px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-[13.5px] font-medium transition disabled:opacity-60"
+            :disabled="updatingStatus"
+            @click="confirmStatusChange"
+          >
+            {{ updatingStatus ? 'Menyimpan...' : 'Ya, ubah' }}
+          </button>
+        </div>
+      </div>
+    </Modal>
+
     <!-- Toast notification custom -->
     <Transition name="fade">
       <div
@@ -412,6 +525,33 @@ function goToPage(p) {
         {{ toast.message }}
       </div>
     </Transition>
+
+    <!-- Dropdown menu aksi (titik tiga), di-teleport ke body supaya tidak terpotong -->
+    <Teleport to="body">
+      <div
+        v-if="openActionMenu"
+        data-action-menu
+        class="fixed z-50 w-36 rounded-lg border border-ink-100 bg-white shadow-card-hover overflow-hidden py-1"
+        :style="{ top: menuPosition.top + 'px', left: menuPosition.left + 'px' }"
+      >
+        <button
+          type="button"
+          class="w-full flex items-center gap-2 text-left px-3 py-2 text-[13px] text-ink-700 hover:bg-ink-500/5 transition"
+          @click="router.push(`/orders/${openActionMenu.id}`); closeActionMenu()"
+        >
+          <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
+          Edit
+        </button>
+        <button
+          type="button"
+          class="w-full flex items-center gap-2 text-left px-3 py-2 text-[13px] text-danger-500 hover:bg-danger-500/5 transition"
+          @click="askDelete(openActionMenu); closeActionMenu()"
+        >
+          <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /></svg>
+          Hapus
+        </button>
+      </div>
+    </Teleport>
   </div>
 </template>
 
