@@ -285,11 +285,22 @@ router.delete('/:id', async (req, res) => {
 })
 
 // Pastikan produk dari :id di URL memang milik tim yang sedang login,
-// dipakai sebelum tulis/ubah/hapus penjualan (tabel sales sendiri tidak
-// punya kolom team_id, jadi verifikasi lewat kepemilikan produknya).
-async function assertOwnedProduct(productId, teamId) {
-  const result = await pool.query('SELECT id FROM products WHERE id = $1 AND team_id = $2', [productId, teamId])
-  return result.rows.length > 0
+// sekaligus ambil price & daftar package-nya — dipakai untuk menghitung
+// total penjualan otomatis kalau frontend tidak mengirim total (tabel
+// sales sendiri tidak punya kolom team_id, jadi verifikasi lewat
+// kepemilikan produknya).
+async function getOwnedProductPricing(productId, teamId) {
+  const result = await pool.query(
+    `SELECT p.price,
+            COALESCE(
+              (SELECT json_agg(json_build_object('name', pk.name, 'price', pk.price))
+               FROM product_packages pk WHERE pk.product_id = p.id),
+              '[]'
+            ) AS packages
+     FROM products p WHERE p.id = $1 AND p.team_id = $2`,
+    [productId, teamId]
+  )
+  return result.rows[0] || null
 }
 
 // ============================================================
@@ -303,8 +314,23 @@ router.post('/:id/sales', validateBody(saleFieldsCreate), async (req, res) => {
   if (!buyer) {
     return res.status(400).json({ message: 'Nama pembeli wajib diisi' })
   }
-  if (!(await assertOwnedProduct(req.params.id, req.user.teamId))) {
+
+  const productPricing = await getOwnedProductPricing(req.params.id, req.user.teamId)
+  if (!productPricing) {
     return res.status(404).json({ message: 'Produk tidak ditemukan' })
+  }
+
+  const qtyValue = qty || 1
+
+  // Kolom "total" di tabel sales NOT NULL — kalau frontend tidak mengirim
+  // total, hitung otomatis dari harga package yang dipilih (kalau ada),
+  // atau harga produk, dikali qty. Jadi total tidak pernah null.
+  let totalValue = total ?? null
+  if (totalValue === null) {
+    const packages = productPricing.packages || []
+    const matchedPackage = pkg ? packages.find((p) => p.name === pkg) : null
+    const unitPrice = matchedPackage ? Number(matchedPackage.price) : Number(productPricing.price)
+    totalValue = (unitPrice || 0) * qtyValue
   }
 
   try {
@@ -312,7 +338,7 @@ router.post('/:id/sales', validateBody(saleFieldsCreate), async (req, res) => {
       `INSERT INTO sales (product_id, buyer, qty, platform, package, total, sold_at)
        VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7, now()))
        RETURNING *`,
-      [req.params.id, buyer, qty || 1, platform || null, pkg || null, total ?? null, soldAt || null]
+      [req.params.id, buyer, qtyValue, platform || null, pkg || null, totalValue, soldAt || null]
     )
     res.status(201).json({ data: result.rows[0] })
   } catch (err) {
@@ -324,7 +350,8 @@ router.post('/:id/sales', validateBody(saleFieldsCreate), async (req, res) => {
 // PATCH /api/products/:id/sales/:saleId
 router.patch('/:id/sales/:saleId', validateBody(saleFieldsUpdate), async (req, res) => {
   const { buyer, qty, platform, package: pkg, total, soldAt } = req.body
-  if (!(await assertOwnedProduct(req.params.id, req.user.teamId))) {
+  const productPricing = await getOwnedProductPricing(req.params.id, req.user.teamId)
+  if (!productPricing) {
     return res.status(404).json({ message: 'Produk tidak ditemukan' })
   }
 
@@ -361,7 +388,8 @@ router.patch('/:id/sales/:saleId', validateBody(saleFieldsUpdate), async (req, r
 
 // DELETE /api/products/:id/sales/:saleId
 router.delete('/:id/sales/:saleId', async (req, res) => {
-  if (!(await assertOwnedProduct(req.params.id, req.user.teamId))) {
+  const productPricing = await getOwnedProductPricing(req.params.id, req.user.teamId)
+  if (!productPricing) {
     return res.status(404).json({ message: 'Produk tidak ditemukan' })
   }
   try {
