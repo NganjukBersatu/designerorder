@@ -192,9 +192,30 @@
 
       <!-- Riwayat penjualan -->
       <div class="bg-white rounded-card shadow-card border border-ink-100 overflow-hidden">
-        <div class="px-5 py-4 border-b border-ink-100">
-          <h3 class="text-base font-semibold text-ink-900">Riwayat Penjualan</h3>
-          <p class="text-[13px] text-ink-500 mt-0.5">Siapa yang membeli produk ini, berapa banyak, dan kapan.</p>
+        <div class="px-5 py-4 border-b border-ink-100 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <div>
+            <h3 class="text-base font-semibold text-ink-900">Riwayat Penjualan</h3>
+            <p class="text-[13px] text-ink-500 mt-0.5">Siapa yang membeli produk ini, berapa banyak, dan kapan.</p>
+          </div>
+
+          <!-- Cari -->
+          <div v-if="productSales.length" class="relative w-full lg:w-72 shrink-0">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-400"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              v-model="saleSearchQuery"
+              type="text"
+              placeholder="Cari pembeli, platform, atau paket..."
+              class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-ink-200 bg-cream-50 focus:bg-white focus:border-brand-400 outline-none text-sm transition text-ink-800"
+            />
+          </div>
         </div>
 
         <div class="overflow-x-auto">
@@ -213,7 +234,7 @@
 
             <tbody>
               <tr
-                v-for="(sale, index) in productSales"
+                v-for="(sale, index) in filteredSales"
                 :key="sale.id"
                 class="border-b border-ink-50 hover:bg-cream-50/70 transition"
               >
@@ -259,9 +280,14 @@
                 </td>
               </tr>
 
-              <tr v-if="productSales.length === 0">
+              <tr v-if="filteredSales.length === 0">
                 <td colspan="7" class="px-4 py-14 text-center text-ink-400">
-                  Belum ada penjualan. Klik <strong>Catat Penjualan</strong> untuk menambahkan pembeli pertama.
+                  <template v-if="productSales.length === 0">
+                    Belum ada penjualan. Klik <strong>Catat Penjualan</strong> untuk menambahkan pembeli pertama.
+                  </template>
+                  <template v-else>
+                    Tidak ada transaksi yang cocok dengan pencarian.
+                  </template>
                 </td>
               </tr>
             </tbody>
@@ -668,6 +694,18 @@ const sold = computed(() => isSold(route.params.id))
 const lastSale = computed(() => productSales.value[0] || null) // sudah diurutkan terbaru
 const revenue = computed(() => totalQty.value * (product.value?.price || 0))
 const links = computed(() => getLinks(product.value))
+
+// ========== PENCARIAN RIWAYAT PENJUALAN ==========
+const saleSearchQuery = ref('')
+const filteredSales = computed(() => {
+  const q = saleSearchQuery.value.toLowerCase().trim()
+  if (!q) return productSales.value
+  return productSales.value.filter(sale =>
+    (sale.buyer || '').toLowerCase().includes(q) ||
+    (sale.platform || '').toLowerCase().includes(q) ||
+    (sale.package || '').toLowerCase().includes(q)
+  )
+})
 
 function goBack() {
   const style = product.value?.style?.trim()
