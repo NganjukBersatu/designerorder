@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { api } from '../utils/api.js'
 import { shortDate } from '../utils/format.js'
 import { useAuth } from '../composables/useAuth'
@@ -89,13 +89,16 @@ function onSaved() {
   load()
 }
 
-async function cycleStatus(task) {
-  const next = { Pending: 'Progress', Progress: 'Done', Done: 'Pending' }[task.status]
+
+// --- Ubah status tugas langsung dari kolom Aksi (tandai Dikerjakan / Selesai) ---
+async function changeStatus(task, newStatus) {
+  const prev = task.status
+  task.status = newStatus // update langsung di baris tabel (optimistic)
   try {
-    await api.patch(`/tasks/${task.id}`, { status: next })
-    load()
+    await api.patch(`/tasks/${task.id}`, { status: newStatus })
   } catch (err) {
-    alert(err.message)
+    task.status = prev
+    errorMsg.value = err.message || 'Gagal mengubah status tugas'
   }
 }
 
@@ -119,42 +122,94 @@ async function confirmRemove() {
     taskToDelete.value = null
     load()
   } catch (err) {
-    alert(err.message)
+    errorMsg.value = err.message || 'Gagal menghapus tugas'
   } finally {
     deleting.value = false
   }
 }
+
+// --- Dropdown menu aksi (titik tiga) per baris tabel, di-teleport ke <body> ---
+// supaya tidak terpotong oleh overflow-hidden container tabel
+const openActionMenu = ref(null) // task yang menu-nya sedang terbuka, null = semua tertutup
+const menuPosition = ref({ top: 0, left: 0 })
+const MENU_WIDTH = 144 // px, harus sama dengan w-36 di bawah
+
+function toggleActionMenu(task, event) {
+  if (openActionMenu.value?.id === task.id) {
+    openActionMenu.value = null
+    return
+  }
+  const rect = event.currentTarget.getBoundingClientRect()
+  menuPosition.value = {
+    top: rect.bottom + window.scrollY + 4,
+    left: rect.right + window.scrollX - MENU_WIDTH,
+  }
+  openActionMenu.value = task
+}
+
+function closeActionMenu() {
+  openActionMenu.value = null
+}
+
+function onClickOutsideActionMenu(e) {
+  if (!e.target.closest('[data-action-menu]')) {
+    closeActionMenu()
+  }
+}
+onMounted(() => {
+  document.addEventListener('click', onClickOutsideActionMenu)
+  window.addEventListener('scroll', closeActionMenu, true)
+  window.addEventListener('resize', closeActionMenu)
+})
+onUnmounted(() => {
+  document.removeEventListener('click', onClickOutsideActionMenu)
+  window.removeEventListener('scroll', closeActionMenu, true)
+  window.removeEventListener('resize', closeActionMenu)
+})
 </script>
 
 <template>
   <div class="space-y-4">
     <!-- Header + tombol tambah -->
-    <div class="flex items-center justify-between gap-3">
-      <div class="text-[13.5px] text-ink-500">
-        <!-- bisa dikosongkan atau taruh breadcrumb -->
-      </div>
+    <div class="flex items-center justify-end gap-3">
       <button
         type="button"
-        class="px-4 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-[13.5px] font-medium transition shrink-0"
+        class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-[13.5px] font-medium transition shrink-0 shadow-sm"
         @click="openCreate"
       >
-        + Tugas baru
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+        Tugas baru
       </button>
     </div>
 
     <!-- Ringkasan status -->
     <div class="grid grid-cols-3 gap-3">
-      <div class="bg-white rounded-card shadow-card p-4">
-        <p class="text-[12px] text-ink-400">Menunggu</p>
-        <p class="text-[20px] font-semibold text-ink-900 mt-0.5">{{ counts.Pending }}</p>
+      <div class="bg-white rounded-card shadow-card p-4 flex items-center justify-between">
+        <div>
+          <p class="text-[12px] text-ink-400">Menunggu</p>
+          <p class="text-[20px] font-semibold text-ink-900 mt-0.5">{{ counts.Pending }}</p>
+        </div>
+        <div class="w-9 h-9 rounded-lg bg-amber-50 flex items-center justify-center text-amber-500 shrink-0">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" /></svg>
+        </div>
       </div>
-      <div class="bg-white rounded-card shadow-card p-4">
-        <p class="text-[12px] text-ink-400">Dikerjakan</p>
-        <p class="text-[20px] font-semibold text-ink-900 mt-0.5">{{ counts.Progress }}</p>
+      <div class="bg-white rounded-card shadow-card p-4 flex items-center justify-between">
+        <div>
+          <p class="text-[12px] text-ink-400">Dikerjakan</p>
+          <p class="text-[20px] font-semibold text-ink-900 mt-0.5">{{ counts.Progress }}</p>
+        </div>
+        <div class="w-9 h-9 rounded-lg bg-sky-50 flex items-center justify-center text-sky-500 shrink-0">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20a8 8 0 100-16 8 8 0 000 16z" /><path d="M12 8v4l3 2" /></svg>
+        </div>
       </div>
-      <div class="bg-white rounded-card shadow-card p-4">
-        <p class="text-[12px] text-ink-400">Selesai</p>
-        <p class="text-[20px] font-semibold text-ink-900 mt-0.5">{{ counts.Done }}</p>
+      <div class="bg-white rounded-card shadow-card p-4 flex items-center justify-between">
+        <div>
+          <p class="text-[12px] text-ink-400">Selesai</p>
+          <p class="text-[20px] font-semibold text-ink-900 mt-0.5">{{ counts.Done }}</p>
+        </div>
+        <div class="w-9 h-9 rounded-lg bg-ok-50 flex items-center justify-center text-ok-600 shrink-0">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+        </div>
       </div>
     </div>
 
@@ -204,6 +259,10 @@ async function confirmRemove() {
         <option value="Progress">Dikerjakan</option>
         <option value="Done">Selesai</option>
       </select>
+
+      <span v-if="!loading" class="hidden sm:flex items-center text-[12.5px] text-ink-400 whitespace-nowrap">
+        {{ filteredTasks.length }} tugas
+      </span>
     </div>
 
     <!-- List tugas -->
@@ -215,39 +274,57 @@ async function confirmRemove() {
         <p class="text-danger-600 text-[13.5px] mb-3">{{ errorMsg }}</p>
         <button class="px-4 py-2 rounded-lg bg-brand-500 text-white text-[13px]" @click="load">Coba lagi</button>
       </div>
-      <div v-else-if="filteredTasks.length === 0" class="p-10 text-center text-[13.5px] text-ink-400">
+      <div v-else-if="filteredTasks.length === 0" class="flex flex-col items-center text-center py-14">
+        <div class="w-12 h-12 rounded-full bg-cream-100 flex items-center justify-center mb-3">
+          <svg class="w-6 h-6 text-ink-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" /></svg>
+        </div>
         <template v-if="search">
-          Tidak ada tugas yang cocok dengan "<strong>{{ search }}</strong>".
+          <p class="text-[13.5px] font-medium text-ink-700">Tidak ada yang cocok</p>
+          <p class="text-[12px] text-ink-400 mt-1 max-w-[260px]">Tidak ditemukan tugas untuk "<strong class="text-ink-600">{{ search }}</strong>".</p>
         </template>
         <template v-else>
-          Belum ada tugas yang cocok. Klik <strong>+ Tugas baru</strong> buat mulai catat kerjaan.
+          <p class="text-[13.5px] font-medium text-ink-700">Belum ada tugas</p>
+          <p class="text-[12px] text-ink-400 mt-1 max-w-[260px]">Klik "Tugas baru" untuk mulai mencatat kerjaan.</p>
+          <button
+            type="button"
+            class="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-[12.5px] font-medium transition"
+            @click="openCreate"
+          >
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+            Tugas baru
+          </button>
         </template>
       </div>
-      <div v-else class="overflow-x-auto">
+      <div v-else class="overflow-auto max-h-[65vh]">
         <table class="w-full text-sm">
           <thead>
-            <tr class="bg-cream-100 text-ink-500 border-b border-ink-100">
-              <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap w-12 sticky left-0 z-20 bg-cream-100">No</th>
-              <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[220px]">Tugas</th>
-              <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[140px]">Untuk siapa</th>
-              <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[140px]">Dikerjakan oleh</th>
-              <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[130px]">Status Produksi</th>
-              <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[160px]">Tanggal Dibuat</th>
-              <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[170px]">Tanggal Selesai/Upload</th>
-              <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[160px]">Link DB</th>
-              <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[180px]">Catatan</th>
-              <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[110px]">Tenggat</th>
-              <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[120px]">Status</th>
-              <th class="px-4 py-3.5 text-center font-medium whitespace-nowrap w-28">Aksi</th>
+            <tr class="text-ink-500 border-b border-ink-100">
+              <th class="sticky top-0 left-0 z-30 bg-cream-100 px-4 py-3.5 text-left font-medium whitespace-nowrap w-12">No</th>
+              <th class="sticky top-0 z-20 bg-cream-100 px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[220px]">
+                <div class="flex items-center gap-3">
+                  <span class="w-9 shrink-0"></span>
+                  <span>Tugas</span>
+                </div>
+              </th>
+              <th class="sticky top-0 z-20 bg-cream-100 px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[140px]">Untuk siapa</th>
+              <th class="sticky top-0 z-20 bg-cream-100 px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[140px]">Dikerjakan oleh</th>
+              <th class="sticky top-0 z-20 bg-cream-100 px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[130px]">Status Produksi</th>
+              <th class="sticky top-0 z-20 bg-cream-100 px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[160px]">Tanggal Dibuat</th>
+              <th class="sticky top-0 z-20 bg-cream-100 px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[170px]">Tanggal Selesai/Upload</th>
+              <th class="sticky top-0 z-20 bg-cream-100 px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[160px]">Link DB</th>
+              <th class="sticky top-0 z-20 bg-cream-100 px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[180px]">Catatan</th>
+              <th class="sticky top-0 z-20 bg-cream-100 px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[110px]">Tenggat</th>
+              <th class="sticky top-0 z-20 bg-cream-100 px-4 py-3.5 text-left font-medium whitespace-nowrap min-w-[120px]">Status</th>
+              <th class="sticky top-0 z-20 bg-cream-100 px-4 py-3.5 text-center font-medium whitespace-nowrap w-28">Aksi</th>
             </tr>
           </thead>
           <tbody>
             <tr
               v-for="(t, idx) in filteredTasks"
               :key="t.id"
-              class="border-b border-ink-50 hover:bg-cream-50/70 transition group"
+              class="border-b border-ink-50 hover:bg-ink-500/5 transition group"
             >
-              <td class="px-4 py-4 text-ink-400 sticky left-0 z-10 bg-white group-hover:bg-cream-50">
+              <td class="px-4 py-4 text-ink-400 sticky left-0 z-10 bg-white group-hover:bg-cream-50/60">
                 {{ idx + 1 }}
               </td>
               <td class="px-4 py-3">
@@ -284,17 +361,40 @@ async function confirmRemove() {
               </td>
               <td class="px-4 py-4 text-ink-500 text-[13px] whitespace-nowrap">{{ t.dueDate ? shortDate(t.dueDate) : '—' }}</td>
               <td class="px-4 py-4">
-                <button type="button" title="Klik buat ganti status" @click="cycleStatus(t)">
-                  <StatusBadge :status="t.status" />
-                </button>
+                <StatusBadge :status="t.status" />
               </td>
-              <td class="px-4 py-4 text-center whitespace-nowrap">
-                <button class="text-brand-500 hover:text-brand-600 text-[12.5px] font-medium mr-3" @click="openEdit(t)">
-                  Edit
-                </button>
-                <button class="text-danger-500 hover:text-danger-600 text-[12.5px] font-medium" @click="askRemove(t)">
-                  Hapus
-                </button>
+              <td class="px-4 py-4 whitespace-nowrap">
+                <div class="flex items-center justify-center gap-2.5">
+                  <button
+                    v-if="t.status !== 'Progress' && t.status !== 'Done'"
+                    type="button"
+                    class="inline-flex text-sky-500 hover:text-sky-600 transition"
+                    title="Tandai sedang dikerjakan"
+                    @click="changeStatus(t, 'Progress')"
+                  >
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" /></svg>
+                  </button>
+                  <button
+                    v-if="t.status !== 'Done'"
+                    type="button"
+                    class="inline-flex text-ok-600 hover:text-ok-700 transition"
+                    title="Tandai selesai"
+                    @click="changeStatus(t, 'Done')"
+                  >
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+                  </button>
+
+                  <!-- Tombol titik tiga: menunya di-teleport ke body, lihat bagian bawah template -->
+                  <button
+                    type="button"
+                    data-action-menu
+                    class="inline-flex items-center justify-center w-7 h-7 rounded-lg text-ink-400 hover:text-ink-600 hover:bg-ink-500/5 transition"
+                    title="Aksi lainnya"
+                    @click="toggleActionMenu(t, $event)"
+                  >
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" /></svg>
+                  </button>
+                </div>
               </td>
             </tr>
           </tbody>
@@ -319,7 +419,7 @@ async function confirmRemove() {
           <div class="flex items-center justify-end gap-3">
             <button
               type="button"
-              class="px-4 py-2.5 rounded-xl border border-ink-200 text-ink-600 hover:bg-ink-50 text-[13.5px] font-medium transition"
+              class="px-4 py-2.5 rounded-xl border border-ink-200 text-ink-600 hover:bg-ink-500/5 text-[13.5px] font-medium transition"
               @click="cancelRemove"
             >
               Batal
@@ -334,6 +434,33 @@ async function confirmRemove() {
             </button>
           </div>
         </div>
+      </div>
+    </Teleport>
+
+    <!-- Dropdown menu aksi (titik tiga): Edit & Hapus, di-teleport ke body supaya tidak terpotong -->
+    <Teleport to="body">
+      <div
+        v-if="openActionMenu"
+        data-action-menu
+        class="fixed z-50 w-36 rounded-lg border border-ink-100 bg-white shadow-card-hover overflow-hidden py-1"
+        :style="{ top: menuPosition.top + 'px', left: menuPosition.left + 'px' }"
+      >
+        <button
+          type="button"
+          class="w-full flex items-center gap-2 text-left px-3 py-2 text-[13px] text-ink-700 hover:bg-ink-500/5 transition"
+          @click="openEdit(openActionMenu); closeActionMenu()"
+        >
+          <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
+          Edit
+        </button>
+        <button
+          type="button"
+          class="w-full flex items-center gap-2 text-left px-3 py-2 text-[13px] text-danger-500 hover:bg-danger-500/5 transition"
+          @click="askRemove(openActionMenu); closeActionMenu()"
+        >
+          <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /></svg>
+          Hapus
+        </button>
       </div>
     </Teleport>
   </div>
