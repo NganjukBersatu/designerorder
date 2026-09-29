@@ -5,13 +5,23 @@ dotenv.config() // load file .env
 
 const { Pool } = pg
 
-export const pool = new Pool({
-  host: process.env.DB_HOST || 'localhost',
-  port: process.env.DB_PORT || 5432,
-  database: process.env.DB_NAME || 'designer_orders',
-  user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD, // ← diambil dari .env
-})
+// Production (Railway/Render/dll) biasanya menyediakan satu DATABASE_URL.
+// Kalau tidak ada, pakai variabel DB_* terpisah seperti di development.
+// Set DB_SSL=true kalau database mewajibkan koneksi SSL.
+const ssl = process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : undefined
+
+export const pool = new Pool(
+  process.env.DATABASE_URL
+    ? { connectionString: process.env.DATABASE_URL, ssl }
+    : {
+        host: process.env.DB_HOST || 'localhost',
+        port: process.env.DB_PORT || 5432,
+        database: process.env.DB_NAME || 'designer_orders',
+        user: process.env.DB_USER || 'postgres',
+        password: process.env.DB_PASSWORD,
+        ssl,
+      },
+)
 
 // Test koneksi PostgreSQL
 export const testConnection = async () => {

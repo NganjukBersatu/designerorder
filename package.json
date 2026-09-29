@@ -1,0 +1,16 @@
+{
+  "name": "designer-orders",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "install:all": "npm --prefix api install && npm --prefix web install",
+    "build": "npm run install:all && npm --prefix web run build",
+    "start": "npm --prefix api run start",
+    "dev:api": "npm --prefix api run dev",
+    "dev:web": "npm --prefix web run dev"
+  }
+}

@@ -1,6 +1,9 @@
 import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
+import path from 'node:path'
+import fs from 'node:fs'
+import { fileURLToPath } from 'node:url'
 
 import { testConnection, ensureSchema } from './config/db.js'
 import { requireAuth } from './middleware/auth.js'
@@ -27,6 +30,14 @@ app.use('/api/dashboard', requireAuth, dashboardRoutes)
 app.use('/api/products', requireAuth, productsRoutes)
 app.use('/api/tasks', requireAuth, tasksRoutes)
 app.use('/api/options', requireAuth, optionsRoutes)
+
+// Sajikan frontend hasil build (web/dist) dari service yang sama, supaya
+// deploy cukup 1 service app + 1 database. Dilewati kalau belum di-build (dev).
+const distDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../web/dist')
+if (fs.existsSync(distDir)) {
+  app.use(express.static(distDir))
+  app.get(/^\/(?!api\/).*/, (req, res) => res.sendFile(path.join(distDir, 'index.html')))
+}
 
 // 404 untuk endpoint yang tidak dikenal
 app.use((req, res) => {
