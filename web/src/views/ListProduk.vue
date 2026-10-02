@@ -447,7 +447,7 @@
 import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useProducts, formatDateTime, formatPrice, normalizeUrl } from '../composables/useProducts'
-import { fileToCompressedDataUrl } from '../utils/imageFile'
+import { uploadImage } from '../utils/imageFile'
 import { getLinks, cleanLinks } from '../utils/links'
 import { splitPlatforms } from '../utils/platforms'
 import { useOptions } from '../composables/useOptions'
@@ -613,7 +613,7 @@ async function onPickImage(e) {
   e.target.value = '' // supaya file yang sama bisa dipilih ulang
   if (!file) return
   try {
-    form.value.image = await fileToCompressedDataUrl(file)
+    form.value.image = await uploadImage(file, 'product')
     imageError.value = ''
   } catch (err) {
     imageError.value = err.message

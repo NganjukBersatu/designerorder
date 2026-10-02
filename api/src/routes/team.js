@@ -3,8 +3,10 @@ import bcrypt from 'bcryptjs'
 import { pool } from '../config/db.js'
 import { requireAuth } from '../middleware/auth.js'
 import { validateBody } from '../middleware/validate.js'
+import { uuidParam } from '../utils/uuid.js'
 
 const router = Router()
+router.param('id', uuidParam)
 router.use(requireAuth)
 
 const memberFieldsCreate = {
@@ -77,7 +79,7 @@ router.post('/members', validateBody(memberFieldsCreate), async (req, res) => {
 
 // DELETE /api/team/members/:id — gak bisa hapus diri sendiri
 router.delete('/members/:id', async (req, res) => {
-  if (Number(req.params.id) === req.user.id) {
+  if (req.params.id.toLowerCase() === req.user.id) {
     return res.status(400).json({ message: 'Tidak bisa menghapus akun sendiri' })
   }
 

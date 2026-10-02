@@ -1,6 +1,6 @@
 import { computed } from 'vue'
 import { useAuth } from './useAuth'
-import { fileToCompressedDataUrl } from '../utils/imageFile'
+import { uploadImage } from '../utils/imageFile'
 
 // Nama tampilan & foto profil sekarang tersimpan di server (kolom
 // display_name & photo di tabel users), lewat useAuth().updateProfile().
@@ -22,8 +22,8 @@ export function useProfile() {
 
   async function updatePhoto(file) {
     try {
-      const dataUrl = await fileToCompressedDataUrl(file)
-      return await updateProfile({ photo: dataUrl })
+      const url = await uploadImage(file, 'avatar')
+      return await updateProfile({ photo: url })
     } catch (err) {
       return { ok: false, message: err.message || 'Gagal memproses gambar' }
     }

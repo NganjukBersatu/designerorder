@@ -40,6 +40,16 @@ export function validateBody(rules) {
           if (rule.max !== undefined && num > rule.max) errors.push(`${label} maksimal ${rule.max}`)
           break
         }
+        case 'url': {
+          // Gambar/file tidak boleh dikirim sebagai base64 — unggah dulu lewat
+          // POST /api/uploads, lalu kirim URL hasilnya.
+          if (typeof value !== 'string' || !/^https?:\/\/\S+$/i.test(value)) {
+            errors.push(`${label} harus berupa URL (http/https), bukan data gambar langsung`)
+            break
+          }
+          if (rule.max && value.length > rule.max) errors.push(`${label} maksimal ${rule.max} karakter`)
+          break
+        }
         case 'date': {
           if (Number.isNaN(Date.parse(value))) errors.push(`${label} bukan tanggal yang valid`)
           break

@@ -5,6 +5,10 @@ dotenv.config() // load file .env
 
 const { Pool } = pg
 
+// Kolom DATE dikembalikan apa adanya ('2026-09-30'), bukan objek Date zona waktu server —
+// kalau tidak, tanggal bisa bergeser sehari saat diserialisasi ke JSON di server non-UTC.
+pg.types.setTypeParser(1082, (value) => value)
+
 // Production (Railway/Render/dll) biasanya menyediakan satu DATABASE_URL.
 // Kalau tidak ada, pakai variabel DB_* terpisah seperti di development.
 // Set DB_SSL=true kalau database mewajibkan koneksi SSL.
@@ -36,229 +40,187 @@ export const testConnection = async () => {
   }
 }
 
-// Membuat tabel-tabel otomatis kalau belum ada, jadi tidak perlu
-// jalankan migrasi manual - cukup pastikan .env sudah diisi dengan benar.
+// Skema database. Semua PK/FK pakai UUID (gen_random_uuid() bawaan PostgreSQL 13+),
+// dan semua FK + kolom filter/urutan yang dipakai query-nya sudah di-index.
+// Di-export supaya skrip migrasi (scripts/migrate-uuid.js) pakai definisi yang sama.
+export const SCHEMA_SQL = `
+  CREATE EXTENSION IF NOT EXISTS pg_trgm;
+  CREATE EXTENSION IF NOT EXISTS btree_gin;
+
+  -- ===== Tim & anggota (multi-tenant: satu tim = satu workspace client) =====
+  CREATE TABLE IF NOT EXISTS teams (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(150) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT now()
+  );
+
+  CREATE TABLE IF NOT EXISTS users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    team_id UUID NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    role VARCHAR(20) NOT NULL DEFAULT 'owner' CHECK (role IN ('owner', 'admin', 'member')),
+    display_name VARCHAR(150),
+    photo TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT now()
+  );
+  CREATE INDEX IF NOT EXISTS idx_users_team_created ON users (team_id, created_at);
+
+  -- ===== Order (pesanan buyer + tugas internal digabung jadi satu) =====
+  -- Satu record bisa berisi data transaksi (pembeli, harga, paket) maupun data
+  -- kerjaan (judul, tenggat, link DB, catatan, gambar) — kolomnya saling melengkapi.
+  -- Syarat minimal: punya judul ATAU nama pembeli/klien.
+  -- product_id sengaja belum di-FK di sini: orders & products saling merujuk,
+  -- jadi FK-nya ditambahkan setelah tabel products ada (lihat bawah).
+  CREATE TABLE IF NOT EXISTS orders (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    team_id UUID NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    product_id UUID,
+    image TEXT,
+    title VARCHAR(255),
+    buyer_name VARCHAR(150),
+    buyer_reference VARCHAR(255),
+    store_name VARCHAR(150),
+    designer_name VARCHAR(150),
+    category VARCHAR(100),
+    character_type VARCHAR(100),
+    style VARCHAR(100),
+    package VARCHAR(100),
+    production_status VARCHAR(100),
+    order_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    completion_date DATE,
+    due_date DATE,
+    status VARCHAR(20) NOT NULL DEFAULT 'Pending' CHECK (status IN ('Pending', 'Progress', 'Done')),
+    price NUMERIC(12, 2) NOT NULL DEFAULT 0,
+    note TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT now(),
+    updated_at TIMESTAMP NOT NULL DEFAULT now(),
+    CONSTRAINT orders_title_or_buyer CHECK (title IS NOT NULL OR buyer_name IS NOT NULL)
+  );
+  CREATE INDEX IF NOT EXISTS idx_orders_team_date ON orders (team_id, order_date DESC, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_orders_team_status ON orders (team_id, status);
+  CREATE INDEX IF NOT EXISTS idx_orders_team_created ON orders (team_id, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_orders_created_by ON orders (created_by) WHERE created_by IS NOT NULL;
+  CREATE INDEX IF NOT EXISTS idx_orders_product_id ON orders (product_id) WHERE product_id IS NOT NULL;
+
+  -- Pencarian order (substring di banyak kolom). ILIKE '%x%' biasa tidak bisa
+  -- pakai index -> seq scan. Solusi: satu kolom gabungan (lowercase, otomatis
+  -- terisi) + GIN trigram index, jadi LIKE '%x%' tetap cepat di data besar.
+  -- team_id ikut di index (btree_gin) supaya filter tim terjadi di dalam index,
+  -- bukan memindai kecocokan semua tim dulu baru disaring.
+  ALTER TABLE orders ADD COLUMN IF NOT EXISTS search_text TEXT GENERATED ALWAYS AS (
+    lower(
+      coalesce(title, '') || ' ' || coalesce(buyer_name, '') || ' ' || coalesce(category, '') || ' ' ||
+      coalesce(store_name, '') || ' ' || coalesce(style, '') || ' ' || coalesce(designer_name, '') || ' ' ||
+      coalesce(note, '')
+    )
+  ) STORED;
+  CREATE INDEX IF NOT EXISTS idx_orders_team_search_trgm ON orders USING gin (team_id, search_text gin_trgm_ops);
+
+  -- Link DB (Dropbox dkk) — satu order bisa punya beberapa link
+  CREATE TABLE IF NOT EXISTS order_links (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    order_id UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+    url TEXT NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE INDEX IF NOT EXISTS idx_order_links_order ON order_links (order_id, position);
+
+  -- ===== Produk (halaman /produk, /kategori) =====
+  CREATE TABLE IF NOT EXISTS products (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    team_id UUID NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    order_id UUID REFERENCES orders(id) ON DELETE SET NULL,
+    image TEXT,
+    name VARCHAR(255) NOT NULL,
+    style VARCHAR(100),
+    substyle VARCHAR(100),
+    designer VARCHAR(150),
+    date TIMESTAMP,
+    upload_date TIMESTAMP,
+    production_status VARCHAR(100),
+    platform VARCHAR(255),
+    link_db TEXT,
+    price NUMERIC(12, 2) NOT NULL DEFAULT 0,
+    note TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT now(),
+    updated_at TIMESTAMP NOT NULL DEFAULT now()
+  );
+  CREATE INDEX IF NOT EXISTS idx_products_team_created ON products (team_id, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_products_order_id ON products (order_id) WHERE order_id IS NOT NULL;
+
+  DO $$
+  BEGIN
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_constraint
+      WHERE conname = 'orders_product_id_fkey' AND conrelid = 'orders'::regclass
+    ) THEN
+      ALTER TABLE orders
+        ADD CONSTRAINT orders_product_id_fkey
+        FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL;
+    END IF;
+  END $$;
+
+  -- Link DB (Dropbox dkk) — satu produk bisa punya beberapa link
+  CREATE TABLE IF NOT EXISTS product_links (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    product_id UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    url TEXT NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE INDEX IF NOT EXISTS idx_product_links_product ON product_links (product_id, position);
+
+  -- Paket per produk (mis. Basic / Full) — dipakai lagi saat catat penjualan
+  CREATE TABLE IF NOT EXISTS product_packages (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    product_id UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    name VARCHAR(150) NOT NULL,
+    price NUMERIC(12, 2) NOT NULL DEFAULT 0,
+    description TEXT,
+    position INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE INDEX IF NOT EXISTS idx_product_packages_product ON product_packages (product_id, position);
+
+  -- Riwayat penjualan produk (halaman Detail Produk)
+  CREATE TABLE IF NOT EXISTS sales (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    product_id UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    buyer VARCHAR(150) NOT NULL,
+    qty INTEGER NOT NULL DEFAULT 1,
+    platform VARCHAR(100),
+    package VARCHAR(100),
+    total NUMERIC(12, 2),
+    sold_at TIMESTAMP NOT NULL DEFAULT now(),
+    created_at TIMESTAMP NOT NULL DEFAULT now(),
+    updated_at TIMESTAMP NOT NULL DEFAULT now()
+  );
+  CREATE INDEX IF NOT EXISTS idx_sales_product_sold ON sales (product_id, sold_at DESC);
+
+  -- ===== Pilihan dropdown per tim (halaman Pengaturan → Pilihan Produk/Tugas) =====
+  -- Satu baris per tim; seluruh grup pilihan disimpan sebagai satu JSON.
+  CREATE TABLE IF NOT EXISTS team_options (
+    team_id UUID PRIMARY KEY REFERENCES teams(id) ON DELETE CASCADE,
+    data JSONB NOT NULL DEFAULT '{}'::jsonb,
+    updated_at TIMESTAMP NOT NULL DEFAULT now()
+  );
+`
+
+// Membuat tabel & index kalau belum ada. Skema lama (ID integer) TIDAK
+// diubah otomatis di sini — migrasi data itu destruktif, jadi dijalankan
+// manual lewat `npm run migrate:uuid`. Server menolak nyala kalau skemanya
+// masih lama, daripada jalan dengan query yang pasti error.
 export const ensureSchema = async () => {
-  // ===== Tim & anggota (multi-tenant: satu tim = satu workspace client) =====
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS teams (
-      id SERIAL PRIMARY KEY,
-      name VARCHAR(150) NOT NULL,
-      created_at TIMESTAMP NOT NULL DEFAULT now()
-    );
+  const current = await pool.query(`
+    SELECT data_type FROM information_schema.columns
+    WHERE table_schema = current_schema() AND table_name = 'users' AND column_name = 'id'
   `)
-
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS users (
-      id SERIAL PRIMARY KEY,
-      team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
-      username VARCHAR(50) UNIQUE NOT NULL,
-      password_hash TEXT NOT NULL,
-      role VARCHAR(20) NOT NULL DEFAULT 'owner' CHECK (role IN ('owner', 'admin', 'member')),
-      created_at TIMESTAMP NOT NULL DEFAULT now()
-    );
-  `)
-
-  // Migrasi otomatis: tambahkan kolom role kalau tabel users sudah dibuat
-  // sebelum kolom ini ada, supaya blok DO di bawah tidak error
-  // "column role does not exist".
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'owner';`)
-
-  // Migrasi otomatis: tambahkan kolom team_id kalau tabel users sudah dibuat
-  // sebelum multi-tim ada. Nullable karena data lama (user sebelum ada tim)
-  // belum tentu sudah punya tim.
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS team_id INTEGER REFERENCES teams(id) ON DELETE CASCADE;`)
-
-  // Migrasi otomatis: kalau tabel users sudah dibuat sebelum role 'admin' ada,
-  // constraint lama cuma izinkan owner/member. Ganti supaya 'admin' valid juga.
-  await pool.query(`
-    DO $$
-    BEGIN
-      IF EXISTS (
-        SELECT 1 FROM pg_constraint WHERE conname = 'users_role_check'
-      ) THEN
-        ALTER TABLE users DROP CONSTRAINT users_role_check;
-      END IF;
-      ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('owner', 'admin', 'member'));
-    END $$;
-  `)
-
-  // Migrasi otomatis: kolom profil (nama tampilan & foto), dipakai di
-  // halaman Pengaturan > Akun. Keduanya opsional — kalau kosong, frontend
-  // fallback ke username & inisial.
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name VARCHAR(150);`)
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS photo TEXT;`)
-
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS orders (
-      id SERIAL PRIMARY KEY,
-      order_date DATE NOT NULL,
-      designer_name VARCHAR(150) NOT NULL,
-      category VARCHAR(100) NOT NULL,
-      character_type VARCHAR(100) NOT NULL,
-      style VARCHAR(100) NOT NULL,
-      package VARCHAR(100),
-      buyer_name VARCHAR(150) NOT NULL,
-      buyer_reference VARCHAR(255),
-      store_name VARCHAR(150),
-      status VARCHAR(20) NOT NULL DEFAULT 'Pending' CHECK (status IN ('Pending', 'Progress', 'Done')),
-      completion_date DATE,
-      price NUMERIC(12, 2) NOT NULL DEFAULT 0,
-      created_at TIMESTAMP NOT NULL DEFAULT now(),
-      updated_at TIMESTAMP NOT NULL DEFAULT now()
-    );
-  `)
-
-  // Setiap pesanan & produk milik satu tim, supaya data antar tim/client
-  // tidak saling kelihatan. Nullable karena data lama (sebelum multi-tim)
-  // belum tentu punya pemilik tim.
-  await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS team_id INTEGER REFERENCES teams(id) ON DELETE CASCADE;`)
-
-  // Migrasi otomatis: kalau tabel "orders" dibuat sebelum perubahan ini
-  // (masih punya kolom lama total_order INTEGER), ganti jadi package VARCHAR
-  // tanpa menghapus data yang sudah ada. Aman dijalankan berkali-kali.
-  await pool.query(`
-    DO $$
-    BEGIN
-      IF EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_name = 'orders' AND column_name = 'total_order'
-      ) THEN
-        ALTER TABLE orders ALTER COLUMN total_order TYPE VARCHAR(100) USING total_order::text;
-        ALTER TABLE orders ALTER COLUMN total_order DROP DEFAULT;
-        ALTER TABLE orders RENAME COLUMN total_order TO package;
-      END IF;
-    END $$;
-  `)
-
-  // ===== Produk (halaman /produk, /kategori) =====
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS products (
-      id SERIAL PRIMARY KEY,
-      order_id INTEGER REFERENCES orders(id) ON DELETE SET NULL,
-      image TEXT,
-      name VARCHAR(255) NOT NULL,
-      style VARCHAR(100),
-      substyle VARCHAR(100),
-      designer VARCHAR(150),
-      date TIMESTAMP,
-      upload_date TIMESTAMP,
-      production_status VARCHAR(100),
-      platform VARCHAR(255),
-      link_db TEXT,
-      price NUMERIC(12, 2) NOT NULL DEFAULT 0,
-      note TEXT,
-      created_at TIMESTAMP NOT NULL DEFAULT now(),
-      updated_at TIMESTAMP NOT NULL DEFAULT now()
-    );
-  `)
-
-  // Migrasi otomatis: tambahkan kolom order_id kalau tabel products sudah
-  // dibuat sebelum relasi ini ada. Aman dijalankan berkali-kali.
-  await pool.query(`
-    ALTER TABLE products ADD COLUMN IF NOT EXISTS order_id INTEGER REFERENCES orders(id) ON DELETE SET NULL;
-  `)
-
-  // Pesanan bisa mengambil datanya dari produk yang sudah ada di katalog
-  // (Kategori/Style ikut produk), jadi orders juga butuh product_id.
-  await pool.query(`
-    ALTER TABLE orders ADD COLUMN IF NOT EXISTS product_id INTEGER REFERENCES products(id) ON DELETE SET NULL;
-  `)
-
-  await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS team_id INTEGER REFERENCES teams(id) ON DELETE CASCADE;`)
-
-  // Link DB (Dropbox dkk) — satu produk bisa punya beberapa link
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS product_links (
-      id SERIAL PRIMARY KEY,
-      product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-      url TEXT NOT NULL,
-      position INTEGER NOT NULL DEFAULT 0
-    );
-  `)
-
-  // Paket per produk (mis. Basic / Full) — isinya beda-beda sesuai yang
-  // ditawarkan ke client di tiap platform jualan. Dipakai lagi saat catat
-  // penjualan, jadi tidak perlu ketik ulang nama & harga paketnya.
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS product_packages (
-      id SERIAL PRIMARY KEY,
-      product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-      name VARCHAR(150) NOT NULL,
-      price NUMERIC(12, 2) NOT NULL DEFAULT 0,
-      description TEXT,
-      position INTEGER NOT NULL DEFAULT 0
-    );
-  `)
-
-  // Riwayat penjualan produk (halaman Detail Produk)
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS sales (
-      id SERIAL PRIMARY KEY,
-      product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-      buyer VARCHAR(150) NOT NULL,
-      qty INTEGER NOT NULL DEFAULT 1,
-      platform VARCHAR(100),
-      package VARCHAR(100),
-      total NUMERIC(12, 2),
-      sold_at TIMESTAMP NOT NULL DEFAULT now(),
-      created_at TIMESTAMP NOT NULL DEFAULT now(),
-      updated_at TIMESTAMP NOT NULL DEFAULT now()
-    );
-  `)
-
-  // ===== Tugas (kerjaan/service internal anggota tim, di luar produk yang dijual) =====
-  // Self-assign: siapa pun di tim bisa bikin tugas buat dirinya sendiri.
-  // Sengaja diketikin (VARCHAR) bukan FK style/opsi, karena datanya independen
-  // dari katalog produk — cukup nempel ke user yang bikin dan status kerjaannya.
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS tasks (
-      id SERIAL PRIMARY KEY,
-      team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
-      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      image TEXT,
-      title VARCHAR(255) NOT NULL,
-      client_name VARCHAR(150),
-      designer VARCHAR(150),
-      style VARCHAR(100),
-      substyle VARCHAR(100),
-      date TIMESTAMP,
-      upload_date TIMESTAMP,
-      production_status VARCHAR(100),
-      status VARCHAR(20) NOT NULL DEFAULT 'Pending' CHECK (status IN ('Pending', 'Progress', 'Done')),
-      due_date DATE,
-      note TEXT,
-      created_at TIMESTAMP NOT NULL DEFAULT now(),
-      updated_at TIMESTAMP NOT NULL DEFAULT now()
-    );
-  `)
-
-  // Migrasi otomatis: tugas gak butuh platform (bukan buat dijual), dan butuh
-  // designer kalau tabelnya sudah kebuat sebelum kolom ini ada.
-  await pool.query(`ALTER TABLE tasks DROP COLUMN IF EXISTS platform;`)
-  await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS designer VARCHAR(150);`)
-
-  // Sama seperti product_links, tapi buat tugas — satu tugas bisa punya beberapa Link DB.
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS task_links (
-      id SERIAL PRIMARY KEY,
-      task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-      url TEXT NOT NULL,
-      position INTEGER NOT NULL DEFAULT 0
-    );
-  `)
-
-  // ===== Pilihan dropdown per tim (halaman Pengaturan → Pilihan Produk/Tugas) =====
-  // Satu baris per tim, seluruh grup pilihan (style, substyle, designer, dst)
-  // disimpan sebagai satu JSON supaya sinkron antar anggota tim, bukan per-browser (localStorage).
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS team_options (
-      team_id INTEGER PRIMARY KEY REFERENCES teams(id) ON DELETE CASCADE,
-      data JSONB NOT NULL DEFAULT '{}'::jsonb,
-      updated_at TIMESTAMP NOT NULL DEFAULT now()
-    );
-  `)
-
+  if (current.rows[0] && current.rows[0].data_type !== 'uuid') {
+    throw new Error(
+      'Skema database masih memakai ID integer. Jalankan "npm run migrate:uuid" (folder api) dulu, lalu nyalakan server lagi.'
+    )
+  }
+  await pool.query(SCHEMA_SQL)
 }
 
 pool.on('error', (err) => {

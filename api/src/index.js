@@ -12,14 +12,15 @@ import teamRoutes from './routes/team.js'
 import ordersRoutes from './routes/orders.js'
 import dashboardRoutes from './routes/dashboard.js'
 import productsRoutes from './routes/products.js'
-import tasksRoutes from './routes/tasks.js'
 import optionsRoutes from './routes/options.js'
+import uploadsRoutes from './routes/uploads.js'
+import filesRoutes from './routes/files.js'
 
 const app = express()
 const PORT = process.env.PORT || 3000
 
 app.use(cors())
-app.use(express.json({ limit: '10mb' })) // dinaikkan supaya gambar base64 dari form tidak ditolak
+app.use(express.json({ limit: '1mb' })) // gambar diunggah lewat /api/uploads (multipart), bukan base64 di JSON
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'designer-orders-api' }))
 
@@ -28,8 +29,10 @@ app.use('/api/team', teamRoutes)
 app.use('/api/orders', requireAuth, ordersRoutes)
 app.use('/api/dashboard', requireAuth, dashboardRoutes)
 app.use('/api/products', requireAuth, productsRoutes)
-app.use('/api/tasks', requireAuth, tasksRoutes)
 app.use('/api/options', requireAuth, optionsRoutes)
+app.use('/api/uploads', requireAuth, uploadsRoutes)
+// Publik (tanpa login): tag <img> tidak bisa mengirim token. Key-nya UUID acak dan divalidasi ketat.
+app.use('/api/files', filesRoutes)
 
 // Sajikan frontend hasil build (web/dist) dari service yang sama, supaya
 // deploy cukup 1 service app + 1 database. Dilewati kalau belum di-build (dev).
@@ -54,7 +57,12 @@ app.listen(PORT, async () => {
   console.log(`Designer Orders API berjalan di http://localhost:${PORT}`)
   const connected = await testConnection()
   if (connected) {
-    await ensureSchema()
-    console.log('✅ Tabel "orders", "products", "product_links", "sales" siap digunakan')
+    try {
+      await ensureSchema()
+      console.log('✅ Skema database siap digunakan')
+    } catch (err) {
+      console.error('❌', err.message)
+      process.exit(1)
+    }
   }
 })

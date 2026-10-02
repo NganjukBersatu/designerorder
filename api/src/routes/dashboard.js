@@ -56,16 +56,16 @@ router.get('/summary', async (req, res) => {
 
     // Performa per kategori: bulan yang dipilih vs bulan sebelumnya
     const categoryNowResult = await pool.query(`
-      SELECT category, COALESCE(SUM(price), 0) AS revenue, COUNT(*) AS orders
+      SELECT COALESCE(NULLIF(category, ''), 'Tanpa kategori') AS category, COALESCE(SUM(price), 0) AS revenue, COUNT(*) AS orders
       FROM orders
       WHERE team_id = $1 AND date_trunc('month', order_date) = date_trunc('month', $2::date)
-      GROUP BY category
+      GROUP BY 1
     `, [teamId, anchorMonth])
     const categoryPrevResult = await pool.query(`
-      SELECT category, COALESCE(SUM(price), 0) AS revenue
+      SELECT COALESCE(NULLIF(category, ''), 'Tanpa kategori') AS category, COALESCE(SUM(price), 0) AS revenue
       FROM orders
       WHERE team_id = $1 AND date_trunc('month', order_date) = date_trunc('month', $2::date - interval '1 month')
-      GROUP BY category
+      GROUP BY 1
     `, [teamId, anchorMonth])
     const prevMap = Object.fromEntries(categoryPrevResult.rows.map((r) => [r.category, Number(r.revenue)]))
     const categoryPerformance = categoryNowResult.rows.map((r) => {
@@ -82,6 +82,7 @@ router.get('/summary', async (req, res) => {
     const recentOrders = recentResult.rows.map((r) => ({
       id: r.id,
       orderDate: r.order_date,
+      title: r.title,
       buyerName: r.buyer_name,
       category: r.category,
       characterType: r.character_type,

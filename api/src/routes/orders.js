@@ -2,21 +2,34 @@ import { Router } from 'express'
 import { pool } from '../config/db.js'
 import { validateBody } from '../middleware/validate.js'
 import { parsePagination, buildPaginationMeta } from '../utils/pagination.js'
+import { isUuid, uuidParam } from '../utils/uuid.js'
+import { buildSet } from '../utils/sql.js'
+import { deleteImageByUrl } from '../config/storage.js'
 
 const router = Router()
+router.param('id', uuidParam)
 
+// Order = pesanan buyer + tugas internal yang digabung. Satu record bisa berisi
+// data transaksi (pembeli, harga, paket) dan/atau data kerjaan (judul, tenggat,
+// link DB, catatan, gambar). Syarat minimal: ada judul ATAU nama pembeli.
 const orderFieldsCreate = {
-  buyerName: { required: true, type: 'string', min: 1, max: 150, label: 'Nama pembeli' },
-  orderDate: { type: 'date', label: 'Tanggal pesanan' },
+  image: { type: 'url', max: 2048, label: 'Gambar' },
+  title: { type: 'string', max: 255, label: 'Judul' },
+  buyerName: { type: 'string', max: 150, label: 'Nama pembeli/klien' },
+  buyerReference: { type: 'string', max: 255, label: 'Referensi pembeli' },
+  storeName: { type: 'string', max: 150, label: 'Platform/toko' },
   designerName: { type: 'string', max: 150, label: 'Nama desainer' },
   category: { type: 'string', max: 100, label: 'Kategori' },
   characterType: { type: 'string', max: 100, label: 'Jenis karakter' },
   style: { type: 'string', max: 100, label: 'Style' },
   package: { type: 'string', max: 100, label: 'Paket' },
-  buyerReference: { type: 'string', max: 255, label: 'Referensi pembeli' },
-  storeName: { type: 'string', max: 150, label: 'Nama toko' },
+  productionStatus: { type: 'string', max: 100, label: 'Status produksi' },
+  orderDate: { type: 'date', label: 'Tanggal order' },
   completionDate: { type: 'date', label: 'Tanggal selesai' },
+  dueDate: { type: 'date', label: 'Tenggat' },
   price: { type: 'number', min: 0, label: 'Harga' },
+  note: { type: 'string', max: 5000, label: 'Catatan' },
+  linkDbs: { type: 'array', itemType: 'string', label: 'Daftar link DB' },
 }
 
 const orderFieldsUpdate = Object.fromEntries(
@@ -28,6 +41,7 @@ const STATUS_MAP = {
   menunggu: 'Pending',
   pending: 'Pending',
   'sedang dikerjakan': 'Progress',
+  dikerjakan: 'Progress',
   progress: 'Progress',
   'in progress': 'Progress',
   selesai: 'Done',
@@ -40,56 +54,104 @@ function normalizeStatus(status) {
   return STATUS_MAP[key] || 'Pending'
 }
 
-async function ownsProduct(productId, teamId) {
-  const result = await pool.query('SELECT id FROM products WHERE id = $1 AND team_id = $2', [productId, teamId])
-  return result.rows.length > 0
-}
+const trimOrNull = (v) => (v === null || v === undefined ? null : String(v).trim())
+
+// Query dasar: menempelkan link DB (JSON array) dan username pembuat langsung
+// dari SQL, supaya frontend tidak perlu request terpisah.
+const SELECT_ORDER = `
+  SELECT
+    o.*,
+    u.username AS created_by_name,
+    COALESCE(
+      (SELECT json_agg(json_build_object('id', l.id, 'url', l.url, 'position', l.position) ORDER BY l.position)
+       FROM order_links l WHERE l.order_id = o.id),
+      '[]'
+    ) AS links
+  FROM orders o
+  LEFT JOIN users u ON u.id = o.created_by
+`
 
 function mapRow(r) {
   return {
     id: r.id,
-    orderDate: r.order_date,
+    image: r.image,
+    title: r.title,
+    buyerName: r.buyer_name,
+    buyerReference: r.buyer_reference,
+    storeName: r.store_name,
     designerName: r.designer_name,
     category: r.category,
     characterType: r.character_type,
     style: r.style,
     package: r.package,
     productId: r.product_id,
-    buyerName: r.buyer_name,
-    buyerReference: r.buyer_reference,
-    storeName: r.store_name,
-    status: r.status,
+    productionStatus: r.production_status,
+    orderDate: r.order_date,
     completionDate: r.completion_date,
+    dueDate: r.due_date,
+    status: r.status,
     price: Number(r.price),
+    note: r.note,
+    linkDbs: (r.links || []).map((l) => l.url),
+    createdBy: r.created_by,
+    createdByName: r.created_by_name,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   }
 }
 
-// GET /api/orders
+async function ownsProduct(productId, teamId) {
+  if (!isUuid(productId)) return false
+  const result = await pool.query('SELECT id FROM products WHERE id = $1 AND team_id = $2', [productId, teamId])
+  return result.rows.length > 0
+}
+
+// Pembuat order, atau owner/admin tim, yang boleh mengubah/menghapus.
+// Order lama yang tidak punya pembuat (created_by kosong) cuma bisa oleh owner/admin.
+function canModify(row, user) {
+  if (user.role === 'owner' || user.role === 'admin') return true
+  return !!row.created_by && row.created_by === user.id
+}
+
+async function replaceLinks(client, orderId, urls) {
+  await client.query('DELETE FROM order_links WHERE order_id = $1', [orderId])
+  const cleaned = (urls || []).map((u) => String(u).trim()).filter(Boolean)
+  for (let i = 0; i < cleaned.length; i++) {
+    await client.query(
+      'INSERT INTO order_links (order_id, url, position) VALUES ($1, $2, $3)',
+      [orderId, cleaned[i], i]
+    )
+  }
+}
+
+// GET /api/orders?search=&status=&mine=true&month=YYYY-MM&page=&limit=
 router.get('/', async (req, res) => {
   try {
-    const { search, status } = req.query
-    const where = []
+    const { search, status, mine, month } = req.query
     const params = [req.user.teamId]
-    where.push(`team_id = $1`)
+    const where = ['o.team_id = $1']
 
     if (search) {
-      params.push(`%${search}%`)
-      where.push(
-        `(buyer_name ILIKE $${params.length} 
-         OR category ILIKE $${params.length} 
-         OR store_name ILIKE $${params.length} 
-         OR style ILIKE $${params.length}
-         OR designer_name ILIKE $${params.length})`
-      )
+      // search_text sudah lowercase & ber-index trigram (lihat db.js). Karakter
+      // wildcard dari user di-escape supaya "50%" dicari sebagai teks biasa.
+      params.push(`%${String(search).toLowerCase().replace(/[\\%_]/g, '\\$&')}%`)
+      where.push(`o.search_text LIKE $${params.length}`)
     }
     if (status) {
       params.push(normalizeStatus(status))
-      where.push(`status = $${params.length}`)
+      where.push(`o.status = $${params.length}`)
+    }
+    if (typeof month === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+      // order_date >= awal bulan DAN < awal bulan berikutnya (memakai index order_date)
+      params.push(`${month}-01`)
+      where.push(`o.order_date >= $${params.length}::date AND o.order_date < $${params.length}::date + interval '1 month'`)
+    }
+    if (mine === 'true' || mine === '1') {
+      params.push(req.user.id)
+      where.push(`o.created_by = $${params.length}`)
     }
 
-    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : ''
+    const whereSql = `WHERE ${where.join(' AND ')}`
     const pagination = parsePagination(req.query)
 
     let limitSql = ''
@@ -102,180 +164,181 @@ router.get('/', async (req, res) => {
     }
 
     const result = await pool.query(
-      `SELECT * FROM orders ${whereSql} ORDER BY order_date DESC, created_at DESC${limitSql}`,
+      `${SELECT_ORDER} ${whereSql} ORDER BY o.order_date DESC, o.created_at DESC${limitSql}`,
       queryParams
     )
 
     let meta = null
     if (pagination) {
-      const countResult = await pool.query(`SELECT COUNT(*)::int AS total FROM orders ${whereSql}`, params)
+      const countResult = await pool.query(`SELECT COUNT(*)::int AS total FROM orders o ${whereSql}`, params)
       meta = buildPaginationMeta(pagination, countResult.rows[0].total)
     }
 
     res.json({ data: result.rows.map(mapRow), pagination: meta })
   } catch (err) {
     console.error(err)
-    res.status(500).json({ message: 'Gagal mengambil data pesanan', error: err.message })
+    res.status(500).json({ message: 'Gagal mengambil data order', error: err.message })
   }
 })
 
 // GET /api/orders/:id
 router.get('/:id', async (req, res) => {
   try {
-    const result = await pool.query(
-      'SELECT * FROM orders WHERE id = $1 AND team_id = $2',
-      [req.params.id, req.user.teamId]
-    )
+    const result = await pool.query(`${SELECT_ORDER} WHERE o.id = $1 AND o.team_id = $2`, [req.params.id, req.user.teamId])
     if (result.rows.length === 0) {
-      return res.status(404).json({ message: 'Pesanan tidak ditemukan' })
+      return res.status(404).json({ message: 'Order tidak ditemukan' })
     }
     res.json({ data: mapRow(result.rows[0]) })
   } catch (err) {
     console.error(err)
-    res.status(500).json({ message: 'Gagal mengambil pesanan', error: err.message })
+    res.status(500).json({ message: 'Gagal mengambil order', error: err.message })
   }
 })
 
 // POST /api/orders
 router.post('/', validateBody(orderFieldsCreate), async (req, res) => {
-  const {
-    orderDate,
-    designerName,
-    category,
-    characterType,
-    style,
-    package: pkg,
-    productId,
-    buyerName,
-    buyerReference,
-    storeName,
-    status,
-    completionDate,
-    price,
-  } = req.body
+  const b = req.body
+  const title = trimOrNull(b.title) || null
+  const buyerName = trimOrNull(b.buyerName) || null
 
-  if (!buyerName) {
-    return res.status(400).json({ message: 'Nama pembeli wajib diisi' })
+  if (!title && !buyerName) {
+    return res.status(400).json({ message: 'Judul atau nama pembeli/klien wajib diisi (minimal salah satu)' })
   }
-  if (productId && !(await ownsProduct(productId, req.user.teamId))) {
+  if (b.productId && !(await ownsProduct(b.productId, req.user.teamId))) {
     return res.status(404).json({ message: 'Produk tidak ditemukan' })
   }
 
+  const client = await pool.connect()
   try {
-    const result = await pool.query(
+    await client.query('BEGIN')
+    const result = await client.query(
       `INSERT INTO orders
-        (team_id, order_date, designer_name, category, character_type, style, package, product_id,
-         buyer_name, buyer_reference, store_name, status, completion_date, price)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-       RETURNING *`,
+        (team_id, created_by, product_id, image, title, buyer_name, buyer_reference, store_name,
+         designer_name, category, character_type, style, package, production_status,
+         order_date, completion_date, due_date, status, price, note)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,
+               COALESCE($15::date, CURRENT_DATE),$16,$17,$18,$19,$20)
+       RETURNING id`,
       [
-        req.user.teamId,
-        orderDate || new Date().toISOString().slice(0, 10),
-        designerName || 'Unknown',
-        category || 'Custom',
-        characterType || '-',
-        style || '-',
-        pkg || null,
-        productId || null,
-        buyerName,
-        buyerReference || null,
-        storeName || null,
-        normalizeStatus(status),
-        completionDate || null,
-        price ?? 0,
+        req.user.teamId, req.user.id, b.productId || null, b.image || null, title, buyerName,
+        b.buyerReference || null, b.storeName || null, b.designerName || null, b.category || null,
+        b.characterType || null, b.style || null, b.package || null, b.productionStatus || null,
+        b.orderDate || null, b.completionDate || null, b.dueDate || null,
+        normalizeStatus(b.status), b.price ?? 0, b.note || null,
       ]
     )
-    res.status(201).json({ data: mapRow(result.rows[0]) })
+    const orderId = result.rows[0].id
+    await replaceLinks(client, orderId, b.linkDbs)
+    await client.query('COMMIT')
+
+    const full = await pool.query(`${SELECT_ORDER} WHERE o.id = $1`, [orderId])
+    res.status(201).json({ data: mapRow(full.rows[0]) })
   } catch (err) {
+    await client.query('ROLLBACK')
     console.error(err)
-    res.status(500).json({ message: 'Gagal menambah pesanan', error: err.message })
+    res.status(500).json({ message: 'Gagal menambah order', error: err.message })
+  } finally {
+    client.release()
   }
 })
 
-// PATCH /api/orders/:id
+// PATCH /api/orders/:id — hanya field yang dikirim yang diubah.
+// image / productId kosong atau null = dihapus.
 router.patch('/:id', validateBody(orderFieldsUpdate), async (req, res) => {
-  const {
-    orderDate,
-    designerName,
-    category,
-    characterType,
-    style,
-    package: pkg,
-    productId,
-    buyerName,
-    buyerReference,
-    storeName,
-    status,
-    completionDate,
-    price,
-  } = req.body
+  const b = req.body
 
-  if (productId && !(await ownsProduct(productId, req.user.teamId))) {
-    return res.status(404).json({ message: 'Produk tidak ditemukan' })
-  }
-
+  const client = await pool.connect()
   try {
-    const result = await pool.query(
-      `UPDATE orders SET
-        order_date       = COALESCE($1, order_date),
-        designer_name    = COALESCE($2, designer_name),
-        category         = COALESCE($3, category),
-        character_type   = COALESCE($4, character_type),
-        style            = COALESCE($5, style),
-        package          = COALESCE($6, package),
-        product_id       = COALESCE($7, product_id),
-        buyer_name       = COALESCE($8, buyer_name),
-        buyer_reference  = COALESCE($9, buyer_reference),
-        store_name       = COALESCE($10, store_name),
-        status           = COALESCE($11, status),
-        completion_date  = COALESCE($12, completion_date),
-        price            = COALESCE($13, price),
-        updated_at       = now()
-       WHERE id = $14 AND team_id = $15
-       RETURNING *`,
-      [
-        orderDate || null,
-        designerName || null,
-        category || null,
-        characterType || null,
-        style || null,
-        pkg !== undefined ? pkg : null,
-        productId !== undefined ? productId : null,
-        buyerName || null,
-        buyerReference !== undefined ? buyerReference : null,
-        storeName !== undefined ? storeName : null,
-        status ? normalizeStatus(status) : null,
-        completionDate !== undefined ? completionDate : null,
-        price !== undefined ? price : null,
-        req.params.id,
-        req.user.teamId,
-      ]
+    await client.query('BEGIN')
+
+    const existing = await client.query('SELECT * FROM orders WHERE id = $1 AND team_id = $2 FOR UPDATE', [req.params.id, req.user.teamId])
+    if (!existing.rows.length) {
+      await client.query('ROLLBACK')
+      return res.status(404).json({ message: 'Order tidak ditemukan' })
+    }
+    const current = existing.rows[0]
+    if (!canModify(current, req.user)) {
+      await client.query('ROLLBACK')
+      return res.status(403).json({ message: 'Cuma pembuat order atau owner/admin tim yang bisa mengubah ini' })
+    }
+
+    // Constraint DB: harus tetap ada judul ATAU nama pembeli setelah diubah
+    const nextTitle = b.title !== undefined ? (trimOrNull(b.title) || null) : current.title
+    const nextBuyer = b.buyerName !== undefined ? (trimOrNull(b.buyerName) || null) : current.buyer_name
+    if (!nextTitle && !nextBuyer) {
+      await client.query('ROLLBACK')
+      return res.status(400).json({ message: 'Judul atau nama pembeli/klien wajib diisi (minimal salah satu)' })
+    }
+    if (b.productId && !(await ownsProduct(b.productId, req.user.teamId))) {
+      await client.query('ROLLBACK')
+      return res.status(404).json({ message: 'Produk tidak ditemukan' })
+    }
+
+    const { sets, values } = buildSet(b, {
+      image: 'image',
+      title: { col: 'title', map: trimOrNull },
+      buyerName: { col: 'buyer_name', map: trimOrNull },
+      buyerReference: 'buyer_reference',
+      storeName: 'store_name',
+      designerName: 'designer_name',
+      category: 'category',
+      characterType: 'character_type',
+      style: 'style',
+      package: 'package',
+      productId: 'product_id',
+      productionStatus: 'production_status',
+      orderDate: { col: 'order_date', required: true },
+      completionDate: 'completion_date',
+      dueDate: 'due_date',
+      status: { col: 'status', required: true, map: (v) => (v ? normalizeStatus(v) : null) },
+      price: { col: 'price', required: true },
+      note: 'note',
+    })
+    const idParam = values.length + 1
+    await client.query(
+      `UPDATE orders SET ${[...sets, 'updated_at = now()'].join(', ')}
+       WHERE id = $${idParam} AND team_id = $${idParam + 1}`,
+      [...values, req.params.id, req.user.teamId]
     )
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ message: 'Pesanan tidak ditemukan' })
+    if (b.linkDbs !== undefined) {
+      await replaceLinks(client, req.params.id, b.linkDbs)
     }
-    res.json({ data: mapRow(result.rows[0]) })
+    await client.query('COMMIT')
+
+    // Gambar diganti/dihapus -> file lama di bucket dibuang (best-effort, setelah data tersimpan)
+    if (b.image !== undefined && current.image && current.image !== (b.image || null)) {
+      await deleteImageByUrl(current.image, req.user.teamId)
+    }
+
+    const full = await pool.query(`${SELECT_ORDER} WHERE o.id = $1`, [req.params.id])
+    res.json({ data: mapRow(full.rows[0]) })
   } catch (err) {
+    await client.query('ROLLBACK')
     console.error(err)
-    res.status(500).json({ message: 'Gagal mengubah pesanan', error: err.message })
+    res.status(500).json({ message: 'Gagal mengubah order', error: err.message })
+  } finally {
+    client.release()
   }
 })
 
 // DELETE /api/orders/:id
 router.delete('/:id', async (req, res) => {
   try {
-    const result = await pool.query(
-      'DELETE FROM orders WHERE id = $1 AND team_id = $2 RETURNING id',
-      [req.params.id, req.user.teamId]
-    )
-    if (result.rows.length === 0) {
-      return res.status(404).json({ message: 'Pesanan tidak ditemukan' })
+    const existing = await pool.query('SELECT created_by, image FROM orders WHERE id = $1 AND team_id = $2', [req.params.id, req.user.teamId])
+    if (!existing.rows.length) {
+      return res.status(404).json({ message: 'Order tidak ditemukan' })
     }
-    res.json({ message: 'Pesanan berhasil dihapus' })
+    if (!canModify(existing.rows[0], req.user)) {
+      return res.status(403).json({ message: 'Cuma pembuat order atau owner/admin tim yang bisa menghapus ini' })
+    }
+
+    await pool.query('DELETE FROM orders WHERE id = $1 AND team_id = $2', [req.params.id, req.user.teamId])
+    await deleteImageByUrl(existing.rows[0].image, req.user.teamId)
+    res.json({ message: 'Order berhasil dihapus' })
   } catch (err) {
     console.error(err)
-    res.status(500).json({ message: 'Gagal menghapus pesanan', error: err.message })
+    res.status(500).json({ message: 'Gagal menghapus order', error: err.message })
   }
 })
 

@@ -3,7 +3,7 @@ import { api, getToken } from '../utils/api.js'
 
 // Dropdown yang bisa diatur dari halaman Pengaturan.
 // usedIn = tempat dropdown ini muncul, ditampilkan di kartu Pengaturan.
-// scope = 'produk' tampil di tab "Pilihan Produk", 'tugas' di tab "Pilihan Tugas"
+// Dipakai bersama oleh form order, form produk, dan filter (Tugas sudah digabung ke Order)
 export const OPTION_GROUPS = [
   {
     id: 'kategori',
@@ -34,15 +34,15 @@ export const OPTION_GROUPS = [
     key: 'designer',
     label: 'Designer',
     description: 'Nama designer di luar anggota tim (anggota tim otomatis muncul di dropdown Designer).',
-    usedIn: ['Form produk'],
+    usedIn: ['Form order', 'Form produk'],
     scope: 'produk'
   },
   {
     id: 'productionStatus',
     key: 'productionStatus',
     label: 'Status Produksi',
-    description: 'Tahap produksi produk, mis. Preview atau Done.',
-    usedIn: ['Form produk'],
+    description: 'Tahap produksi, mis. Preview atau Done.',
+    usedIn: ['Form order', 'Form produk'],
     scope: 'produk'
   },
   {
@@ -50,40 +50,8 @@ export const OPTION_GROUPS = [
     key: 'platform',
     label: 'Platform',
     description: 'Tempat produk dijual. Tulis satu platform per pilihan; produk boleh memilih lebih dari satu.',
-    usedIn: ['Form produk', 'Filter list', 'Catat Penjualan'],
+    usedIn: ['Form order', 'Form produk', 'Filter list', 'Catat Penjualan'],
     scope: 'produk'
-  },
-  {
-    id: 'taskCategory',
-    key: 'taskCategory',
-    label: 'Kategori Tugas',
-    description: 'Jenis kerjaan/service tim, terpisah dari kategori produk jualan. Mis. Custom Avatar atau Fix Rigging.',
-    usedIn: ['Form tugas'],
-    scope: 'tugas'
-  },
-  {
-    id: 'taskSubstyle',
-    key: 'taskSubstyle',
-    label: 'Substyle Tugas',
-    description: 'Detail turunan jenis kerjaan.',
-    usedIn: ['Form tugas'],
-    scope: 'tugas'
-  },
-  {
-    id: 'taskProductionStatus',
-    key: 'taskProductionStatus',
-    label: 'Status Produksi Tugas',
-    description: 'Tahap pengerjaan tugas, terpisah dari status produksi produk.',
-    usedIn: ['Form tugas'],
-    scope: 'tugas'
-  },
-  {
-    id: 'taskDesigner',
-    key: 'taskDesigner',
-    label: 'Designer Tugas',
-    description: 'Nama designer di luar anggota tim, terpisah dari Designer produk (anggota tim otomatis muncul di dropdown ini juga).',
-    usedIn: ['Form tugas'],
-    scope: 'tugas'
   }
 ]
 
@@ -93,11 +61,7 @@ const DEFAULTS = {
   substyle: ['Daily outfit', 'Cyber'],
   designer: [],
   productionStatus: ['Preview', 'Done', 'Ready'],
-  platform: ['Etsy', 'Booth'],
-  taskCategory: [],
-  taskSubstyle: [],
-  taskProductionStatus: [],
-  taskDesigner: []
+  platform: ['Etsy', 'Booth']
 }
 
 const PLATFORM_LIKE_KEYS = ['platform']

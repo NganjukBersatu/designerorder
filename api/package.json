@@ -4,21 +4,23 @@
   "version": "1.0.0",
   "scripts": {
     "dev": "nodemon src/index.js",
-    "start": "node src/index.js"
+    "start": "node scripts/prestart.js && node src/index.js",
+    "migrate:uuid": "node scripts/migrate-uuid.js",
+    "migrate:images": "node scripts/migrate-images.js"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1145.0",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
     "dotenv": "^17.4.2",
-    "drizzle-orm": "^0.45.3",
     "express": "^4.19.2",
     "express-rate-limit": "^8.7.0",
     "jsonwebtoken": "^9.0.3",
+    "multer": "^2.4.0",
     "pg": "^8.23.0"
   },
   "devDependencies": {
     "@types/pg": "^8.23.1",
-    "drizzle-kit": "^0.31.11",
     "nodemon": "^3.1.4"
   }
 }

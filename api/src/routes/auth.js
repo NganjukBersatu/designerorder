@@ -3,12 +3,13 @@ import bcrypt from 'bcryptjs'
 import rateLimit from 'express-rate-limit'
 import { pool } from '../config/db.js'
 import { signToken, requireAuth } from '../middleware/auth.js'
+import { deleteImageByUrl } from '../config/storage.js'
 
 const router = Router()
-// Batas ukuran foto profil (data URL base64) supaya kolom TEXT & payload
-// JSON-nya tidak kebablasan. ~2MB base64 cukup buat foto persegi kecil
-// yang sudah dikompres di frontend.
-const MAX_PHOTO_LENGTH = 2_000_000
+// Foto profil disimpan di bucket (diunggah lewat POST /api/uploads?kind=avatar);
+// di database cuma URL-nya.
+const MAX_PHOTO_URL_LENGTH = 2048
+const PHOTO_URL_RE = /^https?:\/\/\S+$/i
 
 // Batasi percobaan login/register supaya tidak gampang dibrute-force
 const authLimiter = rateLimit({
@@ -162,8 +163,8 @@ router.patch('/profile', requireAuth, async (req, res) => {
   if (displayName !== undefined && displayName !== null && String(displayName).length > 150) {
     return res.status(400).json({ message: 'Nama tampilan maksimal 150 karakter' })
   }
-  if (photo && String(photo).length > MAX_PHOTO_LENGTH) {
-    return res.status(400).json({ message: 'Ukuran foto terlalu besar, coba foto lain' })
+  if (photo && (typeof photo !== 'string' || photo.length > MAX_PHOTO_URL_LENGTH || !PHOTO_URL_RE.test(photo))) {
+    return res.status(400).json({ message: 'Foto harus berupa URL hasil unggah, bukan data gambar langsung' })
   }
 
   const fields = []
@@ -184,6 +185,7 @@ router.patch('/profile', requireAuth, async (req, res) => {
   }
 
   try {
+    const before = await pool.query('SELECT photo FROM users WHERE id = $1', [req.user.id])
     values.push(req.user.id)
     const result = await pool.query(
       `UPDATE users SET ${fields.join(', ')} WHERE id = $${i} RETURNING *`,
@@ -191,6 +193,10 @@ router.patch('/profile', requireAuth, async (req, res) => {
     )
     const user = result.rows[0]
     if (!user) return res.status(404).json({ message: 'Akun tidak ditemukan' })
+
+    // Foto diganti/dihapus -> file lama di bucket dibuang (best-effort)
+    const oldPhoto = before.rows[0]?.photo
+    if (photo !== undefined && oldPhoto && oldPhoto !== user.photo) await deleteImageByUrl(oldPhoto, req.user.teamId)
 
     res.json({ user: mapUser(user) })
   } catch (err) {

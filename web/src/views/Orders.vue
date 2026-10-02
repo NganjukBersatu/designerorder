@@ -8,14 +8,16 @@ import Modal from '../components/Modal.vue'
 import OrderForm from '../components/OrderForm.vue'
 
 const router = useRouter()
+const nameOf = (o) => o.title || o.buyerName || 'Order'
 const orders = ref([])
 const loading = ref(true)
 const errorMsg = ref('')
 const search = ref('')
 const status = ref('all')
 const showCreate = ref(false)
+const owner = ref('all') // 'all' | 'mine' (order buatan sendiri)
 
-// --- Statistik status (kartu ringkasan, seperti di halaman Tugas) ---
+// --- Statistik status (kartu ringkasan) ---
 const stats = ref({ pending: 0, progress: 0, done: 0 })
 const totalStats = computed(() => stats.value.pending + stats.value.progress + stats.value.done)
 
@@ -111,6 +113,7 @@ async function load() {
     const params = new URLSearchParams()
     if (search.value) params.set('search', search.value)
     if (status.value !== 'all') params.set('status', status.value)
+    if (owner.value === 'mine') params.set('mine', 'true')
     params.set('page', page.value)
     params.set('limit', limit.value)
     const qs = params.toString()
@@ -136,6 +139,7 @@ watch(search, () => {
   debounceTimer = setTimeout(resetAndLoad, 300)
 })
 watch(status, resetAndLoad)
+watch(owner, resetAndLoad)
 watch(page, load)
 onMounted(load)
 onMounted(loadStats)
@@ -159,7 +163,7 @@ async function confirmDelete() {
   deleting.value = true
   try {
     await api.delete(`/orders/${deleteTarget.value.id}`)
-    showToast(`Pesanan untuk ${deleteTarget.value.buyerName} berhasil dihapus`, 'success')
+    showToast(`Order "${nameOf(deleteTarget.value)}" berhasil dihapus`, 'success')
     if (orders.value.length === 1 && page.value > 1) {
       page.value -= 1
     } else {
@@ -167,7 +171,7 @@ async function confirmDelete() {
     }
     loadStats()
   } catch (err) {
-    showToast(err.message || 'Gagal menghapus pesanan', 'error')
+    showToast(err.message || 'Gagal menghapus order', 'error')
   } finally {
     deleting.value = false
     deleteTarget.value = null
@@ -189,10 +193,10 @@ async function confirmStatusChange() {
   try {
     await api.patch(`/orders/${order.id}`, { status: newStatus })
     order.status = newStatus // update langsung di baris tabel, tanpa reload penuh
-    showToast(`Status pesanan ${order.buyerName} diubah jadi ${STATUS_LABEL[newStatus] || newStatus}`, 'success')
+    showToast(`Status order "${nameOf(order)}" diubah jadi ${STATUS_LABEL[newStatus] || newStatus}`, 'success')
     loadStats()
   } catch (err) {
-    showToast(err.message || 'Gagal mengubah status pesanan', 'error')
+    showToast(err.message || 'Gagal mengubah status order', 'error')
   } finally {
     updatingStatus.value = false
     statusTarget.value = null
@@ -216,7 +220,7 @@ function goToPage(p) {
 
 <template>
   <div class="space-y-4">
-    <!-- Tombol tambah, berdiri sendiri di baris atas (seperti halaman Tugas) -->
+    <!-- Tombol tambah, berdiri sendiri di baris atas -->
     <div class="flex justify-end">
       <button
         type="button"
@@ -224,7 +228,7 @@ function goToPage(p) {
         @click="showCreate = true"
       >
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14" /></svg>
-        Pesanan baru
+        Order baru
       </button>
     </div>
 
@@ -266,7 +270,7 @@ function goToPage(p) {
         <input
           v-model="search"
           type="search"
-          placeholder="Cari pembeli, kategori, atau toko..."
+          placeholder="Cari judul, pembeli, kategori, catatan, atau toko..."
           class="w-full rounded-lg border border-ink-200 pl-9 pr-3 py-2 text-[13.5px] focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none"
         />
       </div>
@@ -306,8 +310,27 @@ function goToPage(p) {
         </div>
       </div>
 
+      <div class="inline-flex rounded-lg border border-ink-200 overflow-hidden shrink-0 text-[13px]">
+        <button
+          type="button"
+          class="px-3 py-2 transition"
+          :class="owner === 'all' ? 'bg-brand-50 text-brand-700 font-medium' : 'text-ink-600 hover:bg-ink-500/5'"
+          @click="owner = 'all'"
+        >
+          Semua
+        </button>
+        <button
+          type="button"
+          class="px-3 py-2 border-l border-ink-200 transition"
+          :class="owner === 'mine' ? 'bg-brand-50 text-brand-700 font-medium' : 'text-ink-600 hover:bg-ink-500/5'"
+          @click="owner = 'mine'"
+        >
+          Milikku
+        </button>
+      </div>
+
       <span v-if="pagination" class="sm:ml-2 shrink-0 text-[12.5px] text-ink-400">
-        {{ pagination.total }} pesanan cocok
+        {{ pagination.total }} order cocok
       </span>
     </div>
 
@@ -323,7 +346,7 @@ function goToPage(p) {
         <div class="w-12 h-12 rounded-full bg-cream-100 flex items-center justify-center mb-3">
           <svg class="w-6 h-6 text-ink-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
         </div>
-        <p class="text-[13.5px] font-medium text-ink-700">Belum ada pesanan yang cocok</p>
+        <p class="text-[13.5px] font-medium text-ink-700">Belum ada order yang cocok</p>
         <p class="text-[12px] text-ink-400 mt-1 max-w-[260px]">Coba ubah kata kunci pencarian atau filter status di atas.</p>
       </div>
       <template v-else>
@@ -332,13 +355,15 @@ function goToPage(p) {
             <thead>
               <tr class="text-ink-500 border-b border-ink-100">
                 <th class="sticky top-0 z-10 bg-cream-100 px-5 py-3.5 text-left font-medium whitespace-nowrap w-12">No</th>
+                <th class="sticky top-0 z-10 bg-cream-100 px-5 py-3.5 text-left font-medium whitespace-nowrap min-w-[220px]">Order</th>
                 <th class="sticky top-0 z-10 bg-cream-100 px-5 py-3.5 text-left font-medium whitespace-nowrap">Kategori</th>
                 <th class="sticky top-0 z-10 bg-cream-100 px-5 py-3.5 text-left font-medium whitespace-nowrap">Jenis Karakter</th>
                 <th class="sticky top-0 z-10 bg-cream-100 px-5 py-3.5 text-left font-medium whitespace-nowrap">Style</th>
                 <th class="sticky top-0 z-10 bg-cream-100 px-5 py-3.5 text-left font-medium whitespace-nowrap">Designer</th>
                 <th class="sticky top-0 z-10 bg-cream-100 px-5 py-3.5 text-left font-medium whitespace-nowrap">Platform</th>
-                <th class="sticky top-0 z-10 bg-cream-100 px-5 py-3.5 text-left font-medium whitespace-nowrap">Pembeli</th>
+                <th class="sticky top-0 z-10 bg-cream-100 px-5 py-3.5 text-left font-medium whitespace-nowrap">Pembeli / Klien</th>
                 <th class="sticky top-0 z-10 bg-cream-100 px-5 py-3.5 text-left font-medium whitespace-nowrap">Tanggal</th>
+                <th class="sticky top-0 z-10 bg-cream-100 px-5 py-3.5 text-left font-medium whitespace-nowrap">Tenggat</th>
                 <th class="sticky top-0 z-10 bg-cream-100 px-5 py-3.5 text-left font-medium whitespace-nowrap">Harga</th>
                 <th class="sticky top-0 z-10 bg-cream-100 px-5 py-3.5 text-left font-medium whitespace-nowrap">Status</th>
                 <th class="sticky top-0 z-10 bg-cream-100 px-5 py-3.5 text-right font-medium whitespace-nowrap">Aksi</th>
@@ -349,16 +374,33 @@ function goToPage(p) {
                 <td class="px-5 py-4 text-ink-400 tabular-nums">
                   {{ pagination ? (pagination.page - 1) * pagination.limit + index + 1 : index + 1 }}
                 </td>
+                <td class="px-5 py-3">
+                  <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 shrink-0 rounded-lg overflow-hidden border border-ink-100 bg-cream-100 flex items-center justify-center">
+                      <img v-if="o.image" :src="o.image" :alt="nameOf(o)" class="w-full h-full object-cover" />
+                      <svg v-else xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-ink-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                    <div class="min-w-0">
+                      <button type="button" class="font-medium text-ink-800 hover:text-brand-600 truncate max-w-[220px] text-left transition" @click="router.push(`/orders/${o.id}`)">
+                        {{ nameOf(o) }}
+                      </button>
+                      <p class="text-[12px] text-ink-400 truncate">{{ o.productionStatus || '—' }}</p>
+                    </div>
+                  </div>
+                </td>
                 <td class="px-5 py-4 text-ink-800 whitespace-nowrap">{{ o.category || '—' }}</td>
                 <td class="px-5 py-4 text-ink-600 whitespace-nowrap">{{ o.characterType || '—' }}</td>
                 <td class="px-5 py-4 text-ink-600 whitespace-nowrap">{{ o.style || '—' }}</td>
                 <td class="px-5 py-4 text-ink-600 whitespace-nowrap">{{ o.designerName || '—' }}</td>
                 <td class="px-5 py-4 text-ink-600 whitespace-nowrap">{{ o.storeName || '—' }}</td>
                 <td class="px-5 py-4">
-                  <p class="text-ink-800">{{ o.buyerName }}</p>
+                  <p class="text-ink-800">{{ o.buyerName || '—' }}</p>
                   <p class="text-[12px] text-ink-400 mt-0.5">{{ o.buyerReference || '—' }}</p>
                 </td>
                 <td class="px-5 py-4 text-ink-500">{{ shortDate(o.orderDate) }}</td>
+                <td class="px-5 py-4 text-ink-500 whitespace-nowrap">{{ o.dueDate ? shortDate(o.dueDate) : '—' }}</td>
                 <td class="px-5 py-4 font-medium text-ink-900">{{ amount(o.price) }}</td>
                 <td class="px-5 py-4"><StatusBadge :status="o.status" /></td>
                 <td class="px-5 py-4 text-right whitespace-nowrap">
@@ -411,7 +453,7 @@ function goToPage(p) {
             </span>
             dari
             <span class="font-medium text-ink-600">{{ pagination.total }}</span>
-            pesanan
+            order
           </p>
 
           <div v-if="pagination.totalPages > 1" class="flex items-center gap-1">
@@ -439,16 +481,15 @@ function goToPage(p) {
       </template>
     </div>
 
-    <Modal v-if="showCreate" title="Catat pesanan baru" @close="showCreate = false">
+    <Modal v-if="showCreate" title="Catat order baru" @close="showCreate = false">
       <OrderForm @saved="onCreated" @cancel="showCreate = false" />
     </Modal>
 
     <!-- Modal konfirmasi hapus custom -->
-    <Modal v-if="deleteTarget" title="Hapus pesanan?" @close="deleteTarget = null">
+    <Modal v-if="deleteTarget" title="Hapus order?" @close="deleteTarget = null">
       <div class="space-y-5">
         <p class="text-[13.5px] text-ink-600">
-          Pesanan <span class="font-medium text-ink-900">{{ deleteTarget.category }}</span>
-          untuk <span class="font-medium text-ink-900">{{ deleteTarget.buyerName }}</span>
+          Order <span class="font-medium text-ink-900">{{ nameOf(deleteTarget) }}</span>
           akan dihapus permanen. Tindakan ini tidak bisa dibatalkan.
         </p>
         <div class="flex justify-end gap-2.5">
@@ -480,8 +521,7 @@ function goToPage(p) {
     >
       <div class="space-y-5">
         <p class="text-[13.5px] text-ink-600">
-          Status pesanan <span class="font-medium text-ink-900">{{ statusTarget.order.category }}</span>
-          untuk <span class="font-medium text-ink-900">{{ statusTarget.order.buyerName }}</span>
+          Status order <span class="font-medium text-ink-900">{{ nameOf(statusTarget.order) }}</span>
           akan diubah jadi
           <span class="font-medium text-ink-900">{{ STATUS_LABEL[statusTarget.newStatus] || statusTarget.newStatus }}</span>.
         </p>
@@ -539,8 +579,8 @@ function goToPage(p) {
           class="w-full flex items-center gap-2 text-left px-3 py-2 text-[13px] text-ink-700 hover:bg-ink-500/5 transition"
           @click="router.push(`/orders/${openActionMenu.id}`); closeActionMenu()"
         >
-          <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
-          Edit
+          <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /></svg>
+          Lihat detail
         </button>
         <button
           type="button"

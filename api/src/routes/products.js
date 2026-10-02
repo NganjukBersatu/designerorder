@@ -2,10 +2,16 @@ import { Router } from 'express'
 import { pool } from '../config/db.js'
 import { validateBody } from '../middleware/validate.js'
 import { parsePagination, buildPaginationMeta } from '../utils/pagination.js'
+import { uuidParam } from '../utils/uuid.js'
+import { deleteImageByUrl } from '../config/storage.js'
+import { buildSet } from '../utils/sql.js'
 
 const router = Router()
+router.param('id', uuidParam)
+router.param('saleId', uuidParam)
 
 const productFieldsCreate = {
+  image: { type: 'url', max: 2048, label: 'Gambar' },
   name: { required: true, type: 'string', min: 1, max: 255, label: 'Nama produk' },
   style: { type: 'string', max: 100, label: 'Style' },
   substyle: { type: 'string', max: 100, label: 'Substyle' },
@@ -199,47 +205,34 @@ router.post('/', validateBody(productFieldsCreate), async (req, res) => {
 
 // PATCH /api/products/:id
 router.patch('/:id', validateBody(productFieldsUpdate), async (req, res) => {
-  const {
-    image, name, style, substyle, designer, date, uploadDate,
-    productionStatus, platform, linkDb, linkDbs, price, note, packages,
-  } = req.body
+  const { image, linkDbs, packages } = req.body
 
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
 
+    // Hanya kolom yang dikirim yang diubah; image '' / null = hapus gambar.
+    const { sets, values } = buildSet(req.body, {
+      image: 'image',
+      name: { col: 'name', required: true, map: (v) => String(v).trim() },
+      style: 'style',
+      substyle: 'substyle',
+      designer: 'designer',
+      date: 'date',
+      uploadDate: 'upload_date',
+      productionStatus: 'production_status',
+      platform: 'platform',
+      linkDb: 'link_db',
+      price: { col: 'price', required: true },
+      note: 'note',
+    })
+    const idParam = values.length + 1
     const result = await client.query(
-      `UPDATE products SET
-        image = COALESCE($1, image),
-        name = COALESCE($2, name),
-        style = $3,
-        substyle = $4,
-        designer = $5,
-        date = $6,
-        upload_date = $7,
-        production_status = $8,
-        platform = $9,
-        link_db = $10,
-        price = COALESCE($11, price),
-        note = $12,
-        updated_at = now()
-       WHERE id = $13 AND team_id = $14
-       RETURNING id`,
-      [
-        image || null, name || null,
-        style !== undefined ? style : null,
-        substyle !== undefined ? substyle : null,
-        designer !== undefined ? designer : null,
-        date !== undefined ? date : null,
-        uploadDate !== undefined ? uploadDate : null,
-        productionStatus !== undefined ? productionStatus : null,
-        platform !== undefined ? platform : null,
-        linkDb !== undefined ? linkDb : null,
-        price !== undefined ? price : null,
-        note !== undefined ? note : null,
-        req.params.id,
-        req.user.teamId,
-      ]
+      `WITH old AS (SELECT image FROM products WHERE id = $${idParam} AND team_id = $${idParam + 1})
+       UPDATE products SET ${[...sets, 'updated_at = now()'].join(', ')}
+       WHERE id = $${idParam} AND team_id = $${idParam + 1}
+       RETURNING id, (SELECT image FROM old) AS old_image`,
+      [...values, req.params.id, req.user.teamId]
     )
 
     if (result.rows.length === 0) {
@@ -256,6 +249,10 @@ router.patch('/:id', validateBody(productFieldsUpdate), async (req, res) => {
 
     await client.query('COMMIT')
 
+    // Gambar diganti/dihapus -> file lama di bucket dibuang (best-effort, setelah data tersimpan)
+    const oldImage = result.rows[0].old_image
+    if (image !== undefined && oldImage && oldImage !== (image || null)) await deleteImageByUrl(oldImage, req.user.teamId)
+
     const full = await pool.query(`${SELECT_PRODUCT} WHERE p.id = $1`, [req.params.id])
     res.json({ data: mapRow(full.rows[0]) })
   } catch (err) {
@@ -271,12 +268,13 @@ router.patch('/:id', validateBody(productFieldsUpdate), async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const result = await pool.query(
-      'DELETE FROM products WHERE id = $1 AND team_id = $2 RETURNING id',
+      'DELETE FROM products WHERE id = $1 AND team_id = $2 RETURNING id, image',
       [req.params.id, req.user.teamId]
     )
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'Produk tidak ditemukan' })
     }
+    await deleteImageByUrl(result.rows[0].image, req.user.teamId)
     res.json({ message: 'Produk berhasil dihapus' })
   } catch (err) {
     console.error(err)

@@ -46,13 +46,18 @@ function monthKeyOf(value) {
 
 async function loadMonthOrders() {
   try {
-    // Ambil dalam jumlah besar supaya mencakup seluruh pesanan bulan terkait.
-    // Kalau nanti backend sudah mendukung filter rentang tanggal langsung
-    // (mis. /orders?dateFrom=&dateTo=), baris ini bisa disederhanakan.
-    const res = await api.get('/orders?page=1&limit=1000')
-    monthOrders.value = (res.data || []).filter(
-      (o) => monthKeyOf(o.orderDate || o.date || o.createdAt) === selectedMonth.value
-    )
+    // Server menyaring per bulan (?month=YYYY-MM); API membatasi 200 baris per
+    // halaman, jadi ambil halaman demi halaman sampai semua order bulan itu terkumpul.
+    const all = []
+    let page = 1
+    let totalPages = 1
+    do {
+      const res = await api.get(`/orders?month=${selectedMonth.value}&page=${page}&limit=200`)
+      all.push(...(res.data || []))
+      totalPages = res.pagination?.totalPages || 1
+      page++
+    } while (page <= totalPages)
+    monthOrders.value = all
   } catch (err) {
     monthOrders.value = []
   }
@@ -161,6 +166,7 @@ function downloadCsv() {
     rows.push([
       'Pesanan desain',
       formatDateTime(o.orderDate || o.date || o.createdAt),
+      o.title || '',
       o.buyerName || '',
       [o.category, o.characterType].filter(Boolean).join(' / '),
       1,
@@ -536,7 +542,7 @@ const peakMonth = computed(() => {
               class="flex items-center justify-between gap-3 py-3 hover:bg-ink-500/5 -mx-2 px-2 rounded-lg transition"
             >
               <div class="min-w-0">
-                <p class="text-[13.5px] font-medium text-ink-900 truncate">{{ o.buyerName }}</p>
+                <p class="text-[13.5px] font-medium text-ink-900 truncate">{{ o.title || o.buyerName }}</p>
                 <p class="text-[12px] text-ink-400 truncate">{{ o.category }} · {{ o.characterType }}</p>
               </div>
               <div class="flex items-center gap-3 shrink-0">
@@ -558,7 +564,7 @@ const peakMonth = computed(() => {
 
       <!-- Kartu statistik produk -->
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <router-link to="/produk" class="bg-white rounded-card shadow-card p-4 hover:bg-ink-500/5 transition flex flex-col justify-between">
+        <router-link to="/kategori" class="bg-white rounded-card shadow-card p-4 hover:bg-ink-500/5 transition flex flex-col justify-between">
           <div class="flex items-start justify-between">
             <p class="text-[12px] text-ink-400">Total produk</p>
             <div class="w-7 h-7 rounded-lg bg-cream-100 flex items-center justify-center text-ink-500">
@@ -567,7 +573,7 @@ const peakMonth = computed(() => {
           </div>
           <p class="text-[22px] font-semibold text-ink-900">{{ totalProducts }}</p>
         </router-link>
-        <router-link to="/produk" class="bg-white rounded-card shadow-card p-4 hover:bg-ink-500/5 transition flex flex-col justify-between">
+        <router-link to="/kategori" class="bg-white rounded-card shadow-card p-4 hover:bg-ink-500/5 transition flex flex-col justify-between">
           <div class="flex items-start justify-between">
             <p class="text-[12px] text-ink-400">Produk terjual</p>
             <div class="w-7 h-7 rounded-lg bg-cream-100 flex items-center justify-center text-ink-500">
@@ -626,7 +632,7 @@ const peakMonth = computed(() => {
             <h2 class="text-[15px] font-semibold text-ink-900">Produk terlaris</h2>
             <router-link
               v-if="topProducts.length"
-              to="/produk"
+              to="/kategori"
               class="text-[13px] text-brand-500 hover:text-brand-600 font-medium"
             >
               Lihat semua
@@ -644,7 +650,7 @@ const peakMonth = computed(() => {
             <p class="text-[12px] text-ink-400 mt-1 max-w-[260px]">Produk terlaris akan muncul di sini setelah ada produk yang terjual.</p>
             <router-link
               v-if="totalProducts === 0"
-              to="/produk"
+              to="/kategori"
               class="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-[12.5px] font-medium transition"
             >
               <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14" /></svg>

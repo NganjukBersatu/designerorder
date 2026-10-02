@@ -25,20 +25,17 @@ const routes = [
         path: 'orders',
         name: 'orders',
         component: () => import('../views/Orders.vue'),
-        meta: { title: 'Semua Pesanan', subtitle: 'Cari, tambah, dan kelola seluruh pesanan desain' },
+        meta: { title: 'List Order', subtitle: 'Cari, tambah, dan kelola semua order: pesanan buyer dan kerjaan tim' },
       },
       {
         path: 'orders/:id',
         name: 'order-detail',
         component: () => import('../views/OrderDetail.vue'),
-        meta: { title: 'Detail Pesanan', subtitle: 'Lihat dan perbarui detail satu pesanan' },
+        meta: { title: 'Detail Order', subtitle: 'Lihat dan perbarui detail satu order' },
       },
-      {
-        path: 'tugas',
-        name: 'tugas',
-        component: () => import('../views/Tugas.vue'),
-        meta: { title: 'Tugas', subtitle: 'Kerjaan/service anggota tim, di luar produk yang dijual' },
-      },
+      // Tugas sudah digabung ke List Order — tautan/bookmark lama diarahkan ke sana
+      { path: 'tugas', redirect: '/orders' },
+      { path: 'tugas/:id', redirect: (to) => `/orders/${to.params.id}` },
       // ===== Detail Produk (tetap ada, tapi tidak ada List Produk global) =====
       {
         path: 'produk/:id',

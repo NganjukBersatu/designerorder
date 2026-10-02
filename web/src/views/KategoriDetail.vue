@@ -669,7 +669,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useProducts, formatPrice, formatDateTime, nowLocal, normalizeUrl } from '../composables/useProducts'
 import { useOptions } from '../composables/useOptions'
 import { useTeamMembers } from '../composables/useTeamMembers'
-import { fileToCompressedDataUrl } from '../utils/imageFile'
+import { uploadImage } from '../utils/imageFile'
 import { getLinks, cleanLinks } from '../utils/links'
 import { splitPlatforms } from '../utils/platforms'
 import PlatformBadges from '../components/PlatformBadges.vue'
@@ -872,7 +872,7 @@ async function onPickAddImage(e) {
   e.target.value = ''
   if (!file) return
   try {
-    addForm.value.image = await fileToCompressedDataUrl(file)
+    addForm.value.image = await uploadImage(file, 'product')
     addImageError.value = ''
   } catch (err) {
     addImageError.value = err.message
@@ -943,7 +943,7 @@ async function onPickEditImage(e) {
   e.target.value = ''
   if (!file) return
   try {
-    editForm.value.image = await fileToCompressedDataUrl(file)
+    editForm.value.image = await uploadImage(file, 'product')
     editImageError.value = ''
   } catch (err) {
     editImageError.value = err.message

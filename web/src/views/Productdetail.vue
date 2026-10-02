@@ -663,7 +663,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useProducts, formatDateTime, formatPrice, nowLocal, normalizeUrl } from '../composables/useProducts'
-import { fileToCompressedDataUrl } from '../utils/imageFile'
+import { uploadImage } from '../utils/imageFile'
 import { getLinks, cleanLinks } from '../utils/links'
 import { useOptions } from '../composables/useOptions'
 import { useTeamMembers } from '../composables/useTeamMembers'
@@ -849,7 +849,7 @@ async function onPickImage(e) {
   e.target.value = '' // supaya file yang sama bisa dipilih ulang
   if (!file) return
   try {
-    editForm.value.image = await fileToCompressedDataUrl(file)
+    editForm.value.image = await uploadImage(file, 'product')
     imageError.value = ''
   } catch (err) {
     imageError.value = err.message

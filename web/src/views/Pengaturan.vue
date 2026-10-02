@@ -29,9 +29,9 @@
       <p class="text-[13px] text-ink-500 mt-2.5">{{ activeTabInfo }}</p>
     </div>
 
-    <!-- ==================== KATEGORI: PILIHAN DROPDOWN (Produk / Tugas) ==================== -->
+    <!-- ==================== KATEGORI: PILIHAN DROPDOWN (Order & Produk) ==================== -->
     <div
-      v-show="activeTab === 'dropdown-produk' || activeTab === 'dropdown-tugas'"
+      v-show="activeTab === 'dropdown-produk'"
       :id="`panel-${activeTab}`"
       role="tabpanel"
       :aria-labelledby="`tab-${activeTab}`"
@@ -547,13 +547,8 @@ const { user, role, teamName, changeUsername, changePassword } = useAuth()
 const TABS = [
   {
     key: 'dropdown-produk',
-    label: 'Pilihan Produk',
-    info: 'Atur pilihan yang muncul di form produk, filter list, dan Catat Penjualan.'
-  },
-  {
-    key: 'dropdown-tugas',
-    label: 'Pilihan Tugas',
-    info: 'Atur pilihan yang muncul di form Tugas — terpisah total dari pilihan produk jualan.'
+    label: 'Pilihan Dropdown',
+    info: 'Atur pilihan yang muncul di form order, form produk, filter list, dan Catat Penjualan.'
   },
   {
     key: 'akun',
@@ -633,20 +628,14 @@ const TONES = {
   substyle: 'bg-[#3B82F6]',
   designer: 'bg-[#14A38B]',
   productionStatus: 'bg-[#E0A21B]',
-  platform: 'bg-[#F0782B]',
-  taskCategory: 'bg-[#8B5CF6]',
-  taskSubstyle: 'bg-[#3B82F6]',
-  taskProductionStatus: 'bg-[#E0A21B]',
-  taskDesigner: 'bg-[#14A38B]'
+  platform: 'bg-[#F0782B]'
 }
 
 // ========== PILIHAN DROPDOWN ==========
 const { optionsOf, addOption, removeOption, resetOptions } = useOptions()
 const { products } = useProducts()
 
-const currentGroups = computed(() =>
-  OPTION_GROUPS.filter(g => g.scope === (activeTab.value === 'dropdown-tugas' ? 'tugas' : 'produk'))
-)
+const currentGroups = computed(() => OPTION_GROUPS)
 
 const newOption = ref(Object.fromEntries(OPTION_GROUPS.map(g => [g.id, ''])))
 const optionMsg = ref({ id: '', ok: false, text: '' })
