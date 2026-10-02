@@ -3,9 +3,7 @@
 // Sekarang data diambil dari API (bukan disimpan di memory lagi), jadi tidak
 // hilang saat halaman di-refresh.
 import { ref } from 'vue'
-import { getToken, setToken } from '../utils/api.js' // sesuaikan path ini kalau lokasi api.js beda
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
+import { API_BASE, getToken, setToken } from '../utils/api.js'
 
 const products = ref([])
 const sales = ref([])

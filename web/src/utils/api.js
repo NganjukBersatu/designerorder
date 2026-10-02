@@ -1,8 +1,7 @@
-// src/services/api.js (atau lokasi file api.js kamu sekarang)
-
+// Frontend dan backend satu repo & satu domain, jadi alamat API selalu relatif: '/api'.
 // Di dev, '/api' diteruskan ke backend lewat proxy Vite (lihat vite.config.js).
-// Di production (frontend & backend di-deploy terpisah), set VITE_API_URL ke URL publik backend.
-const BASE = import.meta.env.VITE_API_URL || '/api'
+// Satu-satunya sumber alamat API; file lain mengimpor konstanta ini.
+export const API_BASE = '/api'
 const TOKEN_KEY = 'auth_token'
 
 export function getToken() {
@@ -23,7 +22,7 @@ async function request(path, options = {}) {
     ...(options.headers || {}),
   }
 
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers,
   })

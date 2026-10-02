@@ -7,16 +7,12 @@
 // semua produk & pesanan otomatis ke-scope ke team_id milik user yang login.
 
 import { ref, computed } from 'vue'
-import { getToken, setToken } from '../utils/api.js'
+import { API_BASE, getToken, setToken } from '../utils/api.js'
 import { fetchProducts } from './useProducts'
 import { useTeamMembers } from './useTeamMembers'
 import { fetchOptions } from './useOptions'
 
 const USER_KEY = 'auth_user'
-
-// Sama seperti utils/api.js: di dev pakai proxy Vite ('/api'),
-// di production pakai URL publik backend dari VITE_API_URL.
-const API_BASE = import.meta.env.VITE_API_URL || '/api'
 
 function readJSON(key) {
   try {
