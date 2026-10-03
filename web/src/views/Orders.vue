@@ -219,7 +219,7 @@ function goToPage(p) {
 </script>
 
 <template>
-  <div class="space-y-4">
+  <div class="page-fill">
     <!-- Tombol tambah, berdiri sendiri di baris atas -->
     <div class="flex justify-end">
       <button
@@ -233,31 +233,31 @@ function goToPage(p) {
     </div>
 
     <!-- Kartu statistik status pesanan -->
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-      <div class="bg-white rounded-card shadow-card border border-ink-100 px-5 py-4 flex items-center justify-between">
+    <div class="fx-grid [--fx-min:6.5rem] gap-3">
+      <div class="bg-white rounded-card shadow-card border border-ink-100 px-3 sm:px-5 py-3 sm:py-4 flex items-center justify-between">
         <div>
           <p class="text-[12.5px] text-ink-400">Menunggu</p>
           <p class="text-2xl font-semibold text-ink-900 mt-1 tabular-nums">{{ stats.pending }}</p>
         </div>
-        <div class="w-9 h-9 rounded-lg bg-amber-50 flex items-center justify-center text-amber-500 shrink-0">
+        <div class="w-9 h-9 rounded-lg bg-amber-50 hidden sm:flex items-center justify-center text-amber-500 shrink-0">
           <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" /></svg>
         </div>
       </div>
-      <div class="bg-white rounded-card shadow-card border border-ink-100 px-5 py-4 flex items-center justify-between">
+      <div class="bg-white rounded-card shadow-card border border-ink-100 px-3 sm:px-5 py-3 sm:py-4 flex items-center justify-between">
         <div>
           <p class="text-[12.5px] text-ink-400">Dikerjakan</p>
           <p class="text-2xl font-semibold text-ink-900 mt-1 tabular-nums">{{ stats.progress }}</p>
         </div>
-        <div class="w-9 h-9 rounded-lg bg-sky-50 flex items-center justify-center text-sky-500 shrink-0">
+        <div class="w-9 h-9 rounded-lg bg-sky-50 hidden sm:flex items-center justify-center text-sky-500 shrink-0">
           <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20a8 8 0 100-16 8 8 0 000 16z" /><path d="M12 8v4l3 2" /></svg>
         </div>
       </div>
-      <div class="bg-white rounded-card shadow-card border border-ink-100 px-5 py-4 flex items-center justify-between">
+      <div class="bg-white rounded-card shadow-card border border-ink-100 px-3 sm:px-5 py-3 sm:py-4 flex items-center justify-between">
         <div>
           <p class="text-[12.5px] text-ink-400">Selesai</p>
           <p class="text-2xl font-semibold text-ink-900 mt-1 tabular-nums">{{ stats.done }}</p>
         </div>
-        <div class="w-9 h-9 rounded-lg bg-ok-50 flex items-center justify-center text-ok-600 shrink-0">
+        <div class="w-9 h-9 rounded-lg bg-ok-50 hidden sm:flex items-center justify-center text-ok-600 shrink-0">
           <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
         </div>
       </div>
@@ -334,7 +334,7 @@ function goToPage(p) {
       </span>
     </div>
 
-    <div class="bg-white rounded-card shadow-card-hover border border-ink-100 overflow-hidden">
+    <div class="bg-white rounded-card shadow-card-hover border border-ink-100 card-fill">
       <div v-if="loading" class="p-6 space-y-3">
         <div v-for="i in 5" :key="i" class="h-10 rounded-lg bg-ink-100 animate-pulse" />
       </div>
@@ -350,8 +350,8 @@ function goToPage(p) {
         <p class="text-[12px] text-ink-400 mt-1 max-w-[260px]">Coba ubah kata kunci pencarian atau filter status di atas.</p>
       </div>
       <template v-else>
-        <div class="overflow-auto max-h-[65vh]">
-          <table class="w-full text-left text-sm">
+        <div class="scroll-fill">
+          <table v-rtable class="rtable-xl w-full text-left text-sm">
             <thead>
               <tr class="text-ink-500 border-b border-ink-100">
                 <th class="sticky top-0 z-10 bg-cream-100 px-5 py-3.5 text-left font-medium whitespace-nowrap w-12">No</th>
@@ -370,7 +370,12 @@ function goToPage(p) {
               </tr>
             </thead>
             <tbody class="divide-y divide-ink-100 text-[13.5px]">
-              <tr v-for="(o, index) in orders" :key="o.id" class="hover:bg-ink-500/5 transition">
+              <tr
+                v-for="(o, index) in orders"
+                :key="o.id"
+                class="hover:bg-ink-500/5 transition cursor-pointer"
+                @click="router.push(`/orders/${o.id}`)"
+              >
                 <td class="px-5 py-4 text-ink-400 tabular-nums">
                   {{ pagination ? (pagination.page - 1) * pagination.limit + index + 1 : index + 1 }}
                 </td>
@@ -383,7 +388,7 @@ function goToPage(p) {
                       </svg>
                     </div>
                     <div class="min-w-0">
-                      <button type="button" class="font-medium text-ink-800 hover:text-brand-600 truncate max-w-[220px] text-left transition" @click="router.push(`/orders/${o.id}`)">
+                      <button type="button" class="font-medium text-ink-800 hover:text-brand-600 truncate max-w-[220px] text-left transition" @click.stop="router.push(`/orders/${o.id}`)">
                         {{ nameOf(o) }}
                       </button>
                       <p class="text-[12px] text-ink-400 truncate">{{ o.productionStatus || '—' }}</p>
@@ -403,7 +408,7 @@ function goToPage(p) {
                 <td class="px-5 py-4 text-ink-500 whitespace-nowrap">{{ o.dueDate ? shortDate(o.dueDate) : '—' }}</td>
                 <td class="px-5 py-4 font-medium text-ink-900">{{ amount(o.price) }}</td>
                 <td class="px-5 py-4"><StatusBadge :status="o.status" /></td>
-                <td class="px-5 py-4 text-right whitespace-nowrap">
+                <td class="px-5 py-4 text-right whitespace-nowrap cursor-default" @click.stop>
                   <div class="flex items-center justify-end gap-2.5">
                     <button
                       v-if="o.status !== 'Progress' && o.status !== 'Done'"
@@ -444,7 +449,7 @@ function goToPage(p) {
         <!-- Footer: info jumlah data + navigasi halaman -->
         <div
           v-if="pagination"
-          class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-4 border-t border-ink-100 text-[12.5px] text-ink-400"
+          class="shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-4 border-t border-ink-100 text-[12.5px] text-ink-400"
         >
           <p>
             Menampilkan

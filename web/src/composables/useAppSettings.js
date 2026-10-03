@@ -3,7 +3,7 @@ import { ref, watch } from 'vue'
 const STORAGE_KEY = 'designer-orders:app-settings'
 
 // Nilai bawaan (dipakai kalau belum pernah diubah / storage kosong)
-export const APP_SETTINGS_DEFAULTS = {
+const APP_SETTINGS_DEFAULTS = {
   appName: 'Designer Orders',
   appTagline: 'Ruang kerja produksi'
 }

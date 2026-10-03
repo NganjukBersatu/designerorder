@@ -57,14 +57,14 @@ function applySession({ token, user, teamName }) {
   fetchOptions()
 }
 
-export function validateUsername(value) {
+function validateUsername(value) {
   const v = (value || '').trim()
   if (v.length < 3) return 'Username minimal 3 karakter'
   if (v.length > 30) return 'Username maksimal 30 karakter'
   return ''
 }
 
-export function validatePassword(value) {
+function validatePassword(value) {
   if ((value || '').length < 8) return 'Kata sandi minimal 8 karakter'
   return ''
 }
@@ -102,6 +102,13 @@ export function useAuth() {
     } catch (e) {
       return fail(e.message)
     }
+  }
+
+  // Dipakai halaman Kelola Tim: pakai sesi baru dari server (mis. setelah pindah tim)
+  // dan perbarui nama tim aktif di tampilan tanpa login ulang.
+  function setTeamName(name) {
+    currentUser.value = { ...currentUser.value, teamName: name }
+    writeJSON(USER_KEY, currentUser.value)
   }
 
   function logout() {
@@ -163,6 +170,8 @@ export function useAuth() {
   }
 
   return {
+    applySession,
+    setTeamName,
     isLoggedIn,
     user,
     role,

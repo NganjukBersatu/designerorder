@@ -43,6 +43,18 @@ const routes = [
         component: () => import('../views/Productdetail.vue'),
         meta: { title: 'Detail Produk', subtitle: 'Lihat pembeli, jumlah terjual, dan waktu penjualan produk' },
       },
+      {
+        path: 'produk/:id/penjualan/:saleId',
+        name: 'penjualan-detail',
+        component: () => import('../views/SaleDetail.vue'),
+        meta: { title: 'Detail Penjualan', subtitle: 'Lihat detail satu transaksi penjualan' },
+      },
+      {
+        path: 'anggota/:id',
+        name: 'anggota-detail',
+        component: () => import('../views/MemberDetail.vue'),
+        meta: { title: 'Detail Anggota', subtitle: 'Profil anggota tim dan order yang dibuatnya' },
+      },
       // ===== Route Kategori =====
       {
         path: 'kategori',
@@ -55,6 +67,12 @@ const routes = [
         name: 'kategori-detail',
         component: () => import('../views/KategoriDetail.vue'),
         meta: { title: 'Isi Kategori', subtitle: 'Daftar produk dalam kategori' },
+      },
+      {
+        path: 'tim',
+        name: 'kelola-tim',
+        component: () => import('../views/KelolaTim.vue'),
+        meta: { title: 'Kelola Tim', subtitle: 'Buat tim, atur akun, ubah peran, dan pindahkan akun antar tim' },
       },
       {
         path: 'pengaturan',

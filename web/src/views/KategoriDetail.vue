@@ -1,5 +1,5 @@
 <template>
-  <div class="w-full">
+  <div class="w-full page-fill">
     <!-- ==================== KATEGORI DITEMUKAN ==================== -->
     <template v-if="categoryExists">
       <!-- Kembali -->
@@ -39,8 +39,8 @@
       </div>
 
       <!-- Isi kategori: daftar produk -->
-      <div class="bg-white dark:bg-cream-900 rounded-card shadow-card border border-ink-100 dark:border-ink-800 overflow-hidden">
-        <div class="px-5 py-4 border-b border-ink-100 dark:border-ink-800 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+      <div class="bg-white dark:bg-cream-900 rounded-card shadow-card border border-ink-100 dark:border-ink-800 card-fill">
+        <div class="shrink-0 px-5 py-4 border-b border-ink-100 dark:border-ink-800 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
           <!-- Filter Substyle -->
           <div v-if="substyleChips.length > 1" class="flex flex-wrap gap-2">
             <button
@@ -83,8 +83,8 @@
           </div>
         </div>
 
-        <div class="overflow-x-auto">
-          <table class="w-full text-sm">
+        <div class="scroll-fill">
+          <table v-rtable class="rtable-xl w-full text-sm">
             <thead>
               <tr class="bg-cream-100 dark:bg-cream-800 text-ink-500 dark:text-ink-300 border-b border-ink-100 dark:border-ink-800">
                 <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap w-12 sticky left-0 z-20 bg-cream-100 dark:bg-cream-800">No</th>
@@ -283,9 +283,9 @@
             </button>
           </div>
 
-          <div class="px-6 py-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="px-6 py-5 fx-grid [--fx-min:14rem] gap-4">
             <!-- Gambar produk -->
-            <div class="sm:col-span-2">
+            <div class="fx-full">
               <label class="block text-sm font-medium text-ink-700 dark:text-ink-200 mb-1.5">Gambar Produk</label>
               <div class="flex items-center gap-4">
                 <div class="w-24 h-24 shrink-0 rounded-xl overflow-hidden border border-ink-200 dark:border-ink-800 bg-cream-100 dark:bg-cream-800 flex items-center justify-center">
@@ -315,7 +315,7 @@
               </div>
             </div>
 
-            <div class="sm:col-span-2">
+            <div class="fx-full">
               <label class="block text-sm font-medium text-ink-700 dark:text-ink-200 mb-1.5">Nama Produk</label>
               <input v-model="addForm.name" type="text" class="w-full px-3 py-2.5 rounded-xl border border-ink-200 dark:border-ink-800 bg-white dark:bg-cream-800 text-ink-800 dark:text-ink-100 focus:border-brand-400 outline-none text-sm transition" placeholder="Nama produk" />
             </div>
@@ -377,12 +377,12 @@
               <input v-model="addForm.uploadDate" type="datetime-local" class="w-full px-3 py-2.5 rounded-xl border border-ink-200 dark:border-ink-800 bg-white dark:bg-cream-800 text-ink-800 dark:text-ink-100 focus:border-brand-400 outline-none text-sm transition" />
             </div>
 
-            <div class="sm:col-span-2">
+            <div class="fx-full">
               <label class="block text-sm font-medium text-ink-700 dark:text-ink-200 mb-1.5">Platform</label>
               <PlatformPicker v-model="addForm.platform" :options="optionsOf('platform')" />
             </div>
 
-            <div class="sm:col-span-2">
+            <div class="fx-full">
               <div class="flex items-center justify-between mb-1.5">
                 <label class="block text-sm font-medium text-ink-700 dark:text-ink-200">Link DB</label>
                 <button
@@ -420,12 +420,12 @@
               </div>
             </div>
 
-            <div class="sm:col-span-2">
+            <div class="fx-full">
               <label class="block text-sm font-medium text-ink-700 dark:text-ink-200 mb-1.5">Harga ($)</label>
               <input v-model.number="addForm.price" type="number" min="0" step="0.5" class="w-full px-3 py-2.5 rounded-xl border border-ink-200 dark:border-ink-800 bg-white dark:bg-cream-800 text-ink-800 dark:text-ink-100 focus:border-brand-400 outline-none text-sm transition" placeholder="0.00" />
             </div>
 
-            <div class="sm:col-span-2">
+            <div class="fx-full">
               <label class="block text-sm font-medium text-ink-700 dark:text-ink-200 mb-1.5">Catatan</label>
               <textarea v-model="addForm.note" rows="2" class="w-full px-3 py-2.5 rounded-xl border border-ink-200 dark:border-ink-800 bg-white dark:bg-cream-800 text-ink-800 dark:text-ink-100 focus:border-brand-400 outline-none text-sm transition resize-none" placeholder="Catatan tambahan..."></textarea>
             </div>
@@ -467,9 +467,9 @@
             </button>
           </div>
 
-          <div class="px-6 py-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="px-6 py-5 fx-grid [--fx-min:14rem] gap-4">
             <!-- Gambar produk -->
-            <div class="sm:col-span-2">
+            <div class="fx-full">
               <label class="block text-sm font-medium text-ink-700 dark:text-ink-200 mb-1.5">Gambar Produk</label>
               <div class="flex items-center gap-4">
                 <div class="w-24 h-24 shrink-0 rounded-xl overflow-hidden border border-ink-200 dark:border-ink-800 bg-cream-100 dark:bg-cream-800 flex items-center justify-center">
@@ -499,7 +499,7 @@
               </div>
             </div>
 
-            <div class="sm:col-span-2">
+            <div class="fx-full">
               <label class="block text-sm font-medium text-ink-700 dark:text-ink-200 mb-1.5">Nama Produk</label>
               <input v-model="editForm.name" type="text" class="w-full px-3 py-2.5 rounded-xl border border-ink-200 dark:border-ink-800 bg-white dark:bg-cream-800 text-ink-800 dark:text-ink-100 focus:border-brand-400 outline-none text-sm transition" placeholder="Nama produk" />
             </div>
@@ -558,12 +558,12 @@
               <input v-model="editForm.uploadDate" type="datetime-local" class="w-full px-3 py-2.5 rounded-xl border border-ink-200 dark:border-ink-800 bg-white dark:bg-cream-800 text-ink-800 dark:text-ink-100 focus:border-brand-400 outline-none text-sm transition" />
             </div>
 
-            <div class="sm:col-span-2">
+            <div class="fx-full">
               <label class="block text-sm font-medium text-ink-700 dark:text-ink-200 mb-1.5">Platform</label>
               <PlatformPicker v-model="editForm.platform" :options="optionsOf('platform')" />
             </div>
 
-            <div class="sm:col-span-2">
+            <div class="fx-full">
               <div class="flex items-center justify-between mb-1.5">
                 <label class="block text-sm font-medium text-ink-700 dark:text-ink-200">Link DB</label>
                 <button
@@ -601,12 +601,12 @@
               </div>
             </div>
 
-            <div class="sm:col-span-2">
+            <div class="fx-full">
               <label class="block text-sm font-medium text-ink-700 dark:text-ink-200 mb-1.5">Harga ($)</label>
               <input v-model.number="editForm.price" type="number" min="0" step="0.5" class="w-full px-3 py-2.5 rounded-xl border border-ink-200 dark:border-ink-800 bg-white dark:bg-cream-800 text-ink-800 dark:text-ink-100 focus:border-brand-400 outline-none text-sm transition" placeholder="0.00" />
             </div>
 
-            <div class="sm:col-span-2">
+            <div class="fx-full">
               <label class="block text-sm font-medium text-ink-700 dark:text-ink-200 mb-1.5">Catatan</label>
               <textarea v-model="editForm.note" rows="2" class="w-full px-3 py-2.5 rounded-xl border border-ink-200 dark:border-ink-800 bg-white dark:bg-cream-800 text-ink-800 dark:text-ink-100 focus:border-brand-400 outline-none text-sm transition resize-none" placeholder="Catatan tambahan..."></textarea>
             </div>

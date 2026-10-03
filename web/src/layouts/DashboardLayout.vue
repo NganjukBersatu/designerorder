@@ -9,7 +9,7 @@ import { useProfile } from '../composables/useProfile'
 
 const route = useRoute()
 const router = useRouter()
-const { logout: clearSession, user } = useAuth()
+const { logout: clearSession, user, role: authRole } = useAuth()
 const { products } = useProducts()
 const { mergeOptions } = useOptions()
 const { settings } = useAppSettings()
@@ -120,11 +120,22 @@ const menu = [
     children: true
   },
   {
+    to: '/tim',
+    label: 'Kelola Tim',
+    adminOnly: true,
+    icon: 'M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75'
+  },
+  {
     to: '/pengaturan',
     label: 'Pengaturan',
     icon: 'M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6'
   },
 ]
+
+// Menu khusus owner/admin disembunyikan dari anggota biasa
+const visibleMenu = computed(() =>
+  menu.filter((m) => !m.adminOnly || authRole.value === 'owner' || authRole.value === 'admin')
+)
 
 function isActive(to) {
   if (to === '/') return route.path === '/'
@@ -258,7 +269,7 @@ function logout() {
 
       <!-- Menu -->
       <nav class="flex-1 overflow-y-auto py-3 px-2.5 space-y-1 text-[13.5px]">
-        <template v-for="m in menu" :key="m.label">
+        <template v-for="m in visibleMenu" :key="m.label">
           <router-link
             v-if="!m.children"
             :to="m.to"
@@ -466,7 +477,7 @@ function logout() {
       </header>
 
       <!-- Main content -->
-      <main class="flex-1 overflow-y-auto p-4 sm:p-6 bg-cream dark:bg-ink-950">
+      <main class="flex-1 min-h-0 flex flex-col overflow-y-auto p-3 sm:p-6 bg-cream dark:bg-ink-950">
         <router-view />
       </main>
     </div>

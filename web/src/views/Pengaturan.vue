@@ -1,5 +1,5 @@
 <template>
-  <div class="w-full max-w-4xl space-y-6">
+  <div class="w-full space-y-6">
     <!-- Kategori pengaturan -->
     <div>
       <div
@@ -35,14 +35,14 @@
       :id="`panel-${activeTab}`"
       role="tabpanel"
       :aria-labelledby="`tab-${activeTab}`"
-      class="grid grid-cols-1 md:grid-cols-2 gap-5"
+      class="fx-grid fx-cap [--fx-min:22rem] [--fx-cap:36rem] gap-5"
     >
       <section
         v-for="group in currentGroups"
         :key="group.id"
         :class="[
           'relative flex flex-col bg-white rounded-card shadow-card border border-ink-100 overflow-hidden',
-          group.id === 'platform' ? 'md:col-span-2' : ''
+          ''
         ]"
       >
         <span class="absolute left-0 top-0 bottom-0 w-1" :class="TONES[group.id]"></span>
@@ -141,7 +141,7 @@
       id="panel-akun"
       role="tabpanel"
       aria-labelledby="tab-akun"
-      class="max-w-2xl space-y-6"
+      class="fx-grid [--fx-min:26rem] gap-6 items-start"
     >
       <!-- Kartu profil -->
       <section class="relative bg-white rounded-card shadow-card border border-ink-100 overflow-hidden">
@@ -430,7 +430,7 @@
       id="panel-tim"
       role="tabpanel"
       aria-labelledby="tab-tim"
-      class="max-w-2xl space-y-6"
+      class="fx-grid [--fx-min:26rem] gap-6 items-start"
     >
       <section class="relative bg-white rounded-card shadow-card border border-ink-100 overflow-hidden">
         <span class="absolute left-0 top-0 bottom-0 w-1 bg-[#14A38B]"></span>
@@ -441,8 +441,8 @@
           </h2>
           <p class="text-[13px] text-ink-500 mt-0.5">
             Semua anggota di sini berbagi produk & pesanan yang sama, apa pun rolenya.
-            <span v-if="role === 'admin'">Sebagai admin, kamu cuma bisa tambah/hapus anggota biasa.</span>
-            <span v-else-if="role === 'member'">Hanya owner/admin yang bisa menambah/menghapus anggota.</span>
+            <span v-if="role === 'member'">Hanya owner/admin yang bisa menambah/menghapus anggota.</span>
+            <router-link v-else to="/tim" class="text-brand-600 hover:underline">Kelola semua tim dan akun →</router-link>
           </p>
         </div>
 
@@ -461,7 +461,8 @@
           <div
             v-for="m in members"
             :key="m.id"
-            class="flex items-center justify-between gap-3 px-3.5 py-3 rounded-xl bg-cream-50"
+            class="flex items-center justify-between gap-3 px-3.5 py-3 rounded-xl bg-cream-50 hover:bg-cream-100 transition cursor-pointer"
+            @click="router.push(`/anggota/${m.id}`)"
           >
             <div class="min-w-0">
               <p class="text-sm font-medium text-ink-800 truncate">
@@ -473,7 +474,7 @@
             <button
               v-if="m.username !== user && canManage(m.role)"
               type="button"
-              @click="removeMember(m)"
+              @click.stop="removeMember(m)"
               class="p-2 rounded-lg hover:bg-danger-50 text-danger-600 transition shrink-0"
               title="Hapus anggota"
               aria-label="Hapus anggota"
@@ -488,7 +489,7 @@
 
         <div v-if="role === 'owner' || role === 'admin'" class="pl-6 pr-5 py-5 border-t border-ink-100 bg-cream-50 space-y-3">
           <h3 class="text-sm font-semibold text-ink-800">Tambah anggota</h3>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div class="fx-grid [--fx-min:12rem] gap-3">
             <input
               v-model="newMember.username"
               type="text"
@@ -504,7 +505,7 @@
           </div>
           <div class="flex items-center justify-between gap-3">
             <select
-              v-if="role === 'owner'"
+              v-if="role === 'owner' || role === 'admin'"
               v-model="newMember.role"
               class="px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition bg-white"
             >
@@ -512,7 +513,6 @@
               <option value="admin">Admin</option>
               <option value="owner">Owner</option>
             </select>
-            <span v-else class="text-sm text-ink-500">Ditambahkan sebagai anggota biasa</span>
             <button
               type="button"
               @click="addMember"
@@ -777,10 +777,9 @@ function roleLabel(r) {
   return ROLE_LABELS[r] || r || '—'
 }
 
-function canManage(targetRole) {
-  if (role.value === 'owner') return true
-  if (role.value === 'admin') return targetRole === 'member'
-  return false
+// Owner dan admin setara: boleh mengelola siapa saja di timnya
+function canManage() {
+  return role.value === 'owner' || role.value === 'admin'
 }
 
 async function loadMembers() {
@@ -804,7 +803,7 @@ async function addMember() {
     await api.post('/team/members', {
       username: newMember.value.username.trim(),
       password: newMember.value.password,
-      role: role.value === 'owner' ? newMember.value.role : 'member',
+      role: newMember.value.role,
     })
     newMember.value = { username: '', password: '', role: 'member' }
     membersMsg.value = { ok: true, text: 'Anggota berhasil ditambahkan' }

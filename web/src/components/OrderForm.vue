@@ -230,7 +230,7 @@ async function submit() {
       <p class="text-[12px] text-ink-400 mt-1">Pilih produk supaya Kategori &amp; Style otomatis terisi.</p>
     </label>
 
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+    <div class="fx-grid [--fx-min:14rem] gap-4">
       <label class="block">
         <span class="text-[13px] font-medium text-ink-700">Tanggal order *</span>
         <input v-model="form.orderDate" type="date" required class="input" />
@@ -263,7 +263,7 @@ async function submit() {
       </template>
 
       <!-- Order dari produk katalog: Kategori/Style ikut produk. Paket cuma kalau produknya punya paket. -->
-      <label v-if="selectedProduct?.packages?.length" class="block sm:col-span-2">
+      <label v-if="selectedProduct?.packages?.length" class="block fx-full">
         <span class="text-[13px] font-medium text-ink-700">Paket</span>
         <div class="mt-1">
           <CustomSelect
@@ -273,13 +273,13 @@ async function submit() {
           />
         </div>
       </label>
-      <p v-else-if="selectedProduct" class="text-[12px] text-ink-400 sm:col-span-2">
+      <p v-else-if="selectedProduct" class="text-[12px] text-ink-400 fx-full">
         Produk ini dijual satuan (tanpa paket).
       </p>
     </div>
 
-    <div class="border-t border-ink-100 pt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-      <label class="block sm:col-span-2">
+    <div class="border-t border-ink-100 pt-4 fx-grid [--fx-min:14rem] gap-4">
+      <label class="block fx-full">
         <span class="text-[13px] font-medium text-ink-700">Nama pembeli / klien</span>
         <input v-model="form.buyerName" type="text" placeholder="Nama pembeli, klien, atau 'internal'" class="input" />
       </label>
@@ -293,7 +293,7 @@ async function submit() {
       </label>
     </div>
 
-    <div class="border-t border-ink-100 pt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+    <div class="border-t border-ink-100 pt-4 fx-grid [--fx-min:14rem] gap-4">
       <label class="block">
         <span class="text-[13px] font-medium text-ink-700">Status *</span>
         <div class="mt-1">

@@ -144,10 +144,6 @@ teams ─┬─ users (role: owner/admin/member)
 
 ## Catatan pengembangan
 
-- `web/src/views/ListProduk.vue` ada di repo tapi **tidak terdaftar** di
-  router (`web/src/router/index.js`) — halaman mati, gak bisa diakses lewat
-  UI. Kalau memang dibutuhkan, tinggal daftarin route-nya; kalau enggak,
-  aman buat dihapus.
 - Backend selalu jalanin `ensureSchema()` tiap start — aman dipanggil
   berkali-kali (pakai `CREATE TABLE IF NOT EXISTS` + migrasi `ALTER TABLE
   ... IF NOT EXISTS`), jadi update skema baru otomatis ke-apply pas

@@ -83,7 +83,7 @@
       </div>
 
       <!-- Statistik penjualan -->
-      <div class="mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="mb-6 fx-grid [--fx-min:11rem] gap-4">
         <div class="relative bg-white rounded-card shadow-card border border-ink-100 overflow-hidden pl-5 pr-4 py-4">
           <span class="absolute left-0 top-0 bottom-0 w-1 bg-ok-500"></span>
           <p class="text-[13px] text-ink-500 mb-1.5">Total Terjual</p>
@@ -116,7 +116,7 @@
       <!-- Informasi produk -->
       <div class="mb-6 bg-white rounded-card shadow-card border border-ink-100 p-5">
         <h3 class="text-base font-semibold text-ink-900 mb-4">Informasi Produk</h3>
-        <dl class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-4 text-sm">
+        <dl class="fx-grid [--fx-min:13rem] gap-x-8 gap-y-4 text-sm">
           <div>
             <dt class="text-[13px] text-ink-500 mb-0.5">Designer</dt>
             <dd class="text-ink-800 font-medium">{{ product.designer || '—' }}</dd>
@@ -143,9 +143,9 @@
               {{ product.price ? formatPrice(product.price) : '—' }}
             </dd>
           </div>
-          <div class="sm:col-span-2 lg:col-span-3">
+          <div class="fx-full">
             <dt class="text-[13px] text-ink-500 mb-1.5">Paket Produk</dt>
-            <dd v-if="product.packages && product.packages.length" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            <dd v-if="product.packages && product.packages.length" class="fx-grid [--fx-min:11rem] gap-2">
               <div
                 v-for="pk in product.packages"
                 :key="pk.id"
@@ -161,7 +161,7 @@
             <dd v-else class="text-ink-300">—</dd>
           </div>
 
-          <div class="sm:col-span-2 lg:col-span-3">
+          <div class="fx-full">
             <dt class="text-[13px] text-ink-500 mb-0.5">Link DB</dt>
             <dd class="font-medium">
               <div v-if="links.length" class="flex flex-wrap gap-x-5 gap-y-1.5">
@@ -183,7 +183,7 @@
               <span v-else class="text-ink-300">—</span>
             </dd>
           </div>
-          <div class="sm:col-span-2 lg:col-span-3">
+          <div class="fx-full">
             <dt class="text-[13px] text-ink-500 mb-0.5">Catatan</dt>
             <dd class="text-ink-700">{{ product.note || '—' }}</dd>
           </div>
@@ -219,7 +219,7 @@
         </div>
 
         <div class="overflow-x-auto">
-          <table class="w-full text-sm">
+          <table v-rtable class="rtable w-full text-sm">
             <thead>
               <tr class="bg-cream-100 text-ink-500 border-b border-ink-100">
                 <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap w-12">No</th>
@@ -236,7 +236,8 @@
               <tr
                 v-for="(sale, index) in filteredSales"
                 :key="sale.id"
-                class="border-b border-ink-50 hover:bg-cream-50/70 transition"
+                class="border-b border-ink-50 hover:bg-cream-50/70 transition cursor-pointer"
+                @click="router.push(`/produk/${route.params.id}/penjualan/${sale.id}`)"
               >
                 <td class="px-4 py-4 text-ink-400">{{ index + 1 }}</td>
                 <td class="px-4 py-4 font-medium text-ink-800">{{ sale.buyer }}</td>
@@ -256,7 +257,7 @@
                   {{ formatPrice((product.price || 0) * sale.qty) }}
                 </td>
                 <td class="px-4 py-4 text-ink-500 text-[13px]">{{ formatDateTime(sale.soldAt) }}</td>
-                <td class="px-4 py-4 text-center">
+                <td class="px-4 py-4 text-center cursor-default" @click.stop>
                   <div class="flex items-center justify-center gap-1">
                     <button
                       @click="openEditSale(sale)"
@@ -327,9 +328,9 @@
             </button>
           </div>
 
-          <div class="px-6 py-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="px-6 py-5 fx-grid [--fx-min:14rem] gap-4">
             <!-- Gambar produk -->
-            <div class="sm:col-span-2">
+            <div class="fx-full">
               <label class="block text-sm font-medium text-ink-700 mb-1.5">Gambar Produk</label>
               <div class="flex items-center gap-4">
                 <div class="w-24 h-24 shrink-0 rounded-xl overflow-hidden border border-ink-200 bg-cream-100 flex items-center justify-center">
@@ -360,7 +361,7 @@
               </div>
             </div>
 
-            <div class="sm:col-span-2">
+            <div class="fx-full">
               <label class="block text-sm font-medium text-ink-700 mb-1.5">Nama Produk</label>
               <input v-model="editForm.name" type="text" class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition" />
             </div>
@@ -413,12 +414,12 @@
               <input v-model="editForm.uploadDate" type="datetime-local" class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition" />
             </div>
 
-            <div class="sm:col-span-2">
+            <div class="fx-full">
               <label class="block text-sm font-medium text-ink-700 mb-1.5">Platform</label>
               <PlatformPicker v-model="editForm.platform" :options="optionsOf('platform')" />
             </div>
 
-            <div class="sm:col-span-2">
+            <div class="fx-full">
               <div class="flex items-center justify-between mb-1.5">
                 <label class="block text-sm font-medium text-ink-700">Link DB</label>
                 <button
@@ -456,12 +457,12 @@
               </div>
             </div>
 
-            <div class="sm:col-span-2">
+            <div class="fx-full">
               <label class="block text-sm font-medium text-ink-700 mb-1.5">Harga ($)</label>
               <input v-model.number="editForm.price" type="number" min="0" step="0.5" class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition" placeholder="0.00" />
             </div>
 
-            <div class="sm:col-span-2">
+            <div class="fx-full">
               <div class="flex items-center justify-between mb-1.5">
                 <label class="block text-sm font-medium text-ink-700">Paket Produk</label>
                 <button
@@ -518,7 +519,7 @@
               </div>
             </div>
 
-            <div class="sm:col-span-2">
+            <div class="fx-full">
               <label class="block text-sm font-medium text-ink-700 mb-1.5">Catatan</label>
               <textarea v-model="editForm.note" rows="2" class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition resize-none" placeholder="Catatan tambahan..."></textarea>
             </div>
@@ -590,8 +591,8 @@
             </button>
           </div>
 
-          <div class="px-6 py-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div class="sm:col-span-2">
+          <div class="px-6 py-5 fx-grid [--fx-min:14rem] gap-4">
+            <div class="fx-full">
               <label class="block text-sm font-medium text-ink-700 mb-1.5">Nama Pembeli</label>
               <input
                 v-model="saleForm.buyer"
@@ -629,7 +630,7 @@
               </datalist>
             </div>
 
-            <div class="sm:col-span-2">
+            <div class="fx-full">
               <label class="block text-sm font-medium text-ink-700 mb-1.5">Tanggal &amp; Jam Terjual</label>
               <input
                 v-model="saleForm.soldAt"
@@ -672,7 +673,7 @@ import PlatformPicker from '../components/PlatformPicker.vue'
 
 const route = useRoute()
 const router = useRouter()
-const { products, getProduct, salesOf, totalSold, isSold, addSale, removeSale, updateSale, updateProduct, removeProduct } = useProducts()
+const { products, getProduct, loadSales, salesOf, totalSold, isSold, addSale, removeSale, updateSale, updateProduct, removeProduct } = useProducts()
 const { optionsOf, mergeOptions } = useOptions()
 const { members } = useTeamMembers()
 
@@ -917,6 +918,7 @@ async function confirmDelete() {
 
 // Kalau dibuka dari tombol centang di List Produk (?jual=1), langsung buka form
 onMounted(() => {
+  loadSales(route.params.id) // riwayat penjualan produk ini (daftar produk hanya membawa agregatnya)
   if (route.query.jual && product.value) {
     openSaleModal()
     router.replace({ path: route.path }) // bersihkan query

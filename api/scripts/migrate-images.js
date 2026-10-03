@@ -24,12 +24,12 @@ const TARGETS = [
 const DATA_URL_RE = /^data:image\/[a-z0-9.+-]+;base64,([A-Za-z0-9+/=\s]+)$/i
 
 async function main() {
-  let pending = 0
+  let pending = false
   for (const [table, column] of TARGETS) {
-    const n = await pool.query(`SELECT count(*)::int AS n FROM ${table} WHERE ${column} LIKE 'data:%'`)
-    pending += n.rows[0].n
+    const r = await pool.query(`SELECT EXISTS (SELECT 1 FROM ${table} WHERE ${column} LIKE 'data:%') AS found`)
+    if (r.rows[0].found) { pending = true; break }
   }
-  if (pending === 0) {
+  if (!pending) {
     console.log('Tidak ada gambar lama (base64) yang perlu dipindah.')
     return
   }

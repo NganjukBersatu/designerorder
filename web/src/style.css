@@ -124,3 +124,181 @@ html.dark *::-webkit-scrollbar-thumb:hover {
   outline: 2px solid theme('colors.brand.500');
   outline-offset: 2px;
 }
+
+/* ============================================================
+   TATA LETAK RESPONSIF BERBASIS FLEX
+   ============================================================ */
+@layer components {
+  /* Pengganti grid kolom: item membungkus otomatis dan berbagi sisa lebar.
+     Lebar minimal item diatur lewat variabel, mis. class="fx-grid [--fx-min:14rem] gap-4".
+     .fx-full = satu baris penuh, .fx-2 = dua kali lebih lebar dari item biasa. */
+  .fx-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+  .fx-grid > * {
+    flex: 1 1 var(--fx-min, 16rem);
+    min-width: 0;
+  }
+  .fx-grid > .fx-full {
+    flex-basis: 100%;
+  }
+  .fx-grid.fx-cap > * {
+    max-width: var(--fx-cap, 32rem);
+  }
+  .fx-grid > .fx-2 {
+    flex-grow: 2;
+    flex-basis: calc(var(--fx-min, 16rem) * 2);
+  }
+
+  /* Halaman yang mengisi seluruh sisa tinggi area konten (daftar/tabel). */
+  .page-fill {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    gap: 1rem;
+  }
+  /* Kartu yang menyerap sisa tinggi; isi gulirnya ada di dalam (.scroll-fill). */
+  .card-fill {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .scroll-fill {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+  }
+}
+
+/* Tabel -> kartu bertumpuk di layar kecil (dipasangkan dengan direktif v-rtable) */
+@media (max-width: 767px) {
+  .rtable {
+    display: block;
+    width: 100%;
+  }
+  .rtable thead {
+    display: none;
+  }
+  .rtable tbody {
+    display: flex;
+    flex-direction: column;
+  }
+  .rtable tbody tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 0.5rem 1rem;
+    padding: 0.875rem 1rem;
+  }
+  .rtable tbody td {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.125rem;
+    flex: 1 1 8rem;
+    min-width: 0 !important;
+    max-width: none !important;
+    width: auto !important;
+    padding: 0 !important;
+    border: 0 !important;
+    position: static !important;
+    text-align: left !important;
+  }
+  .rtable tbody td::before {
+    content: attr(data-label);
+    font-size: 11px;
+    line-height: 1.2;
+    opacity: 0.6;
+  }
+  .rtable tbody td[data-primary] {
+    flex-basis: 100%;
+  }
+  .rtable tbody td[data-primary]::before,
+  .rtable tbody td[data-label=""]::before,
+  .rtable tbody td[data-label="Aksi"]::before {
+    display: none;
+  }
+  .rtable tbody td[data-label="No"] {
+    display: none;
+  }
+  .rtable tbody td[data-label="Aksi"] {
+    flex-basis: 100%;
+    flex-direction: row;
+    justify-content: flex-end;
+  }
+}
+
+/* Varian untuk tabel yang sangat lebar (belasan kolom): jadi kartu di bawah 1440px,
+   dan di atasnya kolom dirapatkan supaya muat tanpa terpotong. */
+@media (max-width: 1439px) {
+  .rtable-xl {
+    display: block;
+    width: 100%;
+  }
+  .rtable-xl thead {
+    display: none;
+  }
+  .rtable-xl tbody {
+    display: flex;
+    flex-direction: column;
+  }
+  .rtable-xl tbody tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 0.5rem 1rem;
+    padding: 0.875rem 1rem;
+  }
+  .rtable-xl tbody td {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.125rem;
+    flex: 1 1 8rem;
+    min-width: 0 !important;
+    max-width: none !important;
+    width: auto !important;
+    padding: 0 !important;
+    border: 0 !important;
+    position: static !important;
+    text-align: left !important;
+  }
+  .rtable-xl tbody td::before {
+    content: attr(data-label);
+    font-size: 11px;
+    line-height: 1.2;
+    opacity: 0.6;
+  }
+  .rtable-xl tbody td[data-primary] {
+    flex-basis: 100%;
+  }
+  .rtable-xl tbody td[data-primary]::before,
+  .rtable-xl tbody td[data-label=""]::before,
+  .rtable-xl tbody td[data-label="Aksi"]::before {
+    display: none;
+  }
+  .rtable-xl tbody td[data-label="No"] {
+    display: none;
+  }
+  .rtable-xl tbody td[data-label="Aksi"] {
+    flex-basis: 100%;
+    flex-direction: row;
+    justify-content: flex-end;
+  }
+}
+
+@media (min-width: 1440px) {
+  .rtable-xl thead th {
+    min-width: 0 !important;
+  }
+  .rtable-xl th,
+  .rtable-xl td {
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+  }
+}

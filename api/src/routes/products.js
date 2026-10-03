@@ -71,6 +71,34 @@ const SELECT_PRODUCT = `
   FROM products p
 `
 
+// Versi untuk DAFTAR produk: TANPA isi penjualan. Satu produk bisa punya ribuan penjualan,
+// dan menyertakan semuanya membuat respons membengkak tanpa batas (terukur 748 ms di 2.000
+// produk x 50 penjualan). Cukup agregatnya (soldQty, salesCount); isi penjualan satu produk
+// ada di GET /api/products/:id, dan semua penjualan tim ada di GET /api/sales (berpaginasi).
+const SELECT_PRODUCT_LIST = `
+  SELECT
+    p.*,
+    COALESCE(
+      (SELECT json_agg(json_build_object('id', l.id, 'url', l.url, 'position', l.position) ORDER BY l.position)
+       FROM product_links l WHERE l.product_id = p.id),
+      '[]'
+    ) AS links,
+    COALESCE(
+      (SELECT json_agg(json_build_object(
+          'id', pk.id, 'name', pk.name, 'price', pk.price, 'description', pk.description
+        ) ORDER BY pk.position)
+       FROM product_packages pk WHERE pk.product_id = p.id),
+      '[]'
+    ) AS packages,
+    sa.sold_qty,
+    sa.sales_count
+  FROM products p
+  LEFT JOIN LATERAL (
+    SELECT COALESCE(SUM(s.qty), 0)::int AS sold_qty, COUNT(*)::int AS sales_count
+    FROM sales s WHERE s.product_id = p.id
+  ) sa ON true
+`
+
 function mapRow(r) {
   return {
     id: r.id,
@@ -95,6 +123,9 @@ function mapRow(r) {
     note: r.note,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
+    // Dari agregat server (daftar produk) atau dihitung dari penjualan yang ikut (detail produk)
+    soldQty: r.sold_qty ?? (r.sales || []).reduce((sum, s) => sum + (Number(s.qty) || 0), 0),
+    salesCount: r.sales_count ?? (r.sales || []).length,
     sales: (r.sales || []).map((s) => ({
       id: s.id,
       productId: s.productId,
@@ -111,31 +142,36 @@ function mapRow(r) {
 async function replaceLinks(client, productId, urls) {
   await client.query('DELETE FROM product_links WHERE product_id = $1', [productId])
   const cleaned = (urls || []).filter(Boolean)
-  for (let i = 0; i < cleaned.length; i++) {
-    await client.query(
-      'INSERT INTO product_links (product_id, url, position) VALUES ($1, $2, $3)',
-      [productId, cleaned[i], i]
-    )
-  }
+  if (!cleaned.length) return
+  await client.query(
+    `INSERT INTO product_links (product_id, url, position)
+     SELECT $1, t.url, t.pos - 1 FROM unnest($2::text[]) WITH ORDINALITY AS t(url, pos)`,
+    [productId, cleaned]
+  )
 }
 
 async function replacePackages(client, productId, packages) {
   await client.query('DELETE FROM product_packages WHERE product_id = $1', [productId])
   const cleaned = (packages || []).filter((pk) => pk && pk.name && pk.name.trim())
-  for (let i = 0; i < cleaned.length; i++) {
-    const pk = cleaned[i]
-    await client.query(
-      'INSERT INTO product_packages (product_id, name, price, description, position) VALUES ($1, $2, $3, $4, $5)',
-      [productId, pk.name.trim(), pk.price || 0, pk.description || null, i]
-    )
-  }
+  if (!cleaned.length) return
+  await client.query(
+    `INSERT INTO product_packages (product_id, name, price, description, position)
+     SELECT $1, t.name, t.price, t.description, t.pos - 1
+     FROM unnest($2::text[], $3::numeric[], $4::text[]) WITH ORDINALITY AS t(name, price, description, pos)`,
+    [
+      productId,
+      cleaned.map((pk) => pk.name.trim()),
+      cleaned.map((pk) => pk.price || 0),
+      cleaned.map((pk) => pk.description || null),
+    ]
+  )
 }
 
 // GET /api/products
 router.get('/', async (req, res) => {
   try {
     const result = await pool.query(
-      `${SELECT_PRODUCT} WHERE p.team_id = $1 ORDER BY p.created_at DESC`,
+      `${SELECT_PRODUCT_LIST} WHERE p.team_id = $1 ORDER BY p.created_at DESC`,
       [req.user.teamId]
     )
     res.json({ data: result.rows.map(mapRow) })
@@ -342,6 +378,41 @@ router.post('/:id/sales', validateBody(saleFieldsCreate), async (req, res) => {
   } catch (err) {
     console.error(err)
     res.status(500).json({ message: 'Gagal mencatat penjualan', error: err.message })
+  }
+})
+
+// GET /api/products/:id/sales/:saleId — detail satu penjualan (beserta ringkasan produknya)
+router.get('/:id/sales/:saleId', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT s.*, p.name AS product_name, p.image AS product_image, p.price AS product_price
+       FROM sales s
+       JOIN products p ON p.id = s.product_id
+       WHERE s.id = $1 AND s.product_id = $2 AND p.team_id = $3`,
+      [req.params.saleId, req.params.id, req.user.teamId]
+    )
+    if (!result.rows.length) {
+      return res.status(404).json({ message: 'Penjualan tidak ditemukan' })
+    }
+    const r = result.rows[0]
+    res.json({
+      data: {
+        id: r.id,
+        productId: r.product_id,
+        buyer: r.buyer,
+        qty: r.qty,
+        platform: r.platform,
+        package: r.package,
+        total: r.total !== null ? Number(r.total) : null,
+        soldAt: r.sold_at,
+        createdAt: r.created_at,
+        updatedAt: r.updated_at,
+        product: { id: r.product_id, name: r.product_name, image: r.product_image, price: Number(r.product_price) },
+      },
+    })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ message: 'Gagal mengambil penjualan', error: err.message })
   }
 })
 

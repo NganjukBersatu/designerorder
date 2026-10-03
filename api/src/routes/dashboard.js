@@ -2,84 +2,109 @@ import { Router } from 'express'
 import { pool } from '../config/db.js'
 
 const router = Router()
-const NAMA_BULAN = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
 
-// Ambil ?month=YYYY-MM dari query, jatuh ke bulan berjalan kalau kosong/tidak valid
-function parseMonthParam(raw) {
+// Ambil ?month=YYYY-MM dari query, jatuh ke bulan berjalan kalau kosong/tidak valid.
+// Hasilnya selalu tanggal 1 bulan tersebut (YYYY-MM-01).
+function parseMonthStart(raw) {
   if (typeof raw === 'string' && /^\d{4}-\d{2}$/.test(raw)) {
     const monthNum = Number(raw.slice(5, 7))
     if (monthNum >= 1 && monthNum <= 12) return `${raw}-01`
   }
-  return new Date().toISOString().slice(0, 10)
+  return `${new Date().toISOString().slice(0, 7)}-01`
 }
 
+// Semua filter tanggal di bawah berbentuk rentang (order_date >= x AND order_date < y)
+// supaya memakai index (team_id, order_date). Membungkus kolom dengan date_trunc()
+// membuat index tidak terpakai dan seluruh order tim dipindai di setiap request.
+//
 // GET /api/dashboard/summary?month=YYYY-MM
 router.get('/summary', async (req, res) => {
   const teamId = req.user.teamId
-  const anchorMonth = parseMonthParam(req.query.month)
+  const monthStart = parseMonthStart(req.query.month)
+
   try {
-    const statusResult = await pool.query('SELECT status FROM orders WHERE team_id = $1', [teamId])
-    const totalOrders = statusResult.rows.length
-    const pendingOrders = statusResult.rows.filter((r) => r.status === 'Pending').length
-    const progressOrders = statusResult.rows.filter((r) => r.status === 'Progress').length
-    const doneOrders = statusResult.rows.filter((r) => r.status === 'Done').length
+    const [statusRes, totalsRes, monthlyRes, categoryRes, recentRes] = await Promise.all([
+      // Hitung per status di database (bukan menarik semua baris lalu dihitung di JS)
+      pool.query(
+        'SELECT status, count(*)::int AS n FROM orders WHERE team_id = $1 GROUP BY status',
+        [teamId]
+      ),
 
-    const totalRevenueResult = await pool.query(
-      'SELECT COALESCE(SUM(price), 0) AS total FROM orders WHERE team_id = $1',
-      [teamId]
-    )
-    const monthRevenueResult = await pool.query(`
-      SELECT COALESCE(SUM(price), 0) AS total FROM orders
-      WHERE team_id = $1 AND date_trunc('month', order_date) = date_trunc('month', $2::date)
-    `, [teamId, anchorMonth])
+      // Total seluruh pendapatan + pendapatan bulan terpilih dalam satu kali baca
+      pool.query(
+        `SELECT
+           COALESCE(SUM(price), 0) AS total,
+           COALESCE(SUM(price) FILTER (
+             WHERE order_date >= $2::date AND order_date < $2::date + interval '1 month'
+           ), 0) AS month_total
+         FROM orders WHERE team_id = $1`,
+        [teamId, monthStart]
+      ),
 
-    // Pendapatan 12 bulan terakhir, berakhir di bulan yang dipilih
-    const monthlyResult = await pool.query(`
-      WITH bulan AS (
-        SELECT date_trunc('month', $2::date) - (n || ' month')::interval AS periode
-        FROM generate_series(11, 0, -1) AS n
-      )
-      SELECT
-        b.periode,
-        COALESCE(SUM(o.price), 0) AS revenue,
-        COUNT(o.id) AS orders
-      FROM bulan b
-      LEFT JOIN orders o ON date_trunc('month', o.order_date) = b.periode AND o.team_id = $1
-      GROUP BY b.periode
-      ORDER BY b.periode ASC
-    `, [teamId, anchorMonth])
-    const monthlyRevenue = monthlyResult.rows.map((r) => ({
-      month: new Date(r.periode).toISOString().slice(0, 7),
-      revenue: Number(r.revenue),
-      orders: Number(r.orders),
-    }))
+      // Pendapatan 12 bulan terakhir, berakhir di bulan terpilih: SATU pemindaian rentang
+      // lalu dikelompokkan per bulan. (Versi join per-bulan terbukti lebih lambat di benchmark
+      // 500 ribu order: planner memilih index yang salah.) Bulan kosong diisi di bawah.
+      pool.query(
+        `SELECT date_trunc('month', order_date)::date AS periode,
+                COALESCE(SUM(price), 0) AS revenue,
+                COUNT(*)::int AS orders
+         FROM orders
+         WHERE team_id = $1
+           AND order_date >= $2::date - interval '11 month'
+           AND order_date <  $2::date + interval '1 month'
+         GROUP BY 1`,
+        [teamId, monthStart]
+      ),
 
-    // Performa per kategori: bulan yang dipilih vs bulan sebelumnya
-    const categoryNowResult = await pool.query(`
-      SELECT COALESCE(NULLIF(category, ''), 'Tanpa kategori') AS category, COALESCE(SUM(price), 0) AS revenue, COUNT(*) AS orders
-      FROM orders
-      WHERE team_id = $1 AND date_trunc('month', order_date) = date_trunc('month', $2::date)
-      GROUP BY 1
-    `, [teamId, anchorMonth])
-    const categoryPrevResult = await pool.query(`
-      SELECT COALESCE(NULLIF(category, ''), 'Tanpa kategori') AS category, COALESCE(SUM(price), 0) AS revenue
-      FROM orders
-      WHERE team_id = $1 AND date_trunc('month', order_date) = date_trunc('month', $2::date - interval '1 month')
-      GROUP BY 1
-    `, [teamId, anchorMonth])
-    const prevMap = Object.fromEntries(categoryPrevResult.rows.map((r) => [r.category, Number(r.revenue)]))
-    const categoryPerformance = categoryNowResult.rows.map((r) => {
-      const revenue = Number(r.revenue)
-      const prev = prevMap[r.category] || 0
-      const changePercent = prev > 0 ? Math.round(((revenue - prev) / prev) * 100) : revenue > 0 ? 100 : 0
-      return { category: r.category, revenue, orders: Number(r.orders), changePercent }
-    })
+      // Performa per kategori: bulan terpilih vs bulan sebelumnya, satu kali baca untuk keduanya
+      pool.query(
+        `SELECT
+           COALESCE(NULLIF(category, ''), 'Tanpa kategori') AS category,
+           COALESCE(SUM(price) FILTER (WHERE order_date >= $2::date), 0) AS revenue,
+           (COUNT(*) FILTER (WHERE order_date >= $2::date))::int AS orders,
+           COALESCE(SUM(price) FILTER (WHERE order_date < $2::date), 0) AS prev_revenue
+         FROM orders
+         WHERE team_id = $1
+           AND order_date >= $2::date - interval '1 month'
+           AND order_date <  $2::date + interval '1 month'
+         GROUP BY 1`,
+        [teamId, monthStart]
+      ),
 
-    const recentResult = await pool.query(
-      'SELECT * FROM orders WHERE team_id = $1 ORDER BY created_at DESC LIMIT 5',
-      [teamId]
-    )
-    const recentOrders = recentResult.rows.map((r) => ({
+      // Hanya kolom yang dipakai tampilan (tanpa catatan panjang / kolom pencarian)
+      pool.query(
+        `SELECT id, order_date, title, buyer_name, category, character_type, style, status,
+                price, store_name, buyer_reference
+         FROM orders WHERE team_id = $1 ORDER BY created_at DESC LIMIT 5`,
+        [teamId]
+      ),
+    ])
+
+    const countOf = (status) => statusRes.rows.find((r) => r.status === status)?.n || 0
+    const pendingOrders = countOf('Pending')
+    const progressOrders = countOf('Progress')
+    const doneOrders = countOf('Done')
+
+    // 12 bulan berurutan (lama -> baru); bulan tanpa order tetap tampil dengan nilai 0
+    const byMonth = new Map(monthlyRes.rows.map((r) => [String(r.periode).slice(0, 7), r])) // DATE -> 'YYYY-MM-DD'
+    const [year, month] = monthStart.split('-').map(Number)
+    const monthlyRevenue = []
+    for (let i = 11; i >= 0; i--) {
+      const key = new Date(Date.UTC(year, month - 1 - i, 1)).toISOString().slice(0, 7)
+      const row = byMonth.get(key)
+      monthlyRevenue.push({ month: key, revenue: row ? Number(row.revenue) : 0, orders: row ? row.orders : 0 })
+    }
+
+    const categoryPerformance = categoryRes.rows
+      .filter((r) => r.orders > 0) // hanya kategori yang punya order di bulan terpilih
+      .map((r) => {
+        const revenue = Number(r.revenue)
+        const prev = Number(r.prev_revenue)
+        const changePercent = prev > 0 ? Math.round(((revenue - prev) / prev) * 100) : revenue > 0 ? 100 : 0
+        return { category: r.category, revenue, orders: r.orders, changePercent }
+      })
+
+    const recentOrders = recentRes.rows.map((r) => ({
       id: r.id,
       orderDate: r.order_date,
       title: r.title,
@@ -94,12 +119,12 @@ router.get('/summary', async (req, res) => {
     }))
 
     res.json({
-      totalOrders,
+      totalOrders: pendingOrders + progressOrders + doneOrders,
       pendingOrders,
       progressOrders,
       doneOrders,
-      totalRevenue: Number(totalRevenueResult.rows[0].total),
-      monthRevenue: Number(monthRevenueResult.rows[0].total),
+      totalRevenue: Number(totalsRes.rows[0].total),
+      monthRevenue: Number(totalsRes.rows[0].month_total),
       monthlyRevenue,
       categoryPerformance,
       recentOrders,

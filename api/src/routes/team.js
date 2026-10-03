@@ -36,13 +36,10 @@ router.get('/members', async (req, res) => {
   }
 })
 
-// Owner: bisa kelola siapa saja, boleh assign role apa saja.
-// Admin: cuma boleh kelola anggota role 'member' (gak bisa bikin/hapus owner/admin lain).
+// Owner dan admin setara: boleh kelola siapa saja dan assign role apa saja.
 // Biasa (member): gak boleh kelola anggota sama sekali.
-function canManage(requesterRole, targetRole) {
-  if (requesterRole === 'owner') return true
-  if (requesterRole === 'admin') return targetRole === 'member'
-  return false
+function canManage(requesterRole) {
+  return requesterRole === 'owner' || requesterRole === 'admin'
 }
 
 // POST /api/team/members
@@ -74,6 +71,32 @@ router.post('/members', validateBody(memberFieldsCreate), async (req, res) => {
   } catch (err) {
     console.error(err)
     res.status(500).json({ message: 'Gagal menambah anggota', error: err.message })
+  }
+})
+
+// GET /api/team/members/:id — detail satu anggota tim (hanya dari tim yang sama)
+router.get('/members/:id', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT u.*, (SELECT count(*)::int FROM orders o WHERE o.created_by = u.id) AS order_count
+       FROM users u WHERE u.id = $1 AND u.team_id = $2`,
+      [req.params.id, req.user.teamId]
+    )
+    if (!result.rows.length) {
+      return res.status(404).json({ message: 'Anggota tidak ditemukan' })
+    }
+    const u = result.rows[0]
+    res.json({
+      data: {
+        ...mapMember(u),
+        displayName: u.display_name || '',
+        photo: u.photo || '',
+        orderCount: u.order_count,
+      },
+    })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ message: 'Gagal mengambil anggota', error: err.message })
   }
 })
 

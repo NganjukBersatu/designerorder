@@ -63,6 +63,27 @@ async function loadMonthOrders() {
   }
 }
 
+// Penjualan bulan terpilih (semua halaman) + 6 terbaru, dari endpoint berpaginasi
+async function loadSales() {
+  try {
+    const all = []
+    let page = 1
+    let totalPages = 1
+    do {
+      const res = await api.get(`/sales?month=${selectedMonth.value}&page=${page}&limit=200`)
+      all.push(...(res.data || []))
+      totalPages = res.pagination?.totalPages || 1
+      page++
+    } while (page <= totalPages)
+    monthSales.value = all
+    const recent = await api.get('/sales?page=1&limit=6')
+    recentSales.value = recent.data || []
+  } catch (err) {
+    monthSales.value = []
+    recentSales.value = []
+  }
+}
+
 async function load() {
   loading.value = true
   errorMsg.value = ''
@@ -70,6 +91,7 @@ async function load() {
     const [summaryRes] = await Promise.all([
       api.get(`/dashboard/summary?month=${selectedMonth.value}`),
       loadMonthOrders(),
+      loadSales(),
     ])
     summary.value = summaryRes
   } catch (err) {
@@ -81,7 +103,7 @@ async function load() {
 onMounted(load)
 
 // ========== PRODUK & PENJUALAN (data dari useProducts) ==========
-const { products, sales, getProduct, totalSold, isSold } = useProducts()
+const { products, totalSold, isSold } = useProducts()
 
 // Nama field gambar produk. Sesuaikan urutannya kalau field di API/data kamu berbeda.
 const PRODUCT_IMAGE_KEYS = ['image', 'imageUrl', 'photo', 'thumbnail', 'coverImage']
@@ -94,16 +116,9 @@ const totalProducts = computed(() => products.value.length)
 const soldProducts = computed(() => products.value.filter((p) => isSold(p.id)).length)
 const unsoldProducts = computed(() => totalProducts.value - soldProducts.value)
 
-// Hanya hitung penjualan yang produknya masih ada
-const validSales = computed(() =>
-  sales.value
-    .map((s) => ({ ...s, product: getProduct(s.productId) }))
-    .filter((s) => s.product)
-)
-
-const totalUnits = computed(() =>
-  validSales.value.reduce((sum, s) => sum + (Number(s.qty) || 0), 0)
-)
+// Total unit & jumlah transaksi: agregat dari server (tiap produk membawa soldQty / salesCount)
+const totalUnits = computed(() => products.value.reduce((sum, p) => sum + (p.soldQty || 0), 0))
+const totalTransactions = computed(() => products.value.reduce((sum, p) => sum + (p.salesCount || 0), 0))
 
 // 5 produk dengan unit terjual terbanyak
 const topProducts = computed(() =>
@@ -139,21 +154,13 @@ const categoryStats = computed(() => {
 
 const maxCategoryRevenue = computed(() => Math.max(...categoryStats.value.map((c) => c.revenue), 1))
 
-// 6 penjualan terbaru dari semua produk
-const recentSales = computed(() =>
-  [...validSales.value]
-    .sort((a, b) => new Date(b.soldAt) - new Date(a.soldAt))
-    .slice(0, 6)
-)
+// 6 penjualan terbaru dari semua produk (GET /sales), dimuat di load()
+const recentSales = ref([])
 
 // ========== EKSPOR (CSV & Cetak) ==========
 
-// Penjualan produk pada bulan yang sedang dipilih (data lengkap, dari useProducts)
-const monthSales = computed(() =>
-  validSales.value
-    .filter((s) => monthKeyOf(s.soldAt) === selectedMonth.value)
-    .sort((a, b) => new Date(b.soldAt) - new Date(a.soldAt))
-)
+// Penjualan produk pada bulan yang sedang dipilih (GET /sales?month=), dimuat di load()
+const monthSales = ref([])
 
 const saleValue = (s) => (s.product.price || 0) * (Number(s.qty) || 0)
 
@@ -313,9 +320,9 @@ const peakMonth = computed(() => {
         <div class="h-px flex-1 bg-ink-100"></div>
       </div>
 
-      <div v-if="loading" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:auto-rows-[92px]">
-        <div class="lg:col-span-2 lg:row-span-2 h-44 lg:h-auto rounded-card bg-white shadow-card animate-pulse" />
-        <div v-for="i in 4" :key="i" class="h-24 lg:h-auto rounded-card bg-white shadow-card animate-pulse" />
+      <div v-if="loading" class="fx-grid [--fx-min:11rem] gap-4">
+        <div class="fx-2 h-28 rounded-card bg-white shadow-card animate-pulse" />
+        <div v-for="i in 4" :key="i" class="h-28 rounded-card bg-white shadow-card animate-pulse" />
       </div>
 
       <div v-else-if="errorMsg" class="bg-white rounded-card shadow-card p-6 text-center">
@@ -325,8 +332,8 @@ const peakMonth = computed(() => {
 
       <template v-else-if="summary">
         <!-- Kartu KPI: pendapatan total jadi sorotan, sisanya melengkapi di sampingnya -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 lg:grid-rows-2 gap-4">
-          <div class="sm:col-span-2 lg:row-span-2 bg-brand-500 rounded-card p-5 flex flex-col justify-between text-white relative overflow-hidden">
+        <div class="fx-grid [--fx-min:11rem] gap-4">
+          <div class="fx-2 bg-brand-500 rounded-card p-5 flex flex-col justify-between text-white relative overflow-hidden">
             <div class="absolute -right-6 -top-6 w-28 h-28 rounded-full bg-white/10"></div>
             <div class="absolute -right-2 top-14 w-16 h-16 rounded-full bg-white/10"></div>
             <div class="flex items-start justify-between relative">
@@ -451,16 +458,17 @@ const peakMonth = computed(() => {
             <p class="text-[12px] text-ink-400 mt-1 max-w-[260px]">Grafik akan mulai terisi begitu ada pesanan dengan pendapatan tercatat.</p>
           </div>
 
-          <div v-else class="flex items-end gap-2 h-44">
+          <div v-else class="flex items-stretch gap-1 sm:gap-2 h-44 sm:h-56">
             <div
               v-for="m in summary.monthlyRevenue"
               :key="m.month"
-              class="flex-1 flex flex-col items-center justify-end gap-1.5 group"
+              class="flex-1 min-w-0 flex flex-col items-center gap-1.5 group"
             >
               <span
                 class="text-[11px] font-medium text-ink-500 transition-opacity"
                 :class="peakMonth && m.month === peakMonth.month ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'"
               >{{ amount(m.revenue) }}</span>
+              <div class="flex-1 min-h-0 w-full flex items-end">
               <div
                 class="w-full rounded-t-md transition-all"
                 :class="peakMonth && m.month === peakMonth.month ? 'bg-brand-500' : 'bg-brand-200 group-hover:bg-brand-400'"
@@ -469,6 +477,7 @@ const peakMonth = computed(() => {
                 }"
                 :title="amount(m.revenue)"
               />
+              </div>
               <span class="text-[10px] text-ink-400">{{ monthLabel(m.month) }}</span>
             </div>
           </div>
@@ -563,7 +572,7 @@ const peakMonth = computed(() => {
       </div>
 
       <!-- Kartu statistik produk -->
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div class="fx-grid [--fx-min:11rem] gap-4">
         <router-link to="/kategori" class="bg-white rounded-card shadow-card p-4 hover:bg-ink-500/5 transition flex flex-col justify-between">
           <div class="flex items-start justify-between">
             <p class="text-[12px] text-ink-400">Total produk</p>
@@ -594,7 +603,7 @@ const peakMonth = computed(() => {
           </div>
           <div>
             <p class="text-[22px] font-semibold text-ink-900">{{ totalUnits }}</p>
-            <p class="text-[11px] text-ink-400">dari {{ sales.length }} transaksi</p>
+            <p class="text-[11px] text-ink-400">dari {{ totalTransactions }} transaksi</p>
           </div>
         </div>
       </div>
@@ -602,7 +611,7 @@ const peakMonth = computed(() => {
       <!-- Ringkasan per kategori -->
       <div v-if="categoryStats.length" class="bg-white rounded-card shadow-card p-5">
         <h2 class="text-[15px] font-semibold text-ink-900 mb-4">Ringkasan per kategori</h2>
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div class="fx-grid [--fx-min:14rem] gap-3">
           <router-link
             v-for="c in categoryStats"
             :key="c.name"
@@ -625,7 +634,7 @@ const peakMonth = computed(() => {
         </div>
       </div>
 
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div class="fx-grid [--fx-min:22rem] gap-6">
         <!-- Produk terlaris -->
         <div class="bg-white rounded-card shadow-card p-5">
           <div class="flex items-center justify-between mb-4">
@@ -724,7 +733,7 @@ const peakMonth = computed(() => {
             <router-link
               v-for="s in recentSales"
               :key="s.id"
-              :to="`/produk/${s.productId}`"
+              :to="`/produk/${s.productId}/penjualan/${s.id}`"
               class="flex items-center justify-between gap-3 py-3 hover:bg-ink-500/5 -mx-2 px-2 rounded-lg transition"
             >
               <div class="min-w-0">
@@ -760,7 +769,7 @@ const peakMonth = computed(() => {
         </div>
 
         <div v-else class="overflow-x-auto">
-          <table class="w-full text-[13px]">
+          <table v-rtable class="rtable w-full text-[13px]">
             <thead>
               <tr class="bg-cream-100 text-ink-500 text-left">
                 <th class="px-4 py-3 font-medium whitespace-nowrap">Tanggal &amp; jam</th>
@@ -773,11 +782,16 @@ const peakMonth = computed(() => {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="s in monthSales" :key="s.id" class="border-b border-ink-50">
+              <tr
+                v-for="s in monthSales"
+                :key="s.id"
+                class="border-b border-ink-50 hover:bg-ink-500/5 transition cursor-pointer"
+                @click="$router.push(`/produk/${s.productId}/penjualan/${s.id}`)"
+              >
                 <td class="px-4 py-3 text-ink-500 whitespace-nowrap">{{ formatDateTime(s.soldAt) }}</td>
                 <td class="px-4 py-3 font-medium text-ink-800">{{ s.buyer }}</td>
                 <td class="px-4 py-3 text-ink-600">
-                  <router-link :to="`/produk/${s.productId}`" class="hover:text-brand-600 transition">{{ s.product.name }}</router-link>
+                  <router-link :to="`/produk/${s.productId}`" class="hover:text-brand-600 transition" @click.stop>{{ s.product.name }}</router-link>
                 </td>
                 <td class="px-4 py-3 text-ink-600">{{ s.package || 'Satuan' }}</td>
                 <td class="px-4 py-3 text-ink-600">{{ s.platform || '—' }}</td>

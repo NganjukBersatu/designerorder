@@ -102,8 +102,8 @@ function showToast(message, type = 'success') {
         </div>
       </div>
 
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div class="lg:col-span-2 bg-white rounded-card shadow-card p-5">
+      <div class="fx-grid [--fx-min:20rem] gap-4 items-start">
+        <div class="fx-2 bg-white rounded-card shadow-card p-5">
           <div class="flex items-center justify-between mb-4">
             <h2 class="text-[15px] font-semibold text-ink-900">{{ editing ? 'Edit detail' : 'Detail order' }}</h2>
             <button
@@ -119,7 +119,7 @@ function showToast(message, type = 'success') {
           <OrderForm v-if="editing" :initial="order" @saved="onSaved" @cancel="editing = false" />
 
           <template v-else>
-            <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-[13px]">
+            <dl class="fx-grid [--fx-min:16rem] gap-x-6 gap-y-3 text-[13px]">
               <div v-for="f in fields" :key="f.label" class="flex justify-between gap-3 border-b border-ink-50 pb-2">
                 <dt class="text-ink-400">{{ f.label }}</dt>
                 <dd class="font-medium text-ink-800 text-right break-words">{{ f.value || '—' }}</dd>

@@ -43,7 +43,7 @@ function getClient() {
 
 // Jenis gambar ditentukan dari isi file (magic bytes), bukan dari Content-Type
 // atau nama file yang dikirim client — keduanya bisa dipalsukan.
-export function detectImageType(buf) {
+function detectImageType(buf) {
   if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) {
     return { mime: 'image/jpeg', ext: 'jpg' }
   }

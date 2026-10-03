@@ -6,7 +6,7 @@ import { ref } from 'vue'
 import { API_BASE, getToken, setToken } from '../utils/api.js'
 
 const products = ref([])
-const sales = ref([])
+const salesByProduct = ref({}) // { [productId]: penjualan produk itu } — dimuat per produk (halaman detail)
 const loading = ref(false)
 const error = ref(null)
 
@@ -36,14 +36,12 @@ async function request(path, options = {}) {
   return body.data
 }
 
-// Susun ulang `sales` global dari data yang sudah nempel di tiap produk
-// (backend mengirim sales sebagai bagian dari respons produk).
-function flattenSales(productList) {
-  const all = []
-  for (const p of productList) {
-    for (const s of p.sales || []) all.push(s)
-  }
-  return all
+// Daftar produk tidak membawa isi penjualan (hanya agregat: soldQty, salesCount) supaya
+// responsnya tidak membengkak. Isi penjualan SATU produk dimuat dari GET /products/:id
+// saat halaman detailnya dibuka.
+async function loadSales(productId) {
+  const data = await request(`/products/${productId}`)
+  salesByProduct.value = { ...salesByProduct.value, [productId]: data.sales || [] }
 }
 
 // ========== FETCH ==========
@@ -53,7 +51,6 @@ export async function fetchProducts() {
   try {
     const data = await request('/products')
     products.value = data
-    sales.value = flattenSales(data)
   } catch (err) {
     error.value = err.message
     console.error('Gagal memuat produk:', err.message)
@@ -123,13 +120,20 @@ function getProduct(id) {
 
   // Riwayat penjualan satu produk, terbaru di atas
  function salesOf(productId) {
-  return sales.value
-    .filter(s => String(s.productId) === String(productId))
+  return salesByProduct.value[productId] || []
 }
 
-  // Total unit terjual = jumlah qty dari semua transaksi
+  // Total unit terjual: agregat dari server (soldQty), bukan dijumlah di browser
   function totalSold(productId) {
-    return salesOf(productId).reduce((sum, s) => sum + (Number(s.qty) || 0), 0)
+    return getProduct(productId)?.soldQty || 0
+  }
+
+  // Cari produk pemilik sebuah penjualan (untuk pemanggil yang tidak menyebut productId)
+  function productIdOfSale(saleId) {
+    for (const [pid, list] of Object.entries(salesByProduct.value)) {
+      if (list.some(s => s.id === saleId)) return pid
+    }
+    return undefined
   }
 
   function isSold(productId) {
@@ -138,26 +142,26 @@ function getProduct(id) {
 
   async function addSale(productId, data) {
     await request(`/products/${productId}/sales`, { method: 'POST', body: JSON.stringify(data) })
-    await fetchProducts()
+    await Promise.all([fetchProducts(), loadSales(productId)])
   }
 
   async function removeSale(saleId, productId) {
     // productId dibutuhkan karena endpoint di-nest di bawah /products/:id/sales/:saleId
-    const pid = productId ?? sales.value.find(s => s.id === saleId)?.productId
+    const pid = productId ?? productIdOfSale(saleId)
     await request(`/products/${pid}/sales/${saleId}`, { method: 'DELETE' })
-    await fetchProducts()
+    await Promise.all([fetchProducts(), loadSales(pid)])
   }
 
   async function updateSale(saleId, data, productId) {
     // productId dibutuhkan karena endpoint di-nest di bawah /products/:id/sales/:saleId
-    const pid = productId ?? sales.value.find(s => s.id === saleId)?.productId
+    const pid = productId ?? productIdOfSale(saleId)
     await request(`/products/${pid}/sales/${saleId}`, { method: 'PATCH', body: JSON.stringify(data) })
-    await fetchProducts()
+    await Promise.all([fetchProducts(), loadSales(pid)])
   }
 
   return {
     products,
-    sales,
+    loadSales,
     loading,
     error,
     fetchProducts,

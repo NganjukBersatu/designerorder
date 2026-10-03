@@ -116,18 +116,19 @@ function canModify(row, user) {
 async function replaceLinks(client, orderId, urls) {
   await client.query('DELETE FROM order_links WHERE order_id = $1', [orderId])
   const cleaned = (urls || []).map((u) => String(u).trim()).filter(Boolean)
-  for (let i = 0; i < cleaned.length; i++) {
-    await client.query(
-      'INSERT INTO order_links (order_id, url, position) VALUES ($1, $2, $3)',
-      [orderId, cleaned[i], i]
-    )
-  }
+  if (!cleaned.length) return
+  // Satu INSERT untuk semua link; urutan dijaga lewat WITH ORDINALITY
+  await client.query(
+    `INSERT INTO order_links (order_id, url, position)
+     SELECT $1, t.url, t.pos - 1 FROM unnest($2::text[]) WITH ORDINALITY AS t(url, pos)`,
+    [orderId, cleaned]
+  )
 }
 
-// GET /api/orders?search=&status=&mine=true&month=YYYY-MM&page=&limit=
+// GET /api/orders?search=&status=&mine=true&createdBy=<userId>&month=YYYY-MM&page=&limit=
 router.get('/', async (req, res) => {
   try {
-    const { search, status, mine, month } = req.query
+    const { search, status, mine, month, createdBy } = req.query
     const params = [req.user.teamId]
     const where = ['o.team_id = $1']
 
@@ -145,6 +146,11 @@ router.get('/', async (req, res) => {
       // order_date >= awal bulan DAN < awal bulan berikutnya (memakai index order_date)
       params.push(`${month}-01`)
       where.push(`o.order_date >= $${params.length}::date AND o.order_date < $${params.length}::date + interval '1 month'`)
+    }
+    if (createdBy) {
+      if (!isUuid(createdBy)) return res.status(400).json({ message: 'createdBy tidak valid' })
+      params.push(createdBy)
+      where.push(`o.created_by = $${params.length}`)
     }
     if (mine === 'true' || mine === '1') {
       params.push(req.user.id)

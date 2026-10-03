@@ -20,7 +20,7 @@
     </div>
 
     <!-- Ringkasan -->
-    <div class="mb-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <div class="mb-6 fx-grid [--fx-min:9rem] gap-4">
       <div class="relative bg-white rounded-card shadow-card border border-ink-100 overflow-hidden pl-5 pr-4 py-4 flex items-center justify-between gap-3">
         <span class="absolute left-0 top-0 bottom-0 w-1 bg-brand-400"></span>
         <div>
@@ -56,16 +56,17 @@
     </div>
 
     <!-- Daftar kategori -->
-    <div v-if="categories.length" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+    <div v-if="categories.length" class="fx-grid fx-cap [--fx-min:20rem] gap-5">
       <article
         v-for="cat in categories"
         :key="cat.name"
-        class="flex flex-col bg-white rounded-card shadow-card border border-ink-100 overflow-hidden"
+        class="flex flex-col bg-white rounded-card shadow-card border border-ink-100 overflow-hidden cursor-pointer hover:shadow-card-hover transition"
+        @click="openCategory(cat.name)"
       >
         <div class="px-5 pt-4 pb-4">
           <div class="flex items-start justify-between gap-3">
             <h3 class="text-base font-semibold text-ink-900">
-              <button type="button" @click="openCategory(cat.name)" class="text-left hover:text-brand-600 transition">
+              <button type="button" @click.stop="openCategory(cat.name)" class="text-left hover:text-brand-600 transition">
                 {{ cat.name }}
               </button>
             </h3>
@@ -98,7 +99,7 @@
                 v-for="sub in cat.substyles"
                 :key="sub.label"
                 type="button"
-                @click="openCategory(cat.name, sub.label)"
+                @click.stop="openCategory(cat.name, sub.label)"
                 class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-cream-100 hover:bg-ink-500/10 text-ink-700 text-xs font-medium transition"
                 :title="`Buka ${cat.name}, substyle ${sub.label}`"
               >
@@ -111,7 +112,7 @@
         </div>
 
         <!-- Statistik penjualan -->
-        <dl class="grid grid-cols-2 gap-4 px-5 py-3 border-t border-ink-100 text-sm">
+        <dl class="fx-grid [--fx-min:6rem] gap-4 px-5 py-3 border-t border-ink-100 text-sm">
           <div>
             <dt class="text-[13px] text-ink-500 mb-0.5">Terjual</dt>
             <dd class="font-semibold text-ink-900 tabular-nums">
@@ -128,7 +129,7 @@
         <div class="mt-auto px-5 py-3 border-t border-ink-100 bg-cream-50">
           <button
             type="button"
-            @click="openCategory(cat.name)"
+            @click.stop="openCategory(cat.name)"
             class="w-full px-4 py-2 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium transition shadow-sm"
           >
             Lihat isi kategori

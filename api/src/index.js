@@ -6,7 +6,7 @@ import fs from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 import { testConnection, ensureSchema } from './config/db.js'
-import { requireAuth } from './middleware/auth.js'
+import { requireAuth, requirePrivileged } from './middleware/auth.js'
 import authRoutes from './routes/auth.js'
 import teamRoutes from './routes/team.js'
 import ordersRoutes from './routes/orders.js'
@@ -15,6 +15,8 @@ import productsRoutes from './routes/products.js'
 import optionsRoutes from './routes/options.js'
 import uploadsRoutes from './routes/uploads.js'
 import filesRoutes from './routes/files.js'
+import adminRoutes from './routes/admin.js'
+import salesRoutes from './routes/sales.js'
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -31,6 +33,8 @@ app.use('/api/dashboard', requireAuth, dashboardRoutes)
 app.use('/api/products', requireAuth, productsRoutes)
 app.use('/api/options', requireAuth, optionsRoutes)
 app.use('/api/uploads', requireAuth, uploadsRoutes)
+app.use('/api/sales', requireAuth, salesRoutes)
+app.use('/api/admin', requireAuth, requirePrivileged, adminRoutes)
 // Publik (tanpa login): tag <img> tidak bisa mengirim token. Key-nya UUID acak dan divalidasi ketat.
 app.use('/api/files', filesRoutes)
 
