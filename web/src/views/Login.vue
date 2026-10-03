@@ -81,7 +81,7 @@
           {{ mode === 'login' ? 'Selamat datang kembali' : 'Buat tim baru' }}
         </h1>
         <p class="text-sm text-ink-500 mt-1.5 mb-8">
-          {{ mode === 'login' ? 'Masuk untuk membuka dashboard.' : 'Bikin workspace tim, akun ini otomatis jadi owner-nya.' }}
+          {{ mode === 'login' ? 'Masuk untuk membuka dashboard.' : `Bikin workspace tim, akun ini otomatis jadi ${registrationRole}-nya.` }}
         </p>
 
         <form @submit.prevent="submit" class="space-y-5" novalidate>
@@ -146,35 +146,15 @@
                 <rect x="4" y="11" width="16" height="10" rx="2" />
                 <path d="M8 11V7a4 4 0 018 0v4" />
               </svg>
-              <input
+              <PasswordInput
                 id="password"
                 v-model="password"
-                :type="showPassword ? 'text' : 'password'"
                 autocomplete="current-password"
-                class="w-full pl-11 pr-12 py-3 rounded-xl border border-ink-200 bg-white text-sm text-ink-900 placeholder:text-ink-300 focus:border-brand-400 focus:ring-4 focus:ring-brand-400/15 outline-none transition"
+                class="w-full pl-11 py-3 rounded-xl border border-ink-200 bg-white text-sm text-ink-900 placeholder:text-ink-300 focus:border-brand-400 focus:ring-4 focus:ring-brand-400/15 outline-none transition"
                 placeholder="Masukkan kata sandi"
                 @keyup="checkCapsLock"
                 @keydown="checkCapsLock"
               />
-              <!-- Ikon mata -->
-              <button
-                type="button"
-                @click="showPassword = !showPassword"
-                class="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 flex items-center justify-center rounded-lg text-ink-400 hover:text-ink-700 hover:bg-ink-100 transition"
-                :aria-label="showPassword ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'"
-                :aria-pressed="showPassword"
-              >
-                <!-- mata terbuka -->
-                <svg v-if="!showPassword" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z" />
-                  <circle cx="12" cy="12" r="3" />
-                </svg>
-                <!-- mata dicoret -->
-                <svg v-else class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M17.94 17.94A10.94 10.94 0 0112 19C5 19 1 12 1 12a18.5 18.5 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19M14.12 14.12a3 3 0 11-4.24-4.24" />
-                  <path d="M1 1l22 22" />
-                </svg>
-              </button>
             </div>
             <p v-if="capsLock" class="mt-1.5 text-xs text-warn-700">Caps Lock sedang aktif</p>
           </div>
@@ -193,7 +173,7 @@
           </button>
         </form>
 
-        <p class="text-center text-sm text-ink-500 mt-6">
+        <p v-if="registrationOpen" class="text-center text-sm text-ink-500 mt-6">
           <template v-if="mode === 'login'">
             Belum punya tim?
             <button type="button" class="font-medium text-brand-600 hover:underline" @click="toggleMode">Buat tim baru</button>
@@ -209,9 +189,11 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
+import PasswordInput from '../components/PasswordInput.vue'
+import { api } from '../utils/api.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -221,10 +203,23 @@ const mode = ref('login') // 'login' | 'register'
 const teamNameInput = ref('')
 const username = ref('')
 const password = ref('')
-const showPassword = ref(false)
 const loading = ref(false)
 const error = ref('')
 const capsLock = ref(false)
+
+// Pendaftaran tim umum ditutup (tim dibuat Owner lewat Kelola Tim). Tombol "Buat tim baru" hanya
+// muncul kalau server bilang terbuka: database masih kosong (akun Owner pertama) atau ALLOW_REGISTRATION=true.
+const registrationOpen = ref(false)
+const registrationRole = ref('owner')
+onMounted(async () => {
+  try {
+    const cfg = await api.get('/auth/config')
+    registrationOpen.value = !!cfg.registrationOpen
+    registrationRole.value = cfg.registrationRole || 'owner'
+  } catch {
+    // gagal diam-diam: form Masuk tetap bisa dipakai
+  }
+})
 
 function toggleMode() {
   mode.value = mode.value === 'login' ? 'register' : 'login'

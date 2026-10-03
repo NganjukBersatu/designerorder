@@ -6,9 +6,11 @@ import { uuidParam, isUuid } from '../utils/uuid.js'
 import { buildSet } from '../utils/sql.js'
 import { relinkDesignersQuietly } from '../utils/designers.js'
 
-// Owner dan admin setara dan berkuasa penuh atas SEMUA tim (lihat requirePrivileged
-// di middleware/auth.js): membuat/mengganti nama tim, membuat akun di tim mana pun,
-// mengubah peran, mereset kata sandi, memindahkan akun antar tim, dan menghapus akun.
+// Owner dan admin sama-sama berkuasa atas SEMUA tim (lihat requirePrivileged di
+// middleware/auth.js): membuat/mengganti nama tim, membuat akun di tim mana pun, mengubah
+// peran, mereset kata sandi, memindahkan akun antar tim, dan menghapus akun.
+// PENGECUALIAN: peran Owner hanya milik Owner — admin tidak bisa membuat, memberi,
+// mengubah, memindahkan, mereset sandi, atau menghapus akun Owner.
 // Satu akun tetap satu tim; "pindah ke tim lain" = memindahkan akun itu sendiri.
 const router = Router()
 router.param('id', uuidParam)
@@ -27,6 +29,14 @@ function mapUser(u) {
     displayName: u.display_name || '',
     createdAt: u.created_at,
   }
+}
+
+const ownerOnly = (res, message) => res.status(403).json({ message })
+
+// Cegah sistem kehilangan Owner terakhir
+async function otherOwnerCount(excludeUserId) {
+  const r = await pool.query(`SELECT count(*)::int AS n FROM users WHERE role = 'owner' AND id <> $1`, [excludeUserId])
+  return r.rows[0].n
 }
 
 async function teamExists(teamId) {
@@ -51,6 +61,64 @@ function validateCredentials(username, password) {
 }
 
 // ===== TIM =====
+
+// POST /api/admin/copy-settings { fromTeamId, options?: bool, currency?: bool }
+// Menyalin pengaturan tim LAIN ke tim yang sedang dibuka (berguna untuk tim baru):
+//  - options: pilihan dropdown DIGABUNG (yang sudah ada tetap, yang baru ditambahkan) — tidak ada yang hilang
+//  - currency: mata uang tampilan + kurs DITIMPA dengan milik tim sumber
+// Nama aplikasi sengaja tidak ikut (identitas tim). Produk/order/akun tidak tersentuh.
+const COPY_OPTION_KEYS = ['style', 'substyle', 'productionStatus', 'platform']
+router.post('/copy-settings', async (req, res) => {
+  const { fromTeamId, options, currency } = req.body || {}
+  if (!isUuid(fromTeamId)) return res.status(400).json({ message: 'Pilih tim sumbernya' })
+  if (fromTeamId === req.user.teamId) return res.status(400).json({ message: 'Pilih tim lain, bukan tim ini sendiri' })
+  if (!options && !currency) return res.status(400).json({ message: 'Pilih yang mau disalin' })
+
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    const src = await client.query('SELECT display_currency, rates FROM teams WHERE id = $1', [fromTeamId])
+    if (!src.rows.length) {
+      await client.query('ROLLBACK')
+      return res.status(404).json({ message: 'Tim sumber tidak ditemukan' })
+    }
+
+    if (options) {
+      const rows = await client.query('SELECT team_id, data FROM team_options WHERE team_id = ANY($1::uuid[])', [[fromTeamId, req.user.teamId]])
+      const dataOf = (id) => rows.rows.find((r) => r.team_id === id)?.data || {}
+      const from = dataOf(fromTeamId)
+      const mine = dataOf(req.user.teamId)
+      const merged = {}
+      for (const key of COPY_OPTION_KEYS) {
+        const seen = new Set()
+        merged[key] = [...(mine[key] || []), ...(from[key] || [])].filter((v) => {
+          const k = String(v).toLowerCase()
+          if (seen.has(k)) return false
+          seen.add(k)
+          return true
+        })
+      }
+      await client.query(
+        `INSERT INTO team_options (team_id, data) VALUES ($1, $2::jsonb)
+         ON CONFLICT (team_id) DO UPDATE SET data = team_options.data || $2::jsonb, updated_at = now()`,
+        [req.user.teamId, JSON.stringify(merged)]
+      )
+    }
+    if (currency) {
+      await client.query('UPDATE teams SET display_currency = $2, rates = $3::jsonb WHERE id = $1', [
+        req.user.teamId, src.rows[0].display_currency, JSON.stringify(src.rows[0].rates || {}),
+      ])
+    }
+    await client.query('COMMIT')
+    res.json({ message: 'Pengaturan disalin' })
+  } catch (err) {
+    await client.query('ROLLBACK')
+    console.error(err)
+    res.status(500).json({ message: 'Gagal menyalin pengaturan', error: err.message })
+  } finally {
+    client.release()
+  }
+})
 
 // GET /api/admin/teams — semua tim + jumlah anggota
 router.get('/teams', async (req, res) => {
@@ -82,7 +150,7 @@ router.post('/teams', async (req, res) => {
     return res.status(400).json({ message: 'Nama tim wajib diisi (maksimal 150 karakter)' })
   }
 
-  const owner = req.body.owner
+  const owner = req.body.admin ?? req.body.owner // akun pertama tim baru (admin)
   let ownerUsername = ''
   if (owner && (owner.username || owner.password)) {
     ownerUsername = normalizeUsername(owner.username)
@@ -105,7 +173,7 @@ router.post('/teams', async (req, res) => {
     if (ownerUsername) {
       const hash = await bcrypt.hash(owner.password, 10)
       await client.query(
-        `INSERT INTO users (team_id, username, password_hash, role) VALUES ($1, $2, $3, 'owner')`,
+        `INSERT INTO users (team_id, username, password_hash, role) VALUES ($1, $2, $3, 'admin')`,
         [team.rows[0].id, ownerUsername, hash]
       )
       memberCount = 1
@@ -159,6 +227,7 @@ router.get('/users', async (req, res) => {
 router.post('/users', async (req, res) => {
   const username = normalizeUsername(req.body.username)
   const role = ROLES.includes(req.body.role) ? req.body.role : 'member'
+  if (role === 'owner' && req.user.role !== 'owner') return ownerOnly(res, 'Hanya Owner yang bisa membuat akun Owner')
   const problem = validateCredentials(username, req.body.password)
   if (problem) return res.status(400).json({ message: problem })
   if (!(await teamExists(req.body.teamId))) {
@@ -195,6 +264,14 @@ router.patch('/users/:id', async (req, res) => {
     const found = await pool.query('SELECT * FROM users WHERE id = $1', [req.params.id])
     if (!found.rows.length) return res.status(404).json({ message: 'Akun tidak ditemukan' })
     const target = found.rows[0]
+
+    if (req.user.role !== 'owner') {
+      if (target.role === 'owner') return ownerOnly(res, 'Akun Owner hanya bisa diubah oleh Owner')
+      if (role === 'owner') return ownerOnly(res, 'Hanya Owner yang bisa memberi peran Owner')
+    }
+    if (target.role === 'owner' && role !== undefined && role !== 'owner' && (await otherOwnerCount(target.id)) === 0) {
+      return res.status(400).json({ message: 'Tidak bisa menurunkan Owner terakhir' })
+    }
 
     if (role !== undefined && !ROLES.includes(role)) {
       return res.status(400).json({ message: `Peran harus salah satu dari: ${ROLES.join(', ')}` })
@@ -256,6 +333,10 @@ router.delete('/users/:id', async (req, res) => {
   try {
     const found = await pool.query('SELECT role FROM users WHERE id = $1', [req.params.id])
     if (!found.rows.length) return res.status(404).json({ message: 'Akun tidak ditemukan' })
+    if (found.rows[0].role === 'owner') {
+      if (req.user.role !== 'owner') return ownerOnly(res, 'Akun Owner hanya bisa dihapus oleh Owner')
+      if ((await otherOwnerCount(req.params.id)) === 0) return res.status(400).json({ message: 'Tidak bisa menghapus Owner terakhir' })
+    }
     if (isPrivilegedRole(found.rows[0].role) && (await otherPrivilegedCount(req.params.id)) === 0) {
       return res.status(400).json({ message: 'Tidak bisa menghapus admin/owner terakhir' })
     }

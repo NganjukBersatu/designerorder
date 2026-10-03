@@ -49,6 +49,19 @@ const routes = [
         component: () => import('../views/SaleDetail.vue'),
         meta: { title: 'Detail Penjualan', subtitle: 'Lihat detail satu transaksi penjualan' },
       },
+      // ===== Bundling =====
+      {
+        path: 'bundling/:id',
+        name: 'bundling-detail',
+        component: () => import('../views/BundleDetail.vue'),
+        meta: { title: 'Detail Bundling', subtitle: 'Isi, harga, dan penjualan satu bundling' },
+      },
+      {
+        path: 'bundling/:id/penjualan/:saleId',
+        name: 'bundling-penjualan-detail',
+        component: () => import('../views/SaleDetail.vue'),
+        meta: { title: 'Detail Penjualan', subtitle: 'Lihat detail satu transaksi penjualan' },
+      },
       {
         path: 'anggota/:id',
         name: 'anggota-detail',

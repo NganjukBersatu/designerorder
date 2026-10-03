@@ -7,6 +7,11 @@ import { formatDateTime, formatPrice } from '../composables/useProducts'
 const route = useRoute()
 const router = useRouter()
 
+// Halaman yang sama dipakai untuk penjualan produk (/produk/...) dan bundling (/bundling/...)
+const isBundle = route.path.startsWith('/bundling')
+const itemBase = isBundle ? '/bundling' : '/produk'
+const apiBase = isBundle ? '/bundles' : '/products'
+
 const sale = ref(null)
 const loading = ref(true)
 const errorMsg = ref('')
@@ -15,7 +20,7 @@ async function load() {
   loading.value = true
   errorMsg.value = ''
   try {
-    const res = await api.get(`/products/${route.params.id}/sales/${route.params.saleId}`)
+    const res = await api.get(`${apiBase}/${route.params.id}/sales/${route.params.saleId}`)
     sale.value = res.data
   } catch (err) {
     errorMsg.value = err.message
@@ -48,8 +53,8 @@ const fields = computed(() => {
 
 <template>
   <div class="space-y-4">
-    <button class="text-[13px] text-ink-500 hover:text-ink-700 flex items-center gap-1.5" @click="router.push(`/produk/${route.params.id}`)">
-      ← Kembali ke detail produk
+    <button class="text-[13px] text-ink-500 hover:text-ink-700 flex items-center gap-1.5" @click="router.push(`${itemBase}/${route.params.id}`)">
+      ← Kembali ke detail {{ isBundle ? 'bundling' : 'produk' }}
     </button>
 
     <div v-if="loading" class="h-48 rounded-card bg-white shadow-card animate-pulse" />
@@ -65,7 +70,7 @@ const fields = computed(() => {
           <h1 class="text-[19px] font-semibold text-ink-900 break-words">{{ sale.buyer }}</h1>
           <p class="text-[13px] text-ink-500">{{ sale.product.name }}</p>
         </div>
-        <p class="text-[24px] font-semibold text-ink-900">{{ formatPrice(total) }}</p>
+        <p class="text-[24px] font-semibold text-ink-900">{{ formatPrice(total, sale.currency || sale.product.currency) }}</p>
       </div>
 
       <div class="fx-grid [--fx-min:20rem] gap-4 items-start">
@@ -78,13 +83,13 @@ const fields = computed(() => {
             </div>
           </dl>
           <p class="mt-5 text-[12px] text-ink-400">
-            Untuk mengubah atau menghapus transaksi ini, buka halaman detail produk.
+            Untuk mengubah atau menghapus transaksi ini, buka halaman detail {{ isBundle ? 'bundling' : 'produk' }}.
           </p>
         </div>
 
         <div class="bg-white rounded-card shadow-card p-5">
-          <p class="text-[12px] text-ink-400 mb-3">Produk</p>
-          <router-link :to="`/produk/${sale.product.id}`" class="block group">
+          <p class="text-[12px] text-ink-400 mb-3">{{ isBundle ? 'Bundling' : 'Produk' }}</p>
+          <router-link :to="`${itemBase}/${sale.product.id}`" class="block group">
             <img v-if="sale.product.image" :src="sale.product.image" :alt="sale.product.name" class="w-full rounded-xl border border-ink-100 object-cover" />
             <div v-else class="w-full aspect-square rounded-xl border border-dashed border-ink-200 bg-cream-100 flex items-center justify-center text-[12px] text-ink-300">
               Belum ada gambar

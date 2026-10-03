@@ -35,8 +35,33 @@ function normalizeUsername(v) {
   return String(v || '').trim().toLowerCase()
 }
 
-// POST /api/auth/register — bikin tim baru + akun owner pertamanya
+// Pendaftaran umum DITUTUP: tim dibuat oleh Owner lewat Kelola Tim. Dua pengecualian:
+//  - database masih kosong (belum ada akun) -> pendaftaran pertama membuat OWNER (bootstrap)
+//  - ALLOW_REGISTRATION=true -> pendaftaran dibuka; akun pertama tiap tim berperan ADMIN
+async function registrationMode() {
+  const r = await pool.query('SELECT count(*)::int AS n FROM users')
+  if (r.rows[0].n === 0) return { open: true, role: 'owner', bootstrap: true }
+  if (process.env.ALLOW_REGISTRATION === 'true') return { open: true, role: 'admin', bootstrap: false }
+  return { open: false, role: null, bootstrap: false }
+}
+
+// GET /api/auth/config — dipakai halaman Login untuk tahu apakah pendaftaran ditampilkan
+router.get('/config', async (req, res) => {
+  try {
+    const mode = await registrationMode()
+    res.json({ registrationOpen: mode.open, registrationRole: mode.role, bootstrap: mode.bootstrap })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ message: 'Gagal membaca konfigurasi', error: err.message })
+  }
+})
+
+// POST /api/auth/register — bikin tim baru + akun pertamanya (hanya saat pendaftaran dibuka)
 router.post('/register', authLimiter, async (req, res) => {
+  const mode = await registrationMode()
+  if (!mode.open) {
+    return res.status(403).json({ message: 'Pendaftaran tim ditutup. Minta owner untuk membuatkan tim dan akunmu.' })
+  }
   const { teamName, username, password } = req.body
   const uname = normalizeUsername(username)
 
@@ -62,8 +87,8 @@ router.post('/register', authLimiter, async (req, res) => {
 
     const hash = await bcrypt.hash(password, 10)
     const user = await client.query(
-      `INSERT INTO users (team_id, username, password_hash, role) VALUES ($1, $2, $3, 'owner') RETURNING *`,
-      [teamId, uname, hash]
+      `INSERT INTO users (team_id, username, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING *`,
+      [teamId, uname, hash, mode.role]
     )
 
     await client.query('COMMIT')

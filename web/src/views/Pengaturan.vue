@@ -37,6 +37,26 @@
       :aria-labelledby="`tab-${activeTab}`"
       class="fx-grid fx-cap [--fx-min:22rem] [--fx-cap:36rem] gap-5"
     >
+      <!-- Salin pengaturan dari tim lain (owner/admin saja) -->
+      <section v-if="canCopy" class="fx-full bg-white rounded-card shadow-card border border-ink-100 p-5 space-y-3">
+        <div>
+          <h3 class="text-[15px] font-semibold text-ink-900">Salin pengaturan dari tim lain</h3>
+          <p class="text-[13px] text-ink-500">Cocok untuk tim baru. Pilihan dropdown digabung (yang sudah ada tidak hilang), kurs dan mata uang tampilan ditimpa. Nama aplikasi, produk, dan order tidak ikut.</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-3">
+          <select v-model="copyFrom" aria-label="Tim sumber" class="px-3 py-2.5 rounded-xl border border-ink-200 bg-white text-sm outline-none focus:border-brand-400 min-w-[12rem]">
+            <option value="">Pilih tim sumber</option>
+            <option v-for="t in copyTeams" :key="t.id" :value="t.id">{{ t.name }}</option>
+          </select>
+          <label class="inline-flex items-center gap-2 text-sm text-ink-700"><input v-model="copyOptions" type="checkbox" class="w-4 h-4 accent-brand-500" /> Pilihan dropdown</label>
+          <label class="inline-flex items-center gap-2 text-sm text-ink-700"><input v-model="copyCurrency" type="checkbox" class="w-4 h-4 accent-brand-500" /> Mata uang &amp; kurs</label>
+          <button type="button" :disabled="!copyFrom || copying || (!copyOptions && !copyCurrency)" class="px-4 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium transition disabled:opacity-50" @click="submitCopy">
+            {{ copying ? 'Menyalin…' : 'Salin ke tim ini' }}
+          </button>
+        </div>
+        <p v-if="copyMsg.text" :class="['text-sm', copyMsg.ok ? 'text-ok-700' : 'text-danger-600']">{{ copyMsg.text }}</p>
+      </section>
+
       <section
         v-for="group in currentGroups"
         :key="group.id"
@@ -129,7 +149,7 @@
             @click="resetGroup(group)"
             class="text-ink-500 hover:text-ink-800 transition"
           >
-            Reset ke bawaan
+            Kosongkan
           </button>
         </div>
       </section>
@@ -328,17 +348,12 @@
 
           <div>
             <label class="block text-sm font-medium text-ink-700 mb-1.5">Kata sandi saat ini</label>
-            <input
+            <PasswordInput
               v-model="usernameForm.password"
-              :type="showUsernamePw ? 'text' : 'password'"
               autocomplete="current-password"
               class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition"
               placeholder="Untuk konfirmasi perubahan"
             />
-            <label class="inline-flex items-center gap-2 mt-2 text-xs text-ink-500 cursor-pointer select-none">
-              <input v-model="showUsernamePw" type="checkbox" class="rounded border-ink-300" />
-              Tampilkan kata sandi
-            </label>
           </div>
         </div>
 
@@ -377,9 +392,8 @@
 
           <div>
             <label class="block text-sm font-medium text-ink-700 mb-1.5">Kata sandi saat ini</label>
-            <input
+            <PasswordInput
               v-model="passwordForm.current"
-              :type="showPasswords ? 'text' : 'password'"
               autocomplete="current-password"
               class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition"
             />
@@ -387,9 +401,8 @@
 
           <div>
             <label class="block text-sm font-medium text-ink-700 mb-1.5">Kata sandi baru</label>
-            <input
+            <PasswordInput
               v-model="passwordForm.next"
-              :type="showPasswords ? 'text' : 'password'"
               autocomplete="new-password"
               class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition"
               placeholder="Minimal 8 karakter"
@@ -398,16 +411,11 @@
 
           <div>
             <label class="block text-sm font-medium text-ink-700 mb-1.5">Ulangi kata sandi baru</label>
-            <input
+            <PasswordInput
               v-model="passwordForm.confirm"
-              :type="showPasswords ? 'text' : 'password'"
               autocomplete="new-password"
               class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition"
             />
-            <label class="inline-flex items-center gap-2 mt-2 text-xs text-ink-500 cursor-pointer select-none">
-              <input v-model="showPasswords" type="checkbox" class="rounded border-ink-300" />
-              Tampilkan kata sandi
-            </label>
           </div>
         </div>
 
@@ -421,6 +429,59 @@
             {{ passwordLoading ? 'Menyimpan...' : 'Ubah Kata Sandi' }}
           </button>
         </div>
+      </section>
+    </div>
+
+    <!-- ==================== KATEGORI: MATA UANG ==================== -->
+    <div
+      v-show="activeTab === 'mata-uang'"
+      id="panel-mata-uang"
+      role="tabpanel"
+      aria-labelledby="tab-mata-uang"
+      class="space-y-4"
+    >
+      <section class="bg-white rounded-card shadow-card border border-ink-100 p-5 space-y-5 max-w-2xl">
+        <div>
+          <label class="block text-sm font-medium text-ink-700 mb-1.5">Mata uang tampilan Ringkasan</label>
+          <select
+            v-model="currencyDraft.displayCurrency"
+            class="w-full sm:w-56 px-3 py-2.5 rounded-xl border border-ink-200 bg-white text-sm outline-none focus:border-brand-400"
+          >
+            <option v-for="c in currencies" :key="c" :value="c">{{ c }}</option>
+          </select>
+          <p class="text-xs text-ink-400 mt-1">Semua total di Ringkasan dan daftar Kategori dikonversi ke mata uang ini.</p>
+        </div>
+
+        <div>
+          <p class="text-sm font-medium text-ink-700 mb-1.5">Kurs terhadap 1 USD</p>
+          <div class="fx-grid [--fx-min:14rem] gap-3">
+            <label v-for="c in otherCurrencies" :key="c" class="flex items-center gap-2 text-sm text-ink-600">
+              <span class="w-16 shrink-0">1 USD =</span>
+              <input
+                v-model="currencyDraft.rates[c]"
+                type="number"
+                min="0"
+                step="any"
+                :aria-label="`Kurs ${c}`"
+                placeholder="belum diisi"
+                class="w-full min-w-0 px-3 py-2 rounded-xl border border-ink-200 bg-white text-sm outline-none focus:border-brand-400"
+              />
+              <span class="w-10 shrink-0 font-medium text-ink-800">{{ c }}</span>
+            </label>
+          </div>
+          <p class="text-xs text-ink-400 mt-2">Kurs yang kosong berarti nilai mata uang itu belum ikut dihitung di Ringkasan.</p>
+        </div>
+
+        <p v-if="currencyError" class="text-sm text-danger-600">{{ currencyError }}</p>
+        <p v-if="currencyMsg" class="text-sm text-ok-700">{{ currencyMsg }}</p>
+        <button
+          type="button"
+          :disabled="currencySaving"
+          class="px-5 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium transition shadow-sm disabled:opacity-60"
+          @click="submitCurrency"
+        >
+          {{ currencySaving ? 'Menyimpan…' : 'Simpan' }}
+        </button>
       </section>
     </div>
 
@@ -496,9 +557,8 @@
               class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition bg-white"
               placeholder="Username"
             />
-            <input
+            <PasswordInput
               v-model="newMember.password"
-              type="password"
               class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition bg-white"
               placeholder="Kata sandi (min. 8 karakter)"
             />
@@ -511,7 +571,7 @@
             >
               <option value="member">Biasa</option>
               <option value="admin">Admin</option>
-              <option value="owner">Owner</option>
+              <option v-if="role === 'owner'" value="owner">Owner</option>
             </select>
             <button
               type="button"
@@ -532,12 +592,14 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
-import { useOptions, OPTION_GROUPS } from '../composables/useOptions'
+import { useOptions, OPTION_GROUPS, fetchOptions } from '../composables/useOptions'
 import { useProducts } from '../composables/useProducts'
 import { useAppSettings } from '../composables/useAppSettings'
 import { useProfile } from '../composables/useProfile'
 import { splitPlatforms } from '../utils/platforms'
 import { api } from '../utils/api.js'
+import PasswordInput from '../components/PasswordInput.vue'
+import { useCurrency, fetchCurrency } from '../composables/useCurrency'
 
 const route = useRoute()
 const router = useRouter()
@@ -549,6 +611,11 @@ const TABS = [
     key: 'dropdown-produk',
     label: 'Pilihan Dropdown',
     info: 'Atur pilihan yang muncul di form order, form produk, filter list, dan Catat Penjualan.'
+  },
+  {
+    key: 'mata-uang',
+    label: 'Mata Uang',
+    info: 'Atur mata uang tampilan Ringkasan dan kurs terhadap USD. Harga tiap produk tetap memakai mata uangnya sendiri.'
   },
   {
     key: 'akun',
@@ -632,6 +699,84 @@ const TONES = {
 
 // ========== PILIHAN DROPDOWN ==========
 const { optionsOf, addOption, removeOption, resetOptions } = useOptions()
+
+// ========== SALIN PENGATURAN DARI TIM LAIN ==========
+const canCopy = computed(() => role.value === 'owner' || role.value === 'admin')
+const copyTeams = ref([])
+const copyFrom = ref('')
+const copyOptions = ref(true)
+const copyCurrency = ref(true)
+const copying = ref(false)
+const copyMsg = ref({ ok: false, text: '' })
+
+onMounted(async () => {
+  if (!canCopy.value) return
+  try {
+    copyTeams.value = ((await api.get('/admin/teams')).data || []).filter((t) => !t.current)
+  } catch {
+    copyTeams.value = []
+  }
+})
+
+async function submitCopy() {
+  const team = copyTeams.value.find((t) => t.id === copyFrom.value)
+  if (!team) return
+  if (!confirm(`Salin pengaturan dari "${team.name}" ke tim ini?${copyCurrency.value ? ' Kurs dan mata uang tampilan tim ini akan ditimpa.' : ''}`)) return
+  copying.value = true
+  copyMsg.value = { ok: false, text: '' }
+  try {
+    await api.post('/admin/copy-settings', { fromTeamId: copyFrom.value, options: copyOptions.value, currency: copyCurrency.value })
+    await Promise.all([fetchOptions(), fetchCurrency()])
+    copyMsg.value = { ok: true, text: `Pengaturan dari "${team.name}" berhasil disalin` }
+  } catch (err) {
+    copyMsg.value = { ok: false, text: err.message }
+  } finally {
+    copying.value = false
+  }
+}
+
+// ========== MATA UANG & KURS ==========
+const { currencies, displayCurrency, rates, saveCurrency } = useCurrency()
+const currencyDraft = ref({ displayCurrency: 'USD', rates: {} })
+const currencySaving = ref(false)
+const currencyMsg = ref('')
+const currencyError = ref('')
+const otherCurrencies = computed(() => currencies.value.filter((c) => c !== 'USD'))
+
+// Isi formulir dari data server (juga saat data baru selesai dimuat)
+watch(
+  [displayCurrency, rates],
+  () => {
+    currencyDraft.value = {
+      displayCurrency: displayCurrency.value,
+      rates: Object.fromEntries(otherCurrencies.value.map((c) => [c, rates.value[c] ?? ''])),
+    }
+  },
+  { immediate: true, deep: true }
+)
+
+async function submitCurrency() {
+  currencyMsg.value = ''
+  currencyError.value = ''
+  const payloadRates = {}
+  for (const [code, value] of Object.entries(currencyDraft.value.rates)) {
+    if (value === '' || value === null) continue // kosong = belum diisi
+    if (!(Number(value) > 0)) {
+      currencyError.value = `Kurs ${code} harus angka lebih dari 0`
+      return
+    }
+    payloadRates[code] = Number(value)
+  }
+  currencySaving.value = true
+  try {
+    await saveCurrency({ displayCurrency: currencyDraft.value.displayCurrency, rates: payloadRates })
+    currencyMsg.value = 'Pengaturan mata uang tersimpan'
+  } catch (err) {
+    currencyError.value = err.message
+  } finally {
+    currencySaving.value = false
+  }
+}
 const { products } = useProducts()
 
 const currentGroups = computed(() => OPTION_GROUPS)
@@ -670,9 +815,9 @@ function importFromProducts(group) {
 }
 
 function resetGroup(group) {
-  if (!confirm(`Kembalikan pilihan ${group.label} ke bawaan?`)) return
+  if (!confirm(`Kosongkan semua pilihan ${group.label}?`)) return
   resetOptions(group.key)
-  optionMsg.value = { id: group.id, ok: true, text: 'Pilihan dikembalikan ke bawaan' }
+  optionMsg.value = { id: group.id, ok: true, text: 'Pilihan dikosongkan' }
 }
 
 // ========== NAMA APLIKASI ==========
@@ -683,9 +828,11 @@ const appSettingsForm = ref({
   appTagline: settings.value.appTagline
 })
 const appSettingsMsg = ref({ ok: false, text: '' })
+// Isi ulang form begitu data tim selesai dimuat dari server
+watch(settings, (s) => { appSettingsForm.value = { appName: s.appName, appTagline: s.appTagline } }, { deep: true })
 
-function submitAppSettings() {
-  const result = updateAppSettings(appSettingsForm.value)
+async function submitAppSettings() {
+  const result = await updateAppSettings(appSettingsForm.value)
   appSettingsMsg.value = result
   if (result.ok) {
     appSettingsForm.value = {
@@ -695,9 +842,9 @@ function submitAppSettings() {
   }
 }
 
-function resetAppName() {
+async function resetAppName() {
   if (!confirm('Kembalikan nama & tagline aplikasi ke bawaan?')) return
-  const result = resetAppSettings()
+  const result = await resetAppSettings()
   appSettingsForm.value = {
     appName: settings.value.appName,
     appTagline: settings.value.appTagline
@@ -709,7 +856,6 @@ function resetAppName() {
 const usernameForm = ref({ username: '', password: '' })
 const usernameMsg = ref({ ok: false, text: '' })
 const usernameLoading = ref(false)
-const showUsernamePw = ref(false)
 
 onMounted(() => {
   usernameForm.value.username = user.value || ''
@@ -741,7 +887,6 @@ async function submitUsername() {
 const passwordForm = ref({ current: '', next: '', confirm: '' })
 const passwordMsg = ref({ ok: false, text: '' })
 const passwordLoading = ref(false)
-const showPasswords = ref(false)
 
 async function submitPassword() {
   passwordMsg.value = { ok: false, text: '' }
@@ -777,7 +922,8 @@ function roleLabel(r) {
 }
 
 // Owner dan admin setara: boleh mengelola siapa saja di timnya
-function canManage() {
+function canManage(targetRole) {
+  if (targetRole === 'owner' && role.value !== 'owner') return false // akun Owner hanya disentuh Owner
   return role.value === 'owner' || role.value === 'admin'
 }
 

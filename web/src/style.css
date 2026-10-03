@@ -330,3 +330,8 @@ html:not(.dark) .app-sidebar .hover\:text-white:hover { color: theme('colors.ink
 html:not(.dark) .app-sidebar .\!bg-white { background-color: theme('colors.brand.50') !important; box-shadow: none; }
 html:not(.dark) .app-sidebar .\!bg-white\/15 { background-color: rgba(18, 28, 26, 0.06) !important; }
 html:not(.dark) .app-sidebar .\!text-white { color: theme('colors.ink.900') !important; }
+
+/* Semua gambar bisa diperbesar (pratinjau) kecuali logo aplikasi — lihat App.vue */
+img:not([src*="favicon"]):not(.no-preview) {
+  cursor: zoom-in;
+}

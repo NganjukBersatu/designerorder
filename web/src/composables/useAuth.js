@@ -9,6 +9,9 @@
 import { ref, computed } from 'vue'
 import { API_BASE, getToken, setToken } from '../utils/api.js'
 import { fetchProducts } from './useProducts'
+import { fetchBundles } from './useBundles'
+import { fetchCurrency } from './useCurrency'
+import { fetchAppSettings } from './useAppSettings'
 import { useTeamMembers } from './useTeamMembers'
 import { fetchOptions } from './useOptions'
 
@@ -53,6 +56,9 @@ function applySession({ token, user, teamName }) {
   currentUser.value = { ...user, teamName: teamName ?? currentUser.value?.teamName }
   writeJSON(USER_KEY, currentUser.value)
   fetchProducts()
+  fetchBundles()
+  fetchCurrency()
+  fetchAppSettings()
   useTeamMembers().fetchMembers()
   fetchOptions()
 }

@@ -5,11 +5,12 @@ import { shortDate } from '../utils/format.js'
 import { useAuth } from '../composables/useAuth'
 import { useTeamMembers } from '../composables/useTeamMembers'
 import Modal from '../components/Modal.vue'
+import PasswordInput from '../components/PasswordInput.vue'
 
-// Owner dan admin setara dan berkuasa penuh atas semua tim: buat/ganti nama tim,
+// Owner dan admin berkuasa atas semua tim (peran Owner hanya milik Owner): buat/ganti nama tim,
 // buat akun di tim mana pun, ubah peran, reset sandi, pindahkan akun, hapus akun.
 // Satu akun satu tim; "pindah ke tim lain" = memindahkan akun sendiri.
-const { user, applySession, setTeamName } = useAuth()
+const { user, applySession, setTeamName, role: myRole } = useAuth()
 const { fetchMembers } = useTeamMembers()
 
 const ROLES = [
@@ -18,6 +19,10 @@ const ROLES = [
   { value: 'owner', label: 'Owner' },
 ]
 const roleLabel = (r) => ROLES.find((x) => x.value === r)?.label || r
+
+// Peran Owner hanya milik Owner: admin tidak bisa memberinya, dan akun Owner terkunci untuk admin.
+const isOwner = computed(() => myRole.value === 'owner')
+const locked = (u) => u.role === 'owner' && !isOwner.value
 
 const teams = ref([])
 const users = ref([])
@@ -79,7 +84,7 @@ const newTeam = ref({ name: '', withOwner: false, username: '', password: '' })
 function createTeam() {
   return run('membuat tim', async () => {
     const body = { name: newTeam.value.name }
-    if (newTeam.value.withOwner) body.owner = { username: newTeam.value.username, password: newTeam.value.password }
+    if (newTeam.value.withOwner) body.admin = { username: newTeam.value.username, password: newTeam.value.password }
     const res = await api.post('/admin/teams', body)
     showToast(`Tim "${res.data.name}" dibuat`)
     newTeam.value = { name: '', withOwner: false, username: '', password: '' }
@@ -246,11 +251,11 @@ async function refreshSharedMembers() {
           />
           <label class="flex items-center gap-2 text-[13px] text-ink-600 cursor-pointer">
             <input v-model="newTeam.withOwner" type="checkbox" class="rounded" />
-            Buat sekaligus akun owner pertamanya
+            Buat sekaligus akun admin pertamanya
           </label>
           <div v-if="newTeam.withOwner" class="fx-grid [--fx-min:13rem] gap-3">
-            <input v-model="newTeam.username" type="text" placeholder="Username owner" class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm bg-white" />
-            <input v-model="newTeam.password" type="password" placeholder="Kata sandi (min. 8 karakter)" class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm bg-white" />
+            <input v-model="newTeam.username" type="text" placeholder="Username admin" class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm bg-white" />
+            <PasswordInput v-model="newTeam.password" placeholder="Kata sandi (min. 8 karakter)" class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm bg-white" />
           </div>
           <button type="submit" :disabled="busy || !newTeam.name.trim()" class="px-4 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 disabled:opacity-60 text-white text-sm font-medium transition shadow-sm">
             Buat tim
@@ -287,7 +292,7 @@ async function refreshSharedMembers() {
                 <td class="px-3 py-3">
                   <select
                     :value="u.teamId"
-                    :disabled="busy"
+                    :disabled="busy || locked(u)"
                     class="px-2.5 py-1.5 rounded-lg border border-ink-200 bg-white text-[13px] max-w-[190px]"
                     @change="moveUser(u, $event.target.value)"
                   >
@@ -297,17 +302,17 @@ async function refreshSharedMembers() {
                 <td class="px-3 py-3">
                   <select
                     :value="u.role"
-                    :disabled="busy"
+                    :disabled="busy || locked(u)"
                     class="px-2.5 py-1.5 rounded-lg border border-ink-200 bg-white text-[13px]"
                     @change="changeRole(u, $event.target.value)"
                   >
-                    <option v-for="r in ROLES" :key="r.value" :value="r.value">{{ r.label }}</option>
+                    <option v-for="r in ROLES" :key="r.value" :value="r.value" :disabled="r.value === 'owner' && !isOwner">{{ r.label }}</option>
                   </select>
                 </td>
                 <td class="px-5 py-3 text-right whitespace-nowrap">
-                  <button type="button" class="px-2.5 py-1.5 rounded-lg border border-ink-200 text-ink-700 text-[12.5px] hover:bg-ink-500/5 transition" @click="openReset(u)">Reset sandi</button>
+                  <button v-if="!locked(u)" type="button" class="px-2.5 py-1.5 rounded-lg border border-ink-200 text-ink-700 text-[12.5px] hover:bg-ink-500/5 transition" @click="openReset(u)">Reset sandi</button>
                   <button
-                    v-if="u.username !== user"
+                    v-if="u.username !== user && !locked(u)"
                     type="button"
                     class="ml-1.5 px-2.5 py-1.5 rounded-lg text-danger-600 hover:bg-danger-500/10 text-[12.5px] transition"
                     @click="deleteTarget = u"
@@ -328,10 +333,10 @@ async function refreshSharedMembers() {
               <option v-for="t in teams" :key="t.id" :value="t.id">{{ t.name }}</option>
             </select>
             <select v-model="newUser.role" class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm bg-white">
-              <option v-for="r in ROLES" :key="r.value" :value="r.value">{{ r.label }}</option>
+              <option v-for="r in ROLES" :key="r.value" :value="r.value" :disabled="r.value === 'owner' && !isOwner">{{ r.label }}</option>
             </select>
             <input v-model="newUser.username" type="text" placeholder="Username" class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm bg-white" />
-            <input v-model="newUser.password" type="password" placeholder="Kata sandi (min. 8 karakter)" class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm bg-white" />
+            <PasswordInput v-model="newUser.password" placeholder="Kata sandi (min. 8 karakter)" class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm bg-white" />
           </div>
           <button type="submit" :disabled="busy || !newUser.teamId || !newUser.username.trim()" class="px-4 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 disabled:opacity-60 text-white text-sm font-medium transition shadow-sm">
             Buat akun
@@ -343,9 +348,8 @@ async function refreshSharedMembers() {
     <!-- Reset sandi -->
     <Modal v-if="resetTarget" :title="`Reset kata sandi ${resetTarget.username}`" @close="resetTarget = null">
       <form class="space-y-4" @submit.prevent="submitReset">
-        <input
+        <PasswordInput
           v-model="resetPassword"
-          type="password"
           autocomplete="new-password"
           placeholder="Kata sandi baru (min. 8 karakter)"
           class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm bg-white"

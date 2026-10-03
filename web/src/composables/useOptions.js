@@ -47,12 +47,13 @@ export const OPTION_GROUPS = [
   }
 ]
 
-// Pilihan awal (sebelum kamu mengubahnya di Pengaturan)
+// Tim baru dimulai KOSONG: semua pilihan diisi sendiri oleh tim di Pengaturan
+// (atau lewat "Ambil dari produk"). Tidak ada pilihan bawaan yang ikut ke tim lain.
 const DEFAULTS = {
-  style: ['VRoid', 'VRChat', 'AR'],
-  substyle: ['Daily outfit', 'Cyber'],
-  productionStatus: ['Preview', 'Done', 'Ready'],
-  platform: ['Etsy', 'Booth']
+  style: [],
+  substyle: [],
+  productionStatus: [],
+  platform: []
 }
 
 const PLATFORM_LIKE_KEYS = ['platform']
@@ -61,7 +62,7 @@ function cloneDefaults() {
   return Object.fromEntries(Object.entries(DEFAULTS).map(([k, v]) => [k, [...v]]))
 }
 
-// Satu state bersama untuk semua halaman, dimulai dari pilihan awal sebelum data tim dimuat
+// Satu state bersama untuk semua halaman, kosong sampai data tim selesai dimuat
 const options = ref(cloneDefaults())
 
 // Muat pilihan dropdown milik tim dari backend (dipanggil sekali setelah login,

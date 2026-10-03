@@ -6,6 +6,7 @@ import { uuidParam } from '../utils/uuid.js'
 import { deleteImageByUrl } from '../config/storage.js'
 import { isTeamMember } from '../utils/designers.js'
 import { buildSet } from '../utils/sql.js'
+import { currencyRule, checkCurrency } from '../utils/currency.js'
 
 const router = Router()
 router.param('id', uuidParam)
@@ -24,6 +25,7 @@ const productFieldsCreate = {
   linkDb: { type: 'string', max: 2000, label: 'Link DB' },
   linkDbs: { type: 'array', itemType: 'string', label: 'Daftar link DB' },
   price: { type: 'number', min: 0, label: 'Harga' },
+  currency: currencyRule,
   note: { type: 'string', max: 5000, label: 'Catatan' },
 }
 
@@ -64,7 +66,7 @@ const SELECT_PRODUCT = `
     COALESCE(
       (SELECT json_agg(json_build_object(
           'id', s.id, 'productId', s.product_id, 'buyer', s.buyer, 'qty', s.qty,
-          'platform', s.platform, 'package', s.package, 'total', s.total, 'soldAt', s.sold_at
+          'platform', s.platform, 'package', s.package, 'total', s.total, 'currency', s.currency, 'soldAt', s.sold_at
         ) ORDER BY s.sold_at DESC)
        FROM sales s WHERE s.product_id = p.id),
       '[]'
@@ -126,6 +128,8 @@ function mapRow(r) {
       description: pk.description,
     })),
     price: Number(r.price),
+    currency: r.currency,
+    bundleId: r.bundle_id,
     note: r.note,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
@@ -140,6 +144,7 @@ function mapRow(r) {
       platform: s.platform,
       package: s.package,
       total: s.total !== null ? Number(s.total) : null,
+      currency: s.currency,
       soldAt: s.soldAt,
     })),
   }
@@ -177,7 +182,7 @@ async function replacePackages(client, productId, packages) {
 router.get('/', async (req, res) => {
   try {
     const result = await pool.query(
-      `${SELECT_PRODUCT_LIST} WHERE p.team_id = $1 ORDER BY p.created_at DESC`,
+      `${SELECT_PRODUCT_LIST} WHERE p.team_id = $1 AND p.bundle_id IS NULL ORDER BY p.created_at DESC`,
       [req.user.teamId]
     )
     res.json({ data: result.rows.map(mapRow) })
@@ -208,8 +213,10 @@ router.get('/:id', async (req, res) => {
 router.post('/', validateBody(productFieldsCreate), async (req, res) => {
   const {
     image, name, style, substyle, designerId, date, uploadDate,
-    productionStatus, platform, linkDb, linkDbs, price, note, packages,
+    productionStatus, platform, linkDb, linkDbs, price, currency, note, packages,
   } = req.body
+
+  if (!checkCurrency(currency)) return res.status(400).json({ message: 'Mata uang tidak dikenal' })
 
   if (designerId && !(await isTeamMember(designerId, req.user.teamId))) {
     return res.status(400).json({ message: 'Designer harus anggota tim ini' })
@@ -222,13 +229,13 @@ router.post('/', validateBody(productFieldsCreate), async (req, res) => {
     const result = await client.query(
       `INSERT INTO products
         (team_id, image, name, style, substyle, designer_id, date, upload_date,
-         production_status, platform, link_db, price, note)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+         production_status, platform, link_db, price, currency, note)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
        RETURNING id`,
       [
         req.user.teamId, image || null, name, style || null, substyle || null, designerId || null,
         date || null, uploadDate || null, productionStatus || null, platform || null,
-        linkDb || null, price || 0, note || null,
+        linkDb || null, price || 0, currency || 'USD', note || null,
       ]
     )
     const productId = result.rows[0].id
@@ -252,6 +259,7 @@ router.post('/', validateBody(productFieldsCreate), async (req, res) => {
 // PATCH /api/products/:id
 router.patch('/:id', validateBody(productFieldsUpdate), async (req, res) => {
   const { image, linkDbs, packages } = req.body
+  if (!checkCurrency(req.body.currency)) return res.status(400).json({ message: 'Mata uang tidak dikenal' })
 
   const client = await pool.connect()
   try {
@@ -260,6 +268,18 @@ router.patch('/:id', validateBody(productFieldsUpdate), async (req, res) => {
     if (req.body.designerId && !(await isTeamMember(req.body.designerId, req.user.teamId))) {
       await client.query('ROLLBACK')
       return res.status(400).json({ message: 'Designer harus anggota tim ini' })
+    }
+    if (req.body.style !== undefined || req.body.currency) {
+      const cur = await client.query('SELECT style, currency, bundle_id FROM products WHERE id = $1 AND team_id = $2', [req.params.id, req.user.teamId])
+      const c = cur.rows[0]
+      if (c?.bundle_id && req.body.style !== undefined && (req.body.style || null) !== (c.style || null)) {
+        await client.query('ROLLBACK')
+        return res.status(409).json({ message: 'Produk ini ada di dalam bundling, jadi kategorinya tidak bisa dipindah. Keluarkan dari bundling dulu.' })
+      }
+      if (c?.bundle_id && req.body.currency && req.body.currency !== c.currency) {
+        await client.query('ROLLBACK')
+        return res.status(409).json({ message: 'Produk ini ada di dalam bundling, jadi mata uangnya tidak bisa diganti. Keluarkan dari bundling dulu.' })
+      }
     }
     // Memilih designer dari akun = teks lama tidak diperlukan lagi (cegah data dobel)
     const input = req.body.designerId ? { ...req.body, designerLegacy: null } : req.body
@@ -278,6 +298,7 @@ router.patch('/:id', validateBody(productFieldsUpdate), async (req, res) => {
       platform: 'platform',
       linkDb: 'link_db',
       price: { col: 'price', required: true },
+      currency: { col: 'currency', required: true },
       note: 'note',
     })
     const idParam = values.length + 1
@@ -322,10 +343,14 @@ router.patch('/:id', validateBody(productFieldsUpdate), async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const result = await pool.query(
-      'DELETE FROM products WHERE id = $1 AND team_id = $2 RETURNING id, image',
+      'DELETE FROM products WHERE id = $1 AND team_id = $2 AND bundle_id IS NULL RETURNING id, image',
       [req.params.id, req.user.teamId]
     )
     if (result.rows.length === 0) {
+      const exists = await pool.query('SELECT 1 FROM products WHERE id = $1 AND team_id = $2', [req.params.id, req.user.teamId])
+      if (exists.rows.length) {
+        return res.status(409).json({ message: 'Produk ini ada di dalam bundling. Keluarkan dari bundling dulu sebelum dihapus.' })
+      }
       return res.status(404).json({ message: 'Produk tidak ditemukan' })
     }
     await deleteImageByUrl(result.rows[0].image, req.user.teamId)
@@ -343,7 +368,7 @@ router.delete('/:id', async (req, res) => {
 // kepemilikan produknya).
 async function getOwnedProductPricing(productId, teamId) {
   const result = await pool.query(
-    `SELECT p.price,
+    `SELECT p.price, p.currency,
             COALESCE(
               (SELECT json_agg(json_build_object('name', pk.name, 'price', pk.price))
                FROM product_packages pk WHERE pk.product_id = p.id),
@@ -387,10 +412,10 @@ router.post('/:id/sales', validateBody(saleFieldsCreate), async (req, res) => {
 
   try {
     const result = await pool.query(
-      `INSERT INTO sales (product_id, buyer, qty, platform, package, total, sold_at)
-       VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7, now()))
+      `INSERT INTO sales (product_id, buyer, qty, platform, package, total, currency, sold_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,COALESCE($8, now()))
        RETURNING *`,
-      [req.params.id, buyer, qtyValue, platform || null, pkg || null, totalValue, soldAt || null]
+      [req.params.id, buyer, qtyValue, platform || null, pkg || null, totalValue, productPricing.currency, soldAt || null]
     )
     res.status(201).json({ data: result.rows[0] })
   } catch (err) {
@@ -403,7 +428,7 @@ router.post('/:id/sales', validateBody(saleFieldsCreate), async (req, res) => {
 router.get('/:id/sales/:saleId', async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT s.*, p.name AS product_name, p.image AS product_image, p.price AS product_price
+      `SELECT s.*, p.name AS product_name, p.image AS product_image, p.price AS product_price, p.currency AS product_currency
        FROM sales s
        JOIN products p ON p.id = s.product_id
        WHERE s.id = $1 AND s.product_id = $2 AND p.team_id = $3`,
@@ -422,10 +447,11 @@ router.get('/:id/sales/:saleId', async (req, res) => {
         platform: r.platform,
         package: r.package,
         total: r.total !== null ? Number(r.total) : null,
+        currency: r.currency,
         soldAt: r.sold_at,
         createdAt: r.created_at,
         updatedAt: r.updated_at,
-        product: { id: r.product_id, name: r.product_name, image: r.product_image, price: Number(r.product_price) },
+        product: { id: r.product_id, name: r.product_name, image: r.product_image, price: Number(r.product_price), currency: r.product_currency },
       },
     })
   } catch (err) {

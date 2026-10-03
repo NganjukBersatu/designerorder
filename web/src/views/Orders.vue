@@ -6,6 +6,7 @@ import { amount, shortDate, STATUS_LABEL } from '../utils/format.js'
 import StatusBadge from '../components/StatusBadge.vue'
 import Modal from '../components/Modal.vue'
 import OrderForm from '../components/OrderForm.vue'
+import { useTeamMembers } from '../composables/useTeamMembers'
 
 const router = useRouter()
 const nameOf = (o) => o.title || o.buyerName || 'Order'
@@ -16,6 +17,9 @@ const search = ref('')
 const status = ref('all')
 const showCreate = ref(false)
 const owner = ref('all') // 'all' | 'mine' (order buatan sendiri)
+const designerId = ref('')
+const month = ref('') // 'YYYY-MM' atau kosong = semua bulan
+const { members } = useTeamMembers()
 
 // --- Statistik status (kartu ringkasan) ---
 const stats = ref({ pending: 0, progress: 0, done: 0 })
@@ -114,6 +118,8 @@ async function load() {
     if (search.value) params.set('search', search.value)
     if (status.value !== 'all') params.set('status', status.value)
     if (owner.value === 'mine') params.set('mine', 'true')
+    if (designerId.value) params.set('designerId', designerId.value)
+    if (month.value) params.set('month', month.value)
     params.set('page', page.value)
     params.set('limit', limit.value)
     const qs = params.toString()
@@ -140,6 +146,8 @@ watch(search, () => {
 })
 watch(status, resetAndLoad)
 watch(owner, resetAndLoad)
+watch(designerId, resetAndLoad)
+watch(month, resetAndLoad)
 watch(page, load)
 onMounted(load)
 onMounted(loadStats)
@@ -328,6 +336,30 @@ function goToPage(p) {
           Milikku
         </button>
       </div>
+
+      <select
+        v-model="designerId"
+        aria-label="Filter designer"
+        class="px-3 py-2 rounded-lg border border-ink-200 bg-white text-[13px] text-ink-700 outline-none focus:border-brand-400 shrink-0"
+      >
+        <option value="">Semua designer</option>
+        <option v-for="m in members" :key="m.id" :value="m.id">{{ m.displayName || m.username }}</option>
+      </select>
+
+      <input
+        v-model="month"
+        type="month"
+        aria-label="Filter bulan"
+        class="px-3 py-1.5 rounded-lg border border-ink-200 bg-white text-[13px] text-ink-700 outline-none focus:border-brand-400 shrink-0"
+      />
+      <button
+        v-if="designerId || month"
+        type="button"
+        class="px-3 py-2 rounded-lg text-[13px] font-medium text-brand-600 hover:bg-brand-50 transition shrink-0"
+        @click="designerId = ''; month = ''"
+      >
+        Reset
+      </button>
 
       <span v-if="pagination" class="sm:ml-2 shrink-0 text-[12.5px] text-ink-400">
         {{ pagination.total }} order cocok

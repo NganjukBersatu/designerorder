@@ -36,7 +36,7 @@
         <span class="absolute left-0 top-0 bottom-0 w-1 bg-ok-500"></span>
         <div>
           <p class="text-[13px] text-ink-500 mb-1.5">Total Produk</p>
-          <p class="text-[28px] leading-none font-semibold text-ink-900">{{ products.length }}</p>
+          <p class="text-[28px] leading-none font-semibold text-ink-900">{{ products.length + bundles.length }}</p>
         </div>
         <div class="w-9 h-9 rounded-lg bg-ok-50 flex items-center justify-center text-ok-600 shrink-0">
           <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
@@ -121,7 +121,7 @@
           </div>
           <div>
             <dt class="text-[13px] text-ink-500 mb-0.5">Pendapatan</dt>
-            <dd class="font-semibold text-ink-900 tabular-nums">{{ formatPrice(cat.revenue) }}</dd>
+            <dd class="font-semibold text-ink-900 tabular-nums">{{ shown(cat.revenue) }}</dd>
           </div>
         </dl>
 
@@ -199,9 +199,16 @@ import { computed, ref, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useProducts, formatPrice } from '../composables/useProducts'
 import { useOptions } from '../composables/useOptions'
+import { useBundles } from '../composables/useBundles'
+import { useCurrency } from '../composables/useCurrency'
 
 const router = useRouter()
 const { products, totalSold } = useProducts()
+const { bundles } = useBundles()
+const { toDisplay, shown } = useCurrency()
+
+// Bundling dihitung sebagai satu produk di kategorinya
+const soldOf = (p) => (p.kind === 'bundle' ? p.soldQty || 0 : totalSold(p.id))
 const { mergeOptions, addOption } = useOptions()
 
 const MAX_THUMBS = 4
@@ -209,7 +216,7 @@ const MAX_THUMBS = 4
 // Kategori = Style. Pilihan Style dari Pengaturan tetap tampil walau belum ada produknya.
 const categories = computed(() => {
   const byStyle = new Map()
-  for (const p of products.value) {
+  for (const p of [...products.value, ...bundles.value]) {
     const style = (p.style || '').trim()
     if (!style) continue
     if (!byStyle.has(style)) byStyle.set(style, [])
@@ -235,8 +242,8 @@ const categories = computed(() => {
     return {
       name,
       count: items.length,
-      units: items.reduce((sum, p) => sum + totalSold(p.id), 0),
-      revenue: items.reduce((sum, p) => sum + totalSold(p.id) * (p.price || 0), 0),
+      units: items.reduce((sum, p) => sum + soldOf(p), 0),
+      revenue: items.reduce((sum, p) => sum + toDisplay(soldOf(p) * (p.price || 0), p.currency), 0),
       substyles: [...subs.entries()]
         .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
         .map(([label, count]) => ({ label, count })),

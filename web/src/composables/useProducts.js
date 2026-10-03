@@ -78,9 +78,18 @@ export function formatDateTime(dateStr) {
   })
 }
 
-export function formatPrice(n) {
+// Format harga dalam mata uangnya sendiri (default USD seperti sebelumnya: "$10" / "$10.50").
+// IDR, JPY, dan KRW tanpa pecahan.
+const NO_DECIMALS = ['IDR', 'JPY', 'KRW']
+export function formatPrice(n, currency = 'USD') {
   const num = Number(n) || 0
-  return `$${Number.isInteger(num) ? num : num.toFixed(2)}`
+  const digits = NO_DECIMALS.includes(currency) ? 0 : Number.isInteger(num) ? 0 : 2
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(num)
 }
 
 // Pastikan link diawali https:// supaya bisa dibuka (mis. link Dropbox)

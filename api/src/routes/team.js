@@ -49,12 +49,11 @@ router.post('/members', validateBody(memberFieldsCreate), async (req, res) => {
   const { password } = req.body
   const requestedRole = req.body.role === 'owner' || req.body.role === 'admin' ? req.body.role : 'member'
 
-  if (!canManage(req.user.role, requestedRole)) {
-    return res.status(403).json({
-      message: req.user.role === 'member'
-        ? 'Anggota biasa tidak bisa menambah anggota'
-        : 'Admin cuma bisa menambah anggota biasa, bukan admin/owner'
-    })
+  if (!canManage(req.user.role)) {
+    return res.status(403).json({ message: 'Anggota biasa tidak bisa menambah anggota' })
+  }
+  if (requestedRole === 'owner' && req.user.role !== 'owner') {
+    return res.status(403).json({ message: 'Hanya Owner yang bisa membuat akun Owner' })
   }
 
   try {
@@ -113,12 +112,11 @@ router.delete('/members/:id', async (req, res) => {
     if (!target.rows.length) {
       return res.status(404).json({ message: 'Anggota tidak ditemukan' })
     }
-    if (!canManage(req.user.role, target.rows[0].role)) {
-      return res.status(403).json({
-        message: req.user.role === 'member'
-          ? 'Anggota biasa tidak bisa menghapus anggota'
-          : 'Admin cuma bisa menghapus anggota biasa, bukan admin/owner'
-      })
+    if (!canManage(req.user.role)) {
+      return res.status(403).json({ message: 'Anggota biasa tidak bisa menghapus anggota' })
+    }
+    if (target.rows[0].role === 'owner' && req.user.role !== 'owner') {
+      return res.status(403).json({ message: 'Akun Owner hanya bisa dihapus oleh Owner' })
     }
 
     await pool.query('DELETE FROM users WHERE id = $1 AND team_id = $2', [req.params.id, req.user.teamId])

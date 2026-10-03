@@ -208,6 +208,68 @@ export const SCHEMA_SQL = `
   );
   CREATE INDEX IF NOT EXISTS idx_sales_product_sold ON sales (product_id, sold_at DESC);
 
+  -- ===== Bundling: beberapa produk SATU kategori yang dijual sebagai satu kesatuan =====
+  -- Isiannya mirip produk (nama, kategori/style, harga, link, catatan, gambar). Produk yang
+  -- masuk bundling ditandai products.bundle_id dan tidak tampil sebagai produk satuan.
+  CREATE TABLE IF NOT EXISTS bundles (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    team_id UUID NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    image TEXT,
+    name VARCHAR(255) NOT NULL,
+    style VARCHAR(100) NOT NULL,
+    substyle VARCHAR(100),
+    platform VARCHAR(255),
+    price NUMERIC(12, 2) NOT NULL DEFAULT 0,
+    note TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT now(),
+    updated_at TIMESTAMP NOT NULL DEFAULT now()
+  );
+  CREATE INDEX IF NOT EXISTS idx_bundles_team_style ON bundles (team_id, style, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_bundles_created_by ON bundles (created_by) WHERE created_by IS NOT NULL;
+
+  CREATE TABLE IF NOT EXISTS bundle_links (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    bundle_id UUID NOT NULL REFERENCES bundles(id) ON DELETE CASCADE,
+    url TEXT NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE INDEX IF NOT EXISTS idx_bundle_links_bundle ON bundle_links (bundle_id, position);
+
+  ALTER TABLE products ADD COLUMN IF NOT EXISTS bundle_id UUID REFERENCES bundles(id) ON DELETE SET NULL;
+  CREATE INDEX IF NOT EXISTS idx_products_bundle_id ON products (bundle_id) WHERE bundle_id IS NOT NULL;
+  -- daftar produk satuan: hanya yang belum ter-bundling
+  CREATE INDEX IF NOT EXISTS idx_products_team_single ON products (team_id, created_at DESC) WHERE bundle_id IS NULL;
+
+  CREATE TABLE IF NOT EXISTS bundle_sales (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    bundle_id UUID NOT NULL REFERENCES bundles(id) ON DELETE CASCADE,
+    team_id UUID NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    buyer VARCHAR(150) NOT NULL,
+    qty INTEGER NOT NULL DEFAULT 1,
+    platform VARCHAR(100),
+    total NUMERIC(12, 2),
+    sold_at TIMESTAMP NOT NULL DEFAULT now(),
+    created_at TIMESTAMP NOT NULL DEFAULT now(),
+    updated_at TIMESTAMP NOT NULL DEFAULT now()
+  );
+  CREATE INDEX IF NOT EXISTS idx_bundle_sales_bundle_sold ON bundle_sales (bundle_id, sold_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_bundle_sales_team_sold ON bundle_sales (team_id, sold_at DESC);
+
+  -- ===== Mata uang =====
+  -- Harga produk/bundling punya mata uangnya sendiri; penjualan mewarisinya saat dicatat.
+  -- Baris lama otomatis USD (sama dengan perilaku sebelumnya). Kurs & mata uang tampilan
+  -- Ringkasan disimpan per tim (kurs = satuan mata uang per 1 USD).
+  ALTER TABLE products ADD COLUMN IF NOT EXISTS currency VARCHAR(3) NOT NULL DEFAULT 'USD';
+  ALTER TABLE bundles ADD COLUMN IF NOT EXISTS currency VARCHAR(3) NOT NULL DEFAULT 'USD';
+  ALTER TABLE sales ADD COLUMN IF NOT EXISTS currency VARCHAR(3) NOT NULL DEFAULT 'USD';
+  ALTER TABLE bundle_sales ADD COLUMN IF NOT EXISTS currency VARCHAR(3) NOT NULL DEFAULT 'USD';
+  ALTER TABLE teams ADD COLUMN IF NOT EXISTS display_currency VARCHAR(3) NOT NULL DEFAULT 'USD';
+  ALTER TABLE teams ADD COLUMN IF NOT EXISTS rates JSONB NOT NULL DEFAULT '{}'::jsonb;
+  -- Nama & tagline aplikasi per tim (NULL = bawaan)
+  ALTER TABLE teams ADD COLUMN IF NOT EXISTS app_name VARCHAR(100);
+  ALTER TABLE teams ADD COLUMN IF NOT EXISTS app_tagline VARCHAR(150);
+
   -- ===== Pilihan dropdown per tim (halaman Pengaturan → Pilihan Produk/Tugas) =====
   -- Satu baris per tim; seluruh grup pilihan disimpan sebagai satu JSON.
   CREATE TABLE IF NOT EXISTS team_options (

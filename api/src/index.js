@@ -17,6 +17,9 @@ import uploadsRoutes from './routes/uploads.js'
 import filesRoutes from './routes/files.js'
 import adminRoutes from './routes/admin.js'
 import salesRoutes from './routes/sales.js'
+import bundlesRoutes from './routes/bundles.js'
+import currencyRoutes from './routes/currency.js'
+import appSettingsRoutes from './routes/appSettings.js'
 import { linkLegacyDesigners } from './utils/designers.js'
 
 const app = express()
@@ -35,6 +38,9 @@ app.use('/api/products', requireAuth, productsRoutes)
 app.use('/api/options', requireAuth, optionsRoutes)
 app.use('/api/uploads', requireAuth, uploadsRoutes)
 app.use('/api/sales', requireAuth, salesRoutes)
+app.use('/api/bundles', requireAuth, bundlesRoutes)
+app.use('/api/currency', requireAuth, currencyRoutes)
+app.use('/api/app-settings', requireAuth, appSettingsRoutes)
 app.use('/api/admin', requireAuth, requirePrivileged, adminRoutes)
 // Publik (tanpa login): tag <img> tidak bisa mengirim token. Key-nya UUID acak dan divalidasi ketat.
 app.use('/api/files', filesRoutes)

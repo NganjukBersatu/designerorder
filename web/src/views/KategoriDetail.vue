@@ -21,21 +21,30 @@
           <div class="flex flex-wrap items-center gap-3">
             <h2 class="text-2xl font-semibold text-ink-900">{{ name }}</h2>
             <span class="inline-flex items-center px-2.5 py-1 rounded-full bg-cream-100 text-ink-600 text-[12px] font-medium tabular-nums">
-              {{ items.length }} produk
+              {{ items.length }} produk<template v-if="categoryBundles.length"> · {{ categoryBundles.length }} bundling</template>
             </span>
           </div>
           <p class="text-sm text-ink-500 mt-1">Semua produk dengan Style {{ name }}.</p>
         </div>
-        <button
-          type="button"
-          @click="openAddModal"
-          class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium transition shadow-sm"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-          </svg>
-          Tambah Produk
-        </button>
+        <div class="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            @click="openBundleModal"
+            class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-brand-500 text-brand-600 hover:bg-brand-50 text-sm font-medium transition"
+          >
+            Buat Bundling
+          </button>
+          <button
+            type="button"
+            @click="openAddModal"
+            class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium transition shadow-sm"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+            </svg>
+            Tambah Produk
+          </button>
+        </div>
       </div>
 
       <!-- Isi kategori: daftar produk -->
@@ -83,6 +92,38 @@
           </div>
         </div>
 
+        <!-- Filter lanjutan -->
+        <div class="shrink-0 px-5 py-3 border-b border-ink-100 dark:border-ink-800 flex flex-wrap items-center gap-2.5">
+          <select v-model="filters.productionStatus" :class="filterSelect" aria-label="Filter status produksi">
+            <option value="">Semua status produksi</option>
+            <option v-for="o in filterOptions.productionStatus" :key="o" :value="o">{{ o }}</option>
+          </select>
+          <select v-model="filters.platform" :class="filterSelect" aria-label="Filter platform">
+            <option value="">Semua platform</option>
+            <option v-for="o in filterOptions.platform" :key="o" :value="o">{{ o }}</option>
+          </select>
+          <select v-model="filters.designer" :class="filterSelect" aria-label="Filter designer">
+            <option value="">Semua designer</option>
+            <option v-for="o in filterOptions.designer" :key="o" :value="o">{{ o }}</option>
+          </select>
+          <select v-model="filters.sold" :class="filterSelect" aria-label="Filter status jual">
+            <option value="">Semua status jual</option>
+            <option value="sold">Terjual</option>
+            <option value="unsold">Belum terjual</option>
+          </select>
+          <button
+            v-if="hasFilter"
+            type="button"
+            class="px-3 py-2 rounded-xl text-sm font-medium text-brand-600 hover:bg-brand-50 transition"
+            @click="resetFilters"
+          >
+            Reset filter
+          </button>
+          <span class="ml-auto text-[13px] text-ink-400 tabular-nums">
+            {{ filteredItems.length + filteredBundles.length }} dari {{ items.length + categoryBundles.length }}
+          </span>
+        </div>
+
         <div class="scroll-fill">
           <table v-rtable class="rtable-xl w-full text-sm">
             <thead>
@@ -104,6 +145,69 @@
               </tr>
             </thead>
             <tbody>
+              <!-- Bundling di kategori ini (dihitung sebagai satu produk) -->
+              <tr
+                v-for="(b, bIndex) in filteredBundles"
+                :key="b.id"
+                @click="router.push(`/bundling/${b.id}`)"
+                class="border-b border-ink-50 dark:border-ink-800 hover:bg-black/[0.03] dark:hover:bg-white/[0.06] transition group cursor-pointer"
+              >
+                <td class="px-4 py-4 text-ink-400 sticky left-0 z-10 bg-white dark:bg-cream-900 group-hover:bg-black/[0.03] dark:group-hover:bg-white/[0.06]">{{ bIndex + 1 }}</td>
+                <td class="px-4 py-3">
+                  <div class="flex items-center gap-3">
+                    <div class="w-12 h-12 shrink-0 rounded-lg overflow-hidden border border-ink-100 dark:border-ink-800 bg-cream-100 dark:bg-cream-800 flex items-center justify-center">
+                      <img v-if="b.image" :src="b.image" :alt="b.name" class="w-full h-full object-cover" loading="lazy" />
+                      <span v-else class="text-[10px] text-ink-300">Bundling</span>
+                    </div>
+                    <div class="min-w-0">
+                      <span class="font-medium text-ink-800 dark:text-ink-100">{{ b.name }}</span>
+                      <div class="flex items-center gap-1.5 mt-0.5">
+                        <span class="inline-flex px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 text-[11px] font-medium">Bundling</span>
+                        <span class="text-[12px] text-ink-400">{{ b.itemCount }} produk</span>
+                      </div>
+                    </div>
+                  </div>
+                </td>
+                <td class="px-4 py-4 text-ink-600 dark:text-ink-300">{{ b.substyle || '—' }}</td>
+                <td class="px-4 py-4 text-ink-300">—</td>
+                <td class="px-4 py-4 text-ink-500 dark:text-ink-400 text-[13px]">{{ b.createdAt ? formatDateTime(b.createdAt) : '—' }}</td>
+                <td class="px-4 py-4 text-ink-300">—</td>
+                <td class="px-4 py-4 text-ink-300">—</td>
+                <td class="px-4 py-4"><PlatformBadges :platform="b.platform" /></td>
+                <td class="px-4 py-4">
+                  <div v-if="b.linkDbs.length" class="flex flex-col gap-1">
+                    <a
+                      v-for="(link, i) in b.linkDbs"
+                      :key="i"
+                      :href="link"
+                      :title="link"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      @click.stop
+                      class="inline-flex items-center gap-1.5 text-brand-600 hover:underline whitespace-nowrap"
+                    >{{ b.linkDbs.length > 1 ? `Dropbox ${i + 1}` : 'Buka Dropbox' }}</a>
+                  </div>
+                  <span v-else class="text-ink-300">—</span>
+                </td>
+                <td class="px-4 py-4 text-right text-ink-700 dark:text-ink-100 font-medium tabular-nums">{{ b.price ? formatPrice(b.price, b.currency) : '—' }}</td>
+                <td class="px-4 py-4 text-right text-ink-700 dark:text-ink-100 tabular-nums">{{ b.soldQty }}</td>
+                <td class="px-4 py-4 text-center">
+                  <span :class="['inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-medium', b.soldQty > 0 ? 'bg-ok-100 text-ok-700' : 'bg-warn-100 text-warn-700']">
+                    {{ b.soldQty > 0 ? 'Terjual' : 'Belum Terjual' }}
+                  </span>
+                </td>
+                <td class="px-4 py-4 text-center" @click.stop>
+                  <button
+                    class="p-1.5 rounded-lg hover:bg-ok-100 text-ok-600 transition"
+                    title="Catat penjualan"
+                    @click="router.push({ path: `/bundling/${b.id}`, query: { jual: 1 } })"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+                  </button>
+                </td>
+                <td class="px-4 py-4 text-ink-500 dark:text-ink-400">{{ b.note || '—' }}</td>
+              </tr>
+
               <tr
                 v-for="(item, index) in filteredItems"
                 :key="item.id"
@@ -111,7 +215,7 @@
                 class="border-b border-ink-50 dark:border-ink-800 hover:bg-black/[0.03] dark:hover:bg-white/[0.06] transition group cursor-pointer"
               >
                 <td class="px-4 py-4 text-ink-400 sticky left-0 z-10 bg-white dark:bg-cream-900 group-hover:bg-black/[0.03] dark:group-hover:bg-white/[0.06]">
-                  {{ index + 1 }}
+                  {{ filteredBundles.length + index + 1 }}
                 </td>
                 <td class="px-4 py-3">
                   <div class="flex items-center gap-3">
@@ -170,7 +274,7 @@
                   <span v-else class="text-ink-300">—</span>
                 </td>
                 <td class="px-4 py-4 text-right text-ink-700 dark:text-ink-100 font-medium tabular-nums">
-                  {{ item.price ? formatPrice(item.price) : '—' }}
+                  {{ item.price ? formatPrice(item.price, item.currency) : '—' }}
                 </td>
                 <td class="px-4 py-4 text-right text-ink-700 dark:text-ink-100 tabular-nums">{{ totalSold(item.id) }}</td>
                 <td class="px-4 py-4 text-center">
@@ -237,9 +341,9 @@
                 <td class="px-4 py-4 text-ink-500 dark:text-ink-400">{{ item.note || '—' }}</td>
               </tr>
 
-              <tr v-if="filteredItems.length === 0">
+              <tr v-if="filteredItems.length + filteredBundles.length === 0">
                 <td colspan="14" class="px-4 py-16 text-center text-ink-400">
-                  <template v-if="items.length === 0">
+                  <template v-if="items.length + categoryBundles.length === 0">
                     Belum ada produk di kategori ini. Klik <strong>Tambah Produk</strong> untuk menambahkan yang pertama.
                   </template>
                   <template v-else>
@@ -264,6 +368,20 @@
         Kembali ke Kategori
       </button>
     </div>
+
+    <!-- ==================== MODAL BUAT BUNDLING ==================== -->
+    <BundleForm
+      :open="showBundleModal"
+      mode="create"
+      :category="name"
+      :candidates="items"
+      :substyle-options="substyleOptions"
+      :platform-options="optionsOf('platform')"
+      :saving="savingBundle"
+      :error="bundleError"
+      @close="showBundleModal = false"
+      @save="submitBundle"
+    />
 
     <!-- ==================== MODAL TAMBAH PRODUK ==================== -->
     <Teleport to="body">
@@ -421,8 +539,8 @@
             </div>
 
             <div class="fx-full">
-              <label class="block text-sm font-medium text-ink-700 dark:text-ink-200 mb-1.5">Harga ($)</label>
-              <input v-model.number="addForm.price" type="number" min="0" step="0.5" class="w-full px-3 py-2.5 rounded-xl border border-ink-200 dark:border-ink-800 bg-white dark:bg-cream-800 text-ink-800 dark:text-ink-100 focus:border-brand-400 outline-none text-sm transition" placeholder="0.00" />
+              <label class="block text-sm font-medium text-ink-700 dark:text-ink-200 mb-1.5">Harga</label>
+              <PriceInput v-model="addForm.price" v-model:currency="addForm.currency" />
             </div>
 
             <div class="fx-full">
@@ -602,8 +720,8 @@
             </div>
 
             <div class="fx-full">
-              <label class="block text-sm font-medium text-ink-700 dark:text-ink-200 mb-1.5">Harga ($)</label>
-              <input v-model.number="editForm.price" type="number" min="0" step="0.5" class="w-full px-3 py-2.5 rounded-xl border border-ink-200 dark:border-ink-800 bg-white dark:bg-cream-800 text-ink-800 dark:text-ink-100 focus:border-brand-400 outline-none text-sm transition" placeholder="0.00" />
+              <label class="block text-sm font-medium text-ink-700 dark:text-ink-200 mb-1.5">Harga</label>
+              <PriceInput v-model="editForm.price" v-model:currency="editForm.currency" />
             </div>
 
             <div class="fx-full">
@@ -675,6 +793,9 @@ import { splitPlatforms } from '../utils/platforms'
 import PlatformBadges from '../components/PlatformBadges.vue'
 import OptionSelect from '../components/OptionSelect.vue'
 import PlatformPicker from '../components/PlatformPicker.vue'
+import BundleForm from '../components/BundleForm.vue'
+import PriceInput from '../components/PriceInput.vue'
+import { useBundles } from '../composables/useBundles'
 
 const route = useRoute()
 const router = useRouter()
@@ -682,6 +803,7 @@ const router = useRouter()
 const { products, totalSold, isSold, addProduct, updateProduct, removeProduct } = useProducts()
 const { optionsOf, mergeOptions } = useOptions()
 const { members } = useTeamMembers()
+const { bundlesOf, addBundle } = useBundles()
 
 const substyleOptions = computed(() =>
   mergeOptions('substyle', [...new Set(products.value.map(p => p.substyle).filter(Boolean))].sort())
@@ -697,8 +819,9 @@ const name = computed(() => String(route.params.name || ''))
 const items = computed(() =>
   products.value.filter(p => (p.style || '').trim() === name.value)
 )
+const categoryBundles = computed(() => bundlesOf(name.value))
 const categoryExists = computed(
-  () => items.value.length > 0 || optionsOf('style').includes(name.value)
+  () => items.value.length > 0 || categoryBundles.value.length > 0 || optionsOf('style').includes(name.value)
 )
 
 // ========== WARNA BADGE STATUS PRODUKSI ==========
@@ -743,10 +866,10 @@ watch(
 )
 
 const substyleChips = computed(() => {
-  const chips = [{ key: 'all', label: 'Semua', count: items.value.length }]
+  const chips = [{ key: 'all', label: 'Semua', count: items.value.length + categoryBundles.value.length }]
   const subs = new Map()
   let none = 0
-  for (const p of items.value) {
+  for (const p of [...items.value, ...categoryBundles.value]) {
     const sub = (p.substyle || '').trim()
     if (sub) subs.set(sub, (subs.get(sub) || 0) + 1)
     else none++
@@ -757,26 +880,82 @@ const substyleChips = computed(() => {
   return chips
 })
 
-const filteredItems = computed(() => {
-  let result = items.value
-  if (activeSub.value === NONE) {
-    result = result.filter(p => !(p.substyle || '').trim())
-  } else if (activeSub.value !== 'all') {
-    result = result.filter(p => (p.substyle || '').trim() === activeSub.value)
+// Filter lanjutan (dropdown). Semua kondisi digabung dengan "dan".
+const filterSelect =
+  'px-3 py-2 rounded-xl border border-ink-200 dark:border-ink-800 bg-white dark:bg-cream-800 text-ink-700 dark:text-ink-100 focus:border-brand-400 outline-none text-sm transition'
+const filters = ref({ productionStatus: '', platform: '', designer: '', sold: '' })
+const hasFilter = computed(() => Object.values(filters.value).some(Boolean))
+function resetFilters() {
+  filters.value = { productionStatus: '', platform: '', designer: '', sold: '' }
+}
+watch(() => route.params.name, resetFilters)
+
+// Pilihan filter diambil dari data kategori ini saja, jadi tidak ada opsi yang pasti kosong
+const filterOptions = computed(() => {
+  const uniq = (list) => [...new Set(list.filter(Boolean))].sort((a, b) => a.localeCompare(b))
+  return {
+    productionStatus: uniq(items.value.map((p) => p.productionStatus)),
+    platform: uniq([...items.value, ...categoryBundles.value].flatMap((p) => splitPlatforms(p.platform))),
+    designer: uniq(items.value.map((p) => p.designer)),
   }
-  const q = searchQuery.value.toLowerCase().trim()
-  if (q) {
-    result = result.filter(p =>
-      (p.name || '').toLowerCase().includes(q) ||
-      (p.substyle || '').toLowerCase().includes(q) ||
-      (p.designer || '').toLowerCase().includes(q) ||
-      (p.platform || '').toLowerCase().includes(q) ||
-      (p.productionStatus || '').toLowerCase().includes(q) ||
-      (p.note || '').toLowerCase().includes(q)
-    )
-  }
-  return result
 })
+
+const matchesSearch = (q, fields) => !q || fields.some((f) => (f || '').toLowerCase().includes(q))
+const matchesSub = (p) => {
+  const sub = (p.substyle || '').trim()
+  if (activeSub.value === NONE) return !sub
+  return activeSub.value === 'all' || sub === activeSub.value
+}
+const matchesSold = (soldQty) =>
+  !filters.value.sold || (filters.value.sold === 'sold' ? soldQty > 0 : soldQty === 0)
+const matchesPlatform = (p) => !filters.value.platform || splitPlatforms(p.platform).includes(filters.value.platform)
+
+const filteredItems = computed(() => {
+  const q = searchQuery.value.toLowerCase().trim()
+  const f = filters.value
+  return items.value.filter(
+    (p) =>
+      matchesSub(p) &&
+      matchesSearch(q, [p.name, p.substyle, p.designer, p.platform, p.productionStatus, p.note]) &&
+      (!f.productionStatus || p.productionStatus === f.productionStatus) &&
+      (!f.designer || p.designer === f.designer) &&
+      matchesPlatform(p) &&
+      matchesSold(totalSold(p.id))
+  )
+})
+
+// Bundling tidak punya designer / status produksi, jadi tersaring keluar kalau filter itu dipakai
+const filteredBundles = computed(() => {
+  const q = searchQuery.value.toLowerCase().trim()
+  const f = filters.value
+  if (f.productionStatus || f.designer) return []
+  return categoryBundles.value.filter(
+    (b) => matchesSub(b) && matchesSearch(q, [b.name, b.substyle, b.platform, b.note]) && matchesPlatform(b) && matchesSold(b.soldQty)
+  )
+})
+
+// ========== BUAT BUNDLING ==========
+const showBundleModal = ref(false)
+const savingBundle = ref(false)
+const bundleError = ref('')
+
+function openBundleModal() {
+  bundleError.value = ''
+  showBundleModal.value = true
+}
+async function submitBundle(payload) {
+  savingBundle.value = true
+  bundleError.value = ''
+  try {
+    const created = await addBundle(payload)
+    showBundleModal.value = false
+    router.push(`/bundling/${created.id}`)
+  } catch (err) {
+    bundleError.value = err.message
+  } finally {
+    savingBundle.value = false
+  }
+}
 
 // ========== NAVIGASI ==========
 function goBack() {
@@ -851,6 +1030,7 @@ function emptyAddForm() {
     platform: '',
     linkDbs: [''],
     price: 0,
+    currency: 'USD',
     note: ''
   }
 }
@@ -895,6 +1075,7 @@ function submitAdd() {
     linkDb: cleaned[0] || '',
     linkDbs: cleaned,
     price: addForm.value.price || 0,
+    currency: addForm.value.currency,
     note: addForm.value.note.trim()
   })
   closeAddModal()
@@ -924,6 +1105,7 @@ function editProduct(item) {
     platform: item.platform || '',
     linkDbs: links.length ? [...links] : [''],
     price: item.price ?? 0,
+    currency: item.currency || 'USD',
     note: item.note || ''
   }
   editImageError.value = ''
@@ -970,6 +1152,7 @@ async function submitEdit() {
       linkDb: cleaned[0] || '',
       linkDbs: cleaned,
       price: editForm.value.price || 0,
+      currency: editForm.value.currency,
       note: editForm.value.note.trim()
     })
     closeEditModal()

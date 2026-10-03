@@ -1,10 +1,12 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { api } from '../utils/api.js'
-import { amount, monthLabel } from '../utils/format.js'
+import { monthLabel } from '../utils/format.js'
 import StatusBadge from '../components/StatusBadge.vue'
 import { useProducts, formatDateTime, formatPrice } from '../composables/useProducts'
 import { useOptions } from '../composables/useOptions'
+import { useBundles } from '../composables/useBundles'
+import { useCurrency } from '../composables/useCurrency'
 
 // ========== PESANAN (data dari API) ==========
 const loading = ref(true)
@@ -103,7 +105,26 @@ async function load() {
 onMounted(load)
 
 // ========== PRODUK & PENJUALAN (data dari useProducts) ==========
-const { products, totalSold, isSold } = useProducts()
+const { products, totalSold } = useProducts()
+const { bundles } = useBundles()
+const { toDisplay, shown, display, displayCurrency, missingRates } = useCurrency()
+
+// Semua nilai di halaman ini ditampilkan dalam satu mata uang (diatur di Pengaturan > Mata Uang).
+// `amount` = nilai dalam mata uang asalnya (default USD, mata uang pesanan) dikonversi untuk tampilan.
+const amount = (value, from = 'USD') => display(value, from)
+
+// Bundling dihitung sebagai SATU produk di kategorinya (bukan sebanyak isinya).
+// Produk yang masuk bundling sudah tidak ada di daftar produk satuan, jadi tidak terhitung dobel.
+const sellables = computed(() => [
+  ...products.value.map((p) => ({ ...p, kind: 'product', units: totalSold(p.id), transactions: p.salesCount || 0 })),
+  ...bundles.value.map((b) => ({ ...b, kind: 'bundle', units: b.soldQty || 0, transactions: b.salesCount || 0 })),
+].map((p) => ({ ...p, revenue: toDisplay(p.units * (p.price || 0), p.currency) })))
+
+// Mata uang yang dipakai tapi kursnya belum diisi: nilainya belum ikut terhitung
+const missingCurrencies = computed(() => missingRates(sellables.value.filter((p) => p.units > 0).map((p) => p.currency)))
+const sellableLink = (p) => (p.kind === 'bundle' ? `/bundling/${p.id}` : `/produk/${p.id}`)
+const saleLink = (s) => (s.kind === 'bundle' ? `/bundling/${s.productId}/penjualan/${s.id}` : `/produk/${s.productId}/penjualan/${s.id}`)
+const itemLink = (s) => (s.kind === 'bundle' ? `/bundling/${s.productId}` : `/produk/${s.productId}`)
 
 // Nama field gambar produk. Sesuaikan urutannya kalau field di API/data kamu berbeda.
 const PRODUCT_IMAGE_KEYS = ['image', 'imageUrl', 'photo', 'thumbnail', 'coverImage']
@@ -112,21 +133,18 @@ function productImage(p) {
   return null
 }
 
-const totalProducts = computed(() => products.value.length)
-const soldProducts = computed(() => products.value.filter((p) => isSold(p.id)).length)
+const totalProducts = computed(() => sellables.value.length)
+const soldProducts = computed(() => sellables.value.filter((p) => p.units > 0).length)
 const unsoldProducts = computed(() => totalProducts.value - soldProducts.value)
 
 // Total unit & jumlah transaksi: agregat dari server (tiap produk membawa soldQty / salesCount)
-const totalUnits = computed(() => products.value.reduce((sum, p) => sum + (p.soldQty || 0), 0))
-const totalTransactions = computed(() => products.value.reduce((sum, p) => sum + (p.salesCount || 0), 0))
+const totalUnits = computed(() => sellables.value.reduce((sum, p) => sum + p.units, 0))
+const totalTransactions = computed(() => sellables.value.reduce((sum, p) => sum + p.transactions, 0))
 
 // 5 produk dengan unit terjual terbanyak
 const topProducts = computed(() =>
-  products.value
-    .map((p) => {
-      const units = totalSold(p.id)
-      return { id: p.id, name: p.name, image: productImage(p), units, revenue: units * (p.price || 0) }
-    })
+  sellables.value
+    .map((p) => ({ id: p.id, kind: p.kind, name: p.name, image: productImage(p), units: p.units, revenue: p.revenue }))
     .filter((p) => p.units > 0)
     .sort((a, b) => b.units - a.units || b.revenue - a.revenue)
     .slice(0, 5)
@@ -139,15 +157,15 @@ const { optionsOf } = useOptions()
 
 const categoryStats = computed(() => {
   const names = new Set(optionsOf('style'))
-  for (const p of products.value) {
+  for (const p of sellables.value) {
     const s = (p.style || '').trim()
     if (s) names.add(s)
   }
 
   return [...names].map((name) => {
-    const items = products.value.filter((p) => (p.style || '').trim() === name)
-    const units = items.reduce((sum, p) => sum + totalSold(p.id), 0)
-    const revenue = items.reduce((sum, p) => sum + totalSold(p.id) * (p.price || 0), 0)
+    const items = sellables.value.filter((p) => (p.style || '').trim() === name)
+    const units = items.reduce((sum, p) => sum + p.units, 0)
+    const revenue = items.reduce((sum, p) => sum + p.revenue, 0)
     return { name, count: items.length, units, revenue }
   }).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
 })
@@ -162,10 +180,11 @@ const recentSales = ref([])
 // Penjualan produk pada bulan yang sedang dipilih (GET /sales?month=), dimuat di load()
 const monthSales = ref([])
 
-const saleValue = (s) => (s.product.price || 0) * (Number(s.qty) || 0)
+// Nilai penjualan dalam mata uang penjualannya: total yang tercatat, atau harga x jumlah kalau kosong
+const saleValue = (s) => s.total ?? (s.product.price || 0) * (Number(s.qty) || 0)
 
 function downloadCsv() {
-  const rows = [['Jenis', 'Tanggal', 'Nama', 'Keterangan', 'Jumlah', 'Nilai', 'Status / Platform']]
+  const rows = [['Jenis', 'Tanggal', 'Nama', 'Keterangan', 'Jumlah', `Nilai (${displayCurrency.value})`, 'Status / Platform']]
 
   // Semua pesanan pada bulan yang dipilih (bukan cuma "terbaru"), konsisten
   // dengan monthSales di bawah yang juga sudah terfilter per bulan.
@@ -177,7 +196,7 @@ function downloadCsv() {
       o.buyerName || '',
       [o.category, o.characterType].filter(Boolean).join(' / '),
       1,
-      o.price || 0,
+      Math.round(toDisplay(o.price || 0, 'USD') * 100) / 100,
       o.status || '',
     ])
   }
@@ -186,9 +205,9 @@ function downloadCsv() {
       'Penjualan produk',
       formatDateTime(s.soldAt),
       s.buyer,
-      `${s.product.name} (${s.package || 'Satuan'})`,
+      `${s.product.name} (${s.kind === 'bundle' ? 'Bundling' : s.package || 'Satuan'})`,
       s.qty,
-      saleValue(s),
+      Math.round(toDisplay(saleValue(s), s.currency) * 100) / 100,
       s.platform || '',
     ])
   }
@@ -295,7 +314,12 @@ const peakMonth = computed(() => {
       </div>
     </div>
 
-    <!-- ==================== AKSI CEPAT ==================== -->
+    <p v-if="missingCurrencies.length" class="print-hidden text-[13px] text-warn-700 bg-warn-100 rounded-xl px-4 py-3">
+      Kurs {{ missingCurrencies.join(', ') }} belum diisi, jadi nilainya belum ikut terhitung di ringkasan.
+      Isi di <router-link to="/pengaturan?tab=mata-uang" class="underline font-medium">Pengaturan &gt; Mata Uang</router-link>.
+    </p>
+
+    <!-- ==================== AKSI CEPAT ====================
     <div class="flex flex-wrap items-center gap-2.5">
       <router-link
         to="/orders"
@@ -629,7 +653,7 @@ const peakMonth = computed(() => {
                 :style="{ width: `${Math.min(Math.round((c.revenue / maxCategoryRevenue) * 100), 100)}%` }"
               />
             </div>
-            <p class="text-[13px] font-semibold text-ink-900">{{ formatPrice(c.revenue) }}</p>
+            <p class="text-[13px] font-semibold text-ink-900">{{ shown(c.revenue) }}</p>
           </router-link>
         </div>
       </div>
@@ -671,7 +695,7 @@ const peakMonth = computed(() => {
             <router-link
               v-for="(p, idx) in topProducts"
               :key="p.id"
-              :to="`/produk/${p.id}`"
+              :to="sellableLink(p)"
               class="flex items-center gap-3 group"
             >
               <span class="w-5 text-[12px] font-medium text-ink-300 text-center shrink-0">{{ idx + 1 }}</span>
@@ -705,7 +729,7 @@ const peakMonth = computed(() => {
                       :style="{ width: `${Math.round((p.units / maxUnits) * 100)}%` }"
                     />
                   </div>
-                  <span class="text-[12px] text-ink-400 w-16 text-right">{{ amount(p.revenue) }}</span>
+                  <span class="text-[12px] text-ink-400 w-16 text-right">{{ shown(p.revenue) }}</span>
                 </div>
               </div>
             </router-link>
@@ -733,7 +757,7 @@ const peakMonth = computed(() => {
             <router-link
               v-for="s in recentSales"
               :key="s.id"
-              :to="`/produk/${s.productId}/penjualan/${s.id}`"
+              :to="saleLink(s)"
               class="flex items-center justify-between gap-3 py-3 hover:bg-ink-500/5 -mx-2 px-2 rounded-lg transition"
             >
               <div class="min-w-0">
@@ -741,7 +765,7 @@ const peakMonth = computed(() => {
                 <p class="text-[12px] text-ink-400 truncate">{{ s.product.name }} · {{ formatDateTime(s.soldAt) }}</p>
               </div>
               <div class="shrink-0 text-right">
-                <p class="text-[13px] font-medium text-ink-800">{{ amount((s.product.price || 0) * s.qty) }}</p>
+                <p class="text-[13px] font-medium text-ink-800">{{ amount(saleValue(s), s.currency) }}</p>
                 <p class="text-[11px] text-ink-400">{{ s.qty }} unit<template v-if="s.platform"> · {{ s.platform }}</template></p>
               </div>
             </router-link>
@@ -786,17 +810,17 @@ const peakMonth = computed(() => {
                 v-for="s in monthSales"
                 :key="s.id"
                 class="border-b border-ink-50 hover:bg-ink-500/5 transition cursor-pointer"
-                @click="$router.push(`/produk/${s.productId}/penjualan/${s.id}`)"
+                @click="$router.push(saleLink(s))"
               >
                 <td class="px-4 py-3 text-ink-500 whitespace-nowrap">{{ formatDateTime(s.soldAt) }}</td>
                 <td class="px-4 py-3 font-medium text-ink-800">{{ s.buyer }}</td>
                 <td class="px-4 py-3 text-ink-600">
-                  <router-link :to="`/produk/${s.productId}`" class="hover:text-brand-600 transition" @click.stop>{{ s.product.name }}</router-link>
+                  <router-link :to="itemLink(s)" class="hover:text-brand-600 transition" @click.stop>{{ s.product.name }}</router-link>
                 </td>
                 <td class="px-4 py-3 text-ink-600">{{ s.package || 'Satuan' }}</td>
                 <td class="px-4 py-3 text-ink-600">{{ s.platform || '—' }}</td>
                 <td class="px-4 py-3 text-right tabular-nums text-ink-700">{{ s.qty }}</td>
-                <td class="px-4 py-3 text-right tabular-nums text-ink-700 font-medium">{{ amount(saleValue(s)) }}</td>
+                <td class="px-4 py-3 text-right tabular-nums text-ink-700 font-medium">{{ amount(saleValue(s), s.currency) }}</td>
               </tr>
             </tbody>
           </table>

@@ -101,7 +101,7 @@
         <div class="relative bg-white rounded-card shadow-card border border-ink-100 overflow-hidden pl-5 pr-4 py-4">
           <span class="absolute left-0 top-0 bottom-0 w-1 bg-brand-400"></span>
           <p class="text-[13px] text-ink-500 mb-1.5">Total Pendapatan</p>
-          <p class="text-[28px] leading-none font-semibold text-ink-900">{{ formatPrice(revenue) }}</p>
+          <p class="text-[28px] leading-none font-semibold text-ink-900">{{ formatPrice(revenue, product?.currency) }}</p>
         </div>
 
         <div class="relative bg-white rounded-card shadow-card border border-ink-100 overflow-hidden pl-5 pr-4 py-4">
@@ -140,7 +140,7 @@
           <div>
             <dt class="text-[13px] text-ink-500 mb-0.5">Harga</dt>
             <dd class="text-ink-800 font-medium tabular-nums">
-              {{ product.price ? formatPrice(product.price) : '—' }}
+              {{ product.price ? formatPrice(product.price, product.currency) : '—' }}
             </dd>
           </div>
           <div class="fx-full">
@@ -153,7 +153,7 @@
               >
                 <div class="flex items-center justify-between gap-2">
                   <span class="font-medium text-ink-800 text-[13.5px]">{{ pk.name }}</span>
-                  <span class="text-ink-700 text-[13px] font-medium tabular-nums shrink-0">{{ formatPrice(pk.price) }}</span>
+                  <span class="text-ink-700 text-[13px] font-medium tabular-nums shrink-0">{{ formatPrice(pk.price, product.currency) }}</span>
                 </div>
                 <p v-if="pk.description" class="text-[12px] text-ink-500 mt-1">{{ pk.description }}</p>
               </div>
@@ -254,7 +254,7 @@
                   <span v-if="sale.qty > 1" class="ml-1.5 text-ink-400 tabular-nums text-[13px]">×{{ sale.qty }}</span>
                 </td>
                 <td class="px-4 py-4 text-right text-ink-700 font-medium tabular-nums">
-                  {{ formatPrice((product.price || 0) * sale.qty) }}
+                  {{ formatPrice(sale.total ?? (product.price || 0) * sale.qty, sale.currency || product.currency) }}
                 </td>
                 <td class="px-4 py-4 text-ink-500 text-[13px]">{{ formatDateTime(sale.soldAt) }}</td>
                 <td class="px-4 py-4 text-center cursor-default" @click.stop>
@@ -458,8 +458,9 @@
             </div>
 
             <div class="fx-full">
-              <label class="block text-sm font-medium text-ink-700 mb-1.5">Harga ($)</label>
-              <input v-model.number="editForm.price" type="number" min="0" step="0.5" class="w-full px-3 py-2.5 rounded-xl border border-ink-200 focus:border-brand-400 outline-none text-sm transition" placeholder="0.00" />
+              <label class="block text-sm font-medium text-ink-700 mb-1.5">Harga</label>
+              <PriceInput v-model="editForm.price" v-model:currency="editForm.currency" :lock-currency="!!product?.bundleId" />
+              <p v-if="product?.bundleId" class="text-xs text-ink-400 mt-1">Produk ada di dalam bundling, jadi mata uangnya terkunci.</p>
             </div>
 
             <div class="fx-full">
@@ -670,6 +671,7 @@ import { useOptions } from '../composables/useOptions'
 import { useTeamMembers } from '../composables/useTeamMembers'
 import OptionSelect from '../components/OptionSelect.vue'
 import PlatformPicker from '../components/PlatformPicker.vue'
+import PriceInput from '../components/PriceInput.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -823,6 +825,7 @@ function openEditModal() {
     platform: p.platform || '',
     linkDbs: getLinks(p).length ? getLinks(p) : [''], // bisa lebih dari satu link
     price: p.price || 0,
+    currency: p.currency || 'USD',
     note: p.note || '',
     packages: (p.packages || []).map((pk) => ({ ...pk }))
   }
@@ -889,6 +892,7 @@ function submitEdit() {
     linkDb: cleaned[0] || '', // link pertama, supaya kompatibel dengan data lama
     linkDbs: cleaned,
     price: editForm.value.price || 0,
+    currency: editForm.value.currency,
     note: editForm.value.note.trim(),
     packages: editForm.value.packages
   })

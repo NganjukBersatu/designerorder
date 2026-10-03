@@ -129,10 +129,10 @@ async function replaceLinks(client, orderId, urls) {
   )
 }
 
-// GET /api/orders?search=&status=&mine=true&createdBy=<userId>&month=YYYY-MM&page=&limit=
+// GET /api/orders?search=&status=&mine=true&createdBy=<userId>&designerId=<userId>&month=YYYY-MM&page=&limit=
 router.get('/', async (req, res) => {
   try {
-    const { search, status, mine, month, createdBy } = req.query
+    const { search, status, mine, month, createdBy, designerId } = req.query
     const params = [req.user.teamId]
     const where = ['o.team_id = $1']
 
@@ -168,6 +168,11 @@ router.get('/', async (req, res) => {
       if (!isUuid(createdBy)) return res.status(400).json({ message: 'createdBy tidak valid' })
       params.push(createdBy)
       where.push(`o.created_by = $${params.length}`)
+    }
+    if (designerId) {
+      if (!isUuid(designerId)) return res.status(400).json({ message: 'designerId tidak valid' })
+      params.push(designerId)
+      where.push(`o.designer_id = $${params.length}`)
     }
     if (mine === 'true' || mine === '1') {
       params.push(req.user.id)
