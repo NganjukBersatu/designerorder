@@ -348,11 +348,11 @@
             <div>
               <label class="block text-sm font-medium text-ink-700 dark:text-ink-200 mb-1.5">Designer</label>
               <select
-                v-model="addForm.designer"
+                v-model="addForm.designerId"
                 class="w-full px-3 py-2.5 rounded-xl border border-ink-200 dark:border-ink-800 bg-white dark:bg-cream-800 text-ink-800 dark:text-ink-100 focus:border-brand-400 outline-none text-sm transition"
               >
-                <option value="">Pilih designer</option>
-                <option v-for="d in designerOptions" :key="d" :value="d">{{ d }}</option>
+                <option value="">Belum dipilih</option>
+                <option v-for="m in members" :key="m.id" :value="m.id">{{ m.displayName || m.username }}</option>
               </select>
             </div>
 
@@ -529,11 +529,11 @@
             <div>
               <label class="block text-sm font-medium text-ink-700 dark:text-ink-200 mb-1.5">Designer</label>
               <select
-                v-model="editForm.designer"
+                v-model="editForm.designerId"
                 class="w-full px-3 py-2.5 rounded-xl border border-ink-200 dark:border-ink-800 bg-white dark:bg-cream-800 text-ink-800 dark:text-ink-100 focus:border-brand-400 outline-none text-sm transition"
               >
-                <option value="">Pilih designer</option>
-                <option v-for="d in designerOptions" :key="d" :value="d">{{ d }}</option>
+                <option value="">Belum dipilih</option>
+                <option v-for="m in members" :key="m.id" :value="m.id">{{ m.displayName || m.username }}</option>
               </select>
             </div>
 
@@ -685,9 +685,6 @@ const { members } = useTeamMembers()
 
 const substyleOptions = computed(() =>
   mergeOptions('substyle', [...new Set(products.value.map(p => p.substyle).filter(Boolean))].sort())
-)
-const designerOptions = computed(() =>
-  mergeOptions('designer', members.value.map(m => m.username))
 )
 const productionStatusOptions = computed(() =>
   mergeOptions('productionStatus', [...new Set(products.value.map(p => p.productionStatus).filter(Boolean))].sort())
@@ -847,7 +844,7 @@ function emptyAddForm() {
     image: '',
     name: '',
     substyle: '',
-    designer: '',
+    designerId: '',
     date: nowLocal(),
     uploadDate: '',
     productionStatus: '',
@@ -890,7 +887,7 @@ function submitAdd() {
     name: addForm.value.name.trim(),
     style: name.value,
     substyle: addForm.value.substyle.trim(),
-    designer: addForm.value.designer.trim(),
+    designerId: addForm.value.designerId || null,
     date: addForm.value.date,
     uploadDate: addForm.value.uploadDate,
     productionStatus: addForm.value.productionStatus.trim(),
@@ -920,7 +917,7 @@ function editProduct(item) {
     image: item.image || '',
     name: item.name || '',
     substyle: item.substyle || '',
-    designer: item.designer || '',
+    designerId: item.designerId || '',
     date: item.date || '',
     uploadDate: item.uploadDate || '',
     productionStatus: item.productionStatus || '',
@@ -965,7 +962,7 @@ async function submitEdit() {
       name: editForm.value.name.trim(),
       style: name.value, // tetap mengikuti kategori
       substyle: editForm.value.substyle.trim(),
-      designer: editForm.value.designer.trim(),
+      designerId: editForm.value.designerId || null,
       date: editForm.value.date,
       uploadDate: editForm.value.uploadDate,
       productionStatus: editForm.value.productionStatus.trim(),

@@ -4,6 +4,7 @@ import { pool } from '../config/db.js'
 import { signToken } from '../middleware/auth.js'
 import { uuidParam, isUuid } from '../utils/uuid.js'
 import { buildSet } from '../utils/sql.js'
+import { relinkDesignersQuietly } from '../utils/designers.js'
 
 // Owner dan admin setara dan berkuasa penuh atas SEMUA tim (lihat requirePrivileged
 // di middleware/auth.js): membuat/mengganti nama tim, membuat akun di tim mana pun,
@@ -177,6 +178,7 @@ router.post('/users', async (req, res) => {
       `SELECT u.*, t.name AS team_name FROM users u JOIN teams t ON t.id = u.team_id WHERE u.id = $1`,
       [result.rows[0].id]
     )
+    await relinkDesignersQuietly(req.body.teamId)
     res.status(201).json({ data: mapUser(full.rows[0]) })
   } catch (err) {
     console.error(err)
@@ -223,6 +225,7 @@ router.patch('/users/:id', async (req, res) => {
       [target.id]
     )
     const updated = full.rows[0]
+    if (teamId !== undefined) await relinkDesignersQuietly(updated.team_id) // akun pindah tim -> cocokkan ulang
     const response = { data: mapUser(updated) }
     if (updated.id === req.user.id) {
       response.session = {

@@ -4,6 +4,7 @@ import { validateBody } from '../middleware/validate.js'
 import { parsePagination, buildPaginationMeta } from '../utils/pagination.js'
 import { uuidParam } from '../utils/uuid.js'
 import { deleteImageByUrl } from '../config/storage.js'
+import { isTeamMember } from '../utils/designers.js'
 import { buildSet } from '../utils/sql.js'
 
 const router = Router()
@@ -15,7 +16,7 @@ const productFieldsCreate = {
   name: { required: true, type: 'string', min: 1, max: 255, label: 'Nama produk' },
   style: { type: 'string', max: 100, label: 'Style' },
   substyle: { type: 'string', max: 100, label: 'Substyle' },
-  designer: { type: 'string', max: 150, label: 'Desainer' },
+  designerId: { type: 'string', max: 36, label: 'Designer' },
   date: { type: 'date', label: 'Tanggal' },
   uploadDate: { type: 'date', label: 'Tanggal upload' },
   productionStatus: { type: 'string', max: 100, label: 'Status produksi' },
@@ -67,8 +68,10 @@ const SELECT_PRODUCT = `
         ) ORDER BY s.sold_at DESC)
        FROM sales s WHERE s.product_id = p.id),
       '[]'
-    ) AS sales
+    ) AS sales,
+    COALESCE(NULLIF(btrim(d.display_name), ''), d.username, p.designer) AS designer_label
   FROM products p
+  LEFT JOIN users d ON d.id = p.designer_id
 `
 
 // Versi untuk DAFTAR produk: TANPA isi penjualan. Satu produk bisa punya ribuan penjualan,
@@ -91,8 +94,10 @@ const SELECT_PRODUCT_LIST = `
       '[]'
     ) AS packages,
     sa.sold_qty,
-    sa.sales_count
+    sa.sales_count,
+    COALESCE(NULLIF(btrim(d.display_name), ''), d.username, p.designer) AS designer_label
   FROM products p
+  LEFT JOIN users d ON d.id = p.designer_id
   LEFT JOIN LATERAL (
     SELECT COALESCE(SUM(s.qty), 0)::int AS sold_qty, COUNT(*)::int AS sales_count
     FROM sales s WHERE s.product_id = p.id
@@ -106,7 +111,8 @@ function mapRow(r) {
     name: r.name,
     style: r.style,
     substyle: r.substyle,
-    designer: r.designer,
+    designer: r.designer_label, // nama akun designer (atau teks lama kalau belum tertaut)
+    designerId: r.designer_id,
     date: r.date,
     uploadDate: r.upload_date,
     productionStatus: r.production_status,
@@ -201,9 +207,13 @@ router.get('/:id', async (req, res) => {
 // POST /api/products
 router.post('/', validateBody(productFieldsCreate), async (req, res) => {
   const {
-    image, name, style, substyle, designer, date, uploadDate,
+    image, name, style, substyle, designerId, date, uploadDate,
     productionStatus, platform, linkDb, linkDbs, price, note, packages,
   } = req.body
+
+  if (designerId && !(await isTeamMember(designerId, req.user.teamId))) {
+    return res.status(400).json({ message: 'Designer harus anggota tim ini' })
+  }
 
   const client = await pool.connect()
   try {
@@ -211,12 +221,12 @@ router.post('/', validateBody(productFieldsCreate), async (req, res) => {
 
     const result = await client.query(
       `INSERT INTO products
-        (team_id, image, name, style, substyle, designer, date, upload_date,
+        (team_id, image, name, style, substyle, designer_id, date, upload_date,
          production_status, platform, link_db, price, note)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
        RETURNING id`,
       [
-        req.user.teamId, image || null, name, style || null, substyle || null, designer || null,
+        req.user.teamId, image || null, name, style || null, substyle || null, designerId || null,
         date || null, uploadDate || null, productionStatus || null, platform || null,
         linkDb || null, price || 0, note || null,
       ]
@@ -247,13 +257,21 @@ router.patch('/:id', validateBody(productFieldsUpdate), async (req, res) => {
   try {
     await client.query('BEGIN')
 
+    if (req.body.designerId && !(await isTeamMember(req.body.designerId, req.user.teamId))) {
+      await client.query('ROLLBACK')
+      return res.status(400).json({ message: 'Designer harus anggota tim ini' })
+    }
+    // Memilih designer dari akun = teks lama tidak diperlukan lagi (cegah data dobel)
+    const input = req.body.designerId ? { ...req.body, designerLegacy: null } : req.body
+
     // Hanya kolom yang dikirim yang diubah; image '' / null = hapus gambar.
-    const { sets, values } = buildSet(req.body, {
+    const { sets, values } = buildSet(input, {
       image: 'image',
       name: { col: 'name', required: true, map: (v) => String(v).trim() },
       style: 'style',
       substyle: 'substyle',
-      designer: 'designer',
+      designerId: 'designer_id',
+      designerLegacy: 'designer',
       date: 'date',
       uploadDate: 'upload_date',
       productionStatus: 'production_status',

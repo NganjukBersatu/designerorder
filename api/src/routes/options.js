@@ -5,7 +5,7 @@ const router = Router()
 
 // Grup pilihan dropdown yang boleh disimpan (samain dengan OPTION_GROUPS di frontend)
 const ALLOWED_KEYS = [
-  'style', 'substyle', 'designer', 'productionStatus', 'platform',
+  'style', 'substyle', 'productionStatus', 'platform',
   'taskCategory', 'taskSubstyle', 'taskProductionStatus', 'taskDesigner',
 ]
 

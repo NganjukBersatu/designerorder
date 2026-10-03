@@ -30,14 +30,6 @@ export const OPTION_GROUPS = [
     scope: 'produk'
   },
   {
-    id: 'designer',
-    key: 'designer',
-    label: 'Designer',
-    description: 'Nama designer di luar anggota tim (anggota tim otomatis muncul di dropdown Designer).',
-    usedIn: ['Form order', 'Form produk'],
-    scope: 'produk'
-  },
-  {
     id: 'productionStatus',
     key: 'productionStatus',
     label: 'Status Produksi',
@@ -59,7 +51,6 @@ export const OPTION_GROUPS = [
 const DEFAULTS = {
   style: ['VRoid', 'VRChat', 'AR'],
   substyle: ['Daily outfit', 'Cyber'],
-  designer: [],
   productionStatus: ['Preview', 'Done', 'Ready'],
   platform: ['Etsy', 'Booth']
 }

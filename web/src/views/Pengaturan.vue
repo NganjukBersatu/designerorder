@@ -626,7 +626,6 @@ const TONES = {
   kategori: 'bg-[#8B5CF6]',
   style: 'bg-[#8B5CF6]',
   substyle: 'bg-[#3B82F6]',
-  designer: 'bg-[#14A38B]',
   productionStatus: 'bg-[#E0A21B]',
   platform: 'bg-[#F0782B]'
 }

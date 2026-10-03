@@ -302,3 +302,31 @@ html.dark *::-webkit-scrollbar-thumb:hover {
     padding-right: 0.75rem !important;
   }
 }
+
+/* ============================================================
+   SIDEBAR MENGIKUTI TEMA
+   Markup sidebar memakai warna gelap (text-white/xx, bg-white/10, !bg-white untuk item aktif).
+   Di mode gelap dibiarkan apa adanya; blok di bawah hanya berlaku di mode TERANG supaya
+   sidebar ikut jadi terang (latar putih, teks gelap, item aktif bernuansa brand).
+   ============================================================ */
+html:not(.dark) .app-sidebar {
+  background-color: #ffffff !important;
+  color: theme('colors.ink.700') !important;
+  border-right: 1px solid theme('colors.ink.100');
+  box-shadow: none;
+}
+html:not(.dark) .app-sidebar .border-white\/10,
+html:not(.dark) .app-sidebar .border-white\/20 {
+  border-color: theme('colors.ink.100') !important;
+}
+html:not(.dark) .app-sidebar .text-white\/80 { color: theme('colors.ink.600') !important; }
+html:not(.dark) .app-sidebar .text-white\/70 { color: theme('colors.ink.500') !important; }
+html:not(.dark) .app-sidebar .text-white\/60 { color: theme('colors.ink.500') !important; }
+html:not(.dark) .app-sidebar .text-white\/50,
+html:not(.dark) .app-sidebar .text-white\/40 { color: theme('colors.ink.400') !important; }
+html:not(.dark) .app-sidebar .hover\:bg-white\/10:hover { background-color: rgba(18, 28, 26, 0.06) !important; }
+html:not(.dark) .app-sidebar .hover\:text-white:hover { color: theme('colors.ink.900') !important; }
+/* item aktif: putih di atas putih tidak kelihatan -> nuansa brand */
+html:not(.dark) .app-sidebar .\!bg-white { background-color: theme('colors.brand.50') !important; box-shadow: none; }
+html:not(.dark) .app-sidebar .\!bg-white\/15 { background-color: rgba(18, 28, 26, 0.06) !important; }
+html:not(.dark) .app-sidebar .\!text-white { color: theme('colors.ink.900') !important; }

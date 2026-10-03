@@ -17,6 +17,7 @@ import uploadsRoutes from './routes/uploads.js'
 import filesRoutes from './routes/files.js'
 import adminRoutes from './routes/admin.js'
 import salesRoutes from './routes/sales.js'
+import { linkLegacyDesigners } from './utils/designers.js'
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -64,6 +65,15 @@ app.listen(PORT, async () => {
     try {
       await ensureSchema()
       console.log('✅ Skema database siap digunakan')
+      // Designer lama (teks) yang namanya cocok dengan akun otomatis ditautkan; tidak fatal kalau gagal.
+      try {
+        const linked = await linkLegacyDesigners()
+        if (linked.orders || linked.products) {
+          console.log(`✅ Designer lama ditautkan ke akun: ${linked.orders} order, ${linked.products} produk`)
+        }
+      } catch (linkErr) {
+        console.error('⚠️  Gagal menautkan designer lama:', linkErr.message)
+      }
     } catch (err) {
       console.error('❌', err.message)
       process.exit(1)

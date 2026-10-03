@@ -1,5 +1,5 @@
 <script setup>
-import { reactive, computed, ref } from 'vue'
+import { reactive, computed, ref, watch } from 'vue'
 import { api } from '../utils/api.js'
 import { useProducts, normalizeUrl } from '../composables/useProducts'
 import { useOptions } from '../composables/useOptions'
@@ -24,12 +24,12 @@ const errorMsg = ref('')
 const imageError = ref('')
 
 const { products } = useProducts()
-const { optionsOf, mergeOptions } = useOptions()
+const { optionsOf } = useOptions()
 const { members } = useTeamMembers()
 const { user } = useAuth()
 
-// Designer: anggota tim + pilihan manual dari Pengaturan. Order baru default ke diri sendiri.
-const designerOptions = computed(() => mergeOptions('designer', members.value.map(m => m.username)))
+// Designer = anggota tim (akun), dipilih lewat id-nya — bukan diketik. Order baru default ke diri sendiri.
+const myId = computed(() => members.value.find(m => m.username === user.value)?.id || '')
 
 const STATUS_OPTIONS = [
   { value: 'Pending', label: 'Menunggu' },
@@ -41,7 +41,7 @@ const form = reactive({
   image: props.initial?.image || '',
   title: props.initial?.title || '',
   orderDate: props.initial?.orderDate?.slice(0, 10) || new Date().toISOString().slice(0, 10),
-  designerName: props.initial?.designerName || (editing ? '' : user.value || ''),
+  designerId: props.initial?.designerId || '',
   category: props.initial?.category || '',
   characterType: props.initial?.characterType || '',
   style: props.initial?.style || '',
@@ -58,6 +58,8 @@ const form = reactive({
   linkDbs: getLinks(props.initial).length ? getLinks(props.initial) : [''],
   note: props.initial?.note || '',
 })
+
+if (!editing) watch(myId, (id) => { if (id && !form.designerId) form.designerId = id }, { immediate: true })
 
 // Label yang ditampilkan di dropdown custom (Menunggu / Dikerjakan / Selesai),
 // tapi form.status tetap menyimpan value asli (Pending / Progress / Done) untuk dikirim ke API.
@@ -154,7 +156,7 @@ async function submit() {
     image: form.image || null,
     title: form.title.trim() || null,
     orderDate: form.orderDate || null,
-    designerName: form.designerName || null,
+    designerId: form.designerId || null,
     category: form.category || null,
     characterType: form.characterType || null,
     style: form.style || null,
@@ -237,9 +239,13 @@ async function submit() {
       </label>
       <label class="block">
         <span class="text-[13px] font-medium text-ink-700">Designer</span>
-        <div class="mt-1">
-          <CustomSelect v-model="form.designerName" :options="designerOptions" placeholder="Pilih designer" />
-        </div>
+        <select v-model="form.designerId" class="input">
+          <option value="">Belum dipilih</option>
+          <option v-for="m in members" :key="m.id" :value="m.id">{{ m.displayName || m.username }}</option>
+        </select>
+        <p v-if="!form.designerId && props.initial?.designerName" class="text-[12px] text-ink-400 mt-1">
+          Tercatat sebelumnya: {{ props.initial.designerName }} (belum punya akun)
+        </p>
       </label>
 
       <!-- Order bukan dari katalog: Kategori/Jenis Karakter/Style/Paket diketik manual -->

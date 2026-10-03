@@ -214,7 +214,7 @@ function logout() {
     <!-- ==================== SIDEBAR ==================== -->
     <aside
       :class="[
-        'bg-sidebar text-white h-screen flex flex-col shrink-0 z-50 transition-all duration-300',
+        'app-sidebar bg-sidebar text-white h-screen flex flex-col shrink-0 z-50 transition-all duration-300',
         'hidden lg:flex',
         isCollapsed ? 'lg:w-20' : 'lg:w-64',
         'w-64',

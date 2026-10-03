@@ -385,11 +385,11 @@
             <div>
               <label class="block text-sm font-medium text-ink-700 mb-1.5">Designer</label>
               <select
-                v-model="editForm.designer"
+                v-model="editForm.designerId"
                 class="w-full px-3 py-2.5 rounded-xl border border-ink-200 bg-white focus:border-brand-400 outline-none text-sm transition"
               >
-                <option value="">Pilih designer</option>
-                <option v-for="d in designerOptions" :key="d" :value="d">{{ d }}</option>
+                <option value="">Belum dipilih</option>
+                <option v-for="m in members" :key="m.id" :value="m.id">{{ m.displayName || m.username }}</option>
               </select>
             </div>
 
@@ -680,9 +680,6 @@ const { members } = useTeamMembers()
 const substyleOptions = computed(() =>
   mergeOptions('substyle', [...new Set(products.value.map(p => p.substyle).filter(Boolean))].sort())
 )
-const designerOptions = computed(() =>
-  mergeOptions('designer', members.value.map(m => m.username))
-)
 const productionStatusOptions = computed(() =>
   mergeOptions('productionStatus', [...new Set(products.value.map(p => p.productionStatus).filter(Boolean))].sort())
 )
@@ -819,7 +816,7 @@ function openEditModal() {
     name: p.name || '',
     style: p.style || '',
     substyle: p.substyle || '',
-    designer: p.designer || '',
+    designerId: p.designerId || '',
     date: p.date || '',              // Tanggal Dibuat
     uploadDate: p.uploadDate || '',  // Tanggal Upload ke Platform
     productionStatus: p.productionStatus || '',
@@ -884,7 +881,7 @@ function submitEdit() {
     name: editForm.value.name.trim(),
     style: editForm.value.style.trim(),
     substyle: editForm.value.substyle.trim(),
-    designer: editForm.value.designer.trim(),
+    designerId: editForm.value.designerId || null,
     date: editForm.value.date,
     uploadDate: editForm.value.uploadDate,
     productionStatus: editForm.value.productionStatus.trim(),

@@ -4,6 +4,7 @@ import { pool } from '../config/db.js'
 import { requireAuth } from '../middleware/auth.js'
 import { validateBody } from '../middleware/validate.js'
 import { uuidParam } from '../utils/uuid.js'
+import { relinkDesignersQuietly } from '../utils/designers.js'
 
 const router = Router()
 router.param('id', uuidParam)
@@ -15,7 +16,7 @@ const memberFieldsCreate = {
 }
 
 function mapMember(u) {
-  return { id: u.id, username: u.username, role: u.role, createdAt: u.created_at }
+  return { id: u.id, username: u.username, role: u.role, displayName: u.display_name || '', createdAt: u.created_at }
 }
 
 function normalizeUsername(v) {
@@ -67,6 +68,7 @@ router.post('/members', validateBody(memberFieldsCreate), async (req, res) => {
       `INSERT INTO users (team_id, username, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING *`,
       [req.user.teamId, uname, hash, requestedRole]
     )
+    await relinkDesignersQuietly(req.user.teamId) // data lama dengan nama ini otomatis tertaut ke akun baru
     res.status(201).json({ data: mapMember(result.rows[0]) })
   } catch (err) {
     console.error(err)

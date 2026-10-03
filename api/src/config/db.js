@@ -162,6 +162,17 @@ export const SCHEMA_SQL = `
     END IF;
   END $$;
 
+  -- Designer = anggota tim (users.id), bukan teks bebas. Kolom teks lama (designer_name /
+  -- designer) dipertahankan HANYA untuk data lama yang namanya belum punya akun; begitu
+  -- cocok dengan USERNAME akun, otomatis ditautkan ke designer_id dan teksnya dikosongkan.
+  ALTER TABLE orders ADD COLUMN IF NOT EXISTS designer_id UUID REFERENCES users(id) ON DELETE SET NULL;
+  ALTER TABLE products ADD COLUMN IF NOT EXISTS designer_id UUID REFERENCES users(id) ON DELETE SET NULL;
+  CREATE INDEX IF NOT EXISTS idx_orders_designer_id ON orders (designer_id) WHERE designer_id IS NOT NULL;
+  CREATE INDEX IF NOT EXISTS idx_products_designer_id ON products (designer_id) WHERE designer_id IS NOT NULL;
+  -- indeks kecil: hanya baris lama yang masih berupa teks (untuk penautan otomatis)
+  CREATE INDEX IF NOT EXISTS idx_orders_designer_legacy ON orders (team_id) WHERE designer_id IS NULL AND designer_name IS NOT NULL;
+  CREATE INDEX IF NOT EXISTS idx_products_designer_legacy ON products (team_id) WHERE designer_id IS NULL AND designer IS NOT NULL;
+
   -- Link DB (Dropbox dkk) — satu produk bisa punya beberapa link
   CREATE TABLE IF NOT EXISTS product_links (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

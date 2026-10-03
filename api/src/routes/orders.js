@@ -5,6 +5,7 @@ import { parsePagination, buildPaginationMeta } from '../utils/pagination.js'
 import { isUuid, uuidParam } from '../utils/uuid.js'
 import { buildSet } from '../utils/sql.js'
 import { deleteImageByUrl } from '../config/storage.js'
+import { isTeamMember } from '../utils/designers.js'
 
 const router = Router()
 router.param('id', uuidParam)
@@ -18,7 +19,7 @@ const orderFieldsCreate = {
   buyerName: { type: 'string', max: 150, label: 'Nama pembeli/klien' },
   buyerReference: { type: 'string', max: 255, label: 'Referensi pembeli' },
   storeName: { type: 'string', max: 150, label: 'Platform/toko' },
-  designerName: { type: 'string', max: 150, label: 'Nama desainer' },
+  designerId: { type: 'string', max: 36, label: 'Designer' },
   category: { type: 'string', max: 100, label: 'Kategori' },
   characterType: { type: 'string', max: 100, label: 'Jenis karakter' },
   style: { type: 'string', max: 100, label: 'Style' },
@@ -62,6 +63,7 @@ const SELECT_ORDER = `
   SELECT
     o.*,
     u.username AS created_by_name,
+    COALESCE(NULLIF(btrim(d.display_name), ''), d.username, o.designer_name) AS designer_label,
     COALESCE(
       (SELECT json_agg(json_build_object('id', l.id, 'url', l.url, 'position', l.position) ORDER BY l.position)
        FROM order_links l WHERE l.order_id = o.id),
@@ -69,6 +71,7 @@ const SELECT_ORDER = `
     ) AS links
   FROM orders o
   LEFT JOIN users u ON u.id = o.created_by
+  LEFT JOIN users d ON d.id = o.designer_id
 `
 
 function mapRow(r) {
@@ -79,7 +82,8 @@ function mapRow(r) {
     buyerName: r.buyer_name,
     buyerReference: r.buyer_reference,
     storeName: r.store_name,
-    designerName: r.designer_name,
+    designerId: r.designer_id,
+    designerName: r.designer_label, // nama akun designer (atau teks lama kalau belum tertaut)
     category: r.category,
     characterType: r.character_type,
     style: r.style,
@@ -135,8 +139,21 @@ router.get('/', async (req, res) => {
     if (search) {
       // search_text sudah lowercase & ber-index trigram (lihat db.js). Karakter
       // wildcard dari user di-escape supaya "50%" dicari sebagai teks biasa.
-      params.push(`%${String(search).toLowerCase().replace(/[\\%_]/g, '\\$&')}%`)
-      where.push(`o.search_text LIKE $${params.length}`)
+      const term = `%${String(search).toLowerCase().replace(/[\\%_]/g, '\\$&')}%`
+      params.push(term)
+      const likeIdx = params.length
+      // Nama designer ada di tabel users (bukan di search_text): cari dulu akun yang cocok di
+      // tim ini (tabel kecil), lalu gabungkan lewat OR agar kedua sisi tetap memakai index.
+      const found = await pool.query(
+        `SELECT id FROM users WHERE team_id = $1 AND lower(coalesce(display_name, '') || ' ' || username) LIKE $2`,
+        [req.user.teamId, term]
+      )
+      if (found.rows.length) {
+        params.push(found.rows.map((r) => r.id))
+        where.push(`(o.search_text LIKE $${likeIdx} OR o.designer_id = ANY($${params.length}::uuid[]))`)
+      } else {
+        where.push(`o.search_text LIKE $${likeIdx}`)
+      }
     }
     if (status) {
       params.push(normalizeStatus(status))
@@ -213,6 +230,9 @@ router.post('/', validateBody(orderFieldsCreate), async (req, res) => {
   if (b.productId && !(await ownsProduct(b.productId, req.user.teamId))) {
     return res.status(404).json({ message: 'Produk tidak ditemukan' })
   }
+  if (b.designerId && !(await isTeamMember(b.designerId, req.user.teamId))) {
+    return res.status(400).json({ message: 'Designer harus anggota tim ini' })
+  }
 
   const client = await pool.connect()
   try {
@@ -220,14 +240,14 @@ router.post('/', validateBody(orderFieldsCreate), async (req, res) => {
     const result = await client.query(
       `INSERT INTO orders
         (team_id, created_by, product_id, image, title, buyer_name, buyer_reference, store_name,
-         designer_name, category, character_type, style, package, production_status,
+         designer_id, category, character_type, style, package, production_status,
          order_date, completion_date, due_date, status, price, note)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,
                COALESCE($15::date, CURRENT_DATE),$16,$17,$18,$19,$20)
        RETURNING id`,
       [
         req.user.teamId, req.user.id, b.productId || null, b.image || null, title, buyerName,
-        b.buyerReference || null, b.storeName || null, b.designerName || null, b.category || null,
+        b.buyerReference || null, b.storeName || null, b.designerId || null, b.category || null,
         b.characterType || null, b.style || null, b.package || null, b.productionStatus || null,
         b.orderDate || null, b.completionDate || null, b.dueDate || null,
         normalizeStatus(b.status), b.price ?? 0, b.note || null,
@@ -280,13 +300,21 @@ router.patch('/:id', validateBody(orderFieldsUpdate), async (req, res) => {
       return res.status(404).json({ message: 'Produk tidak ditemukan' })
     }
 
-    const { sets, values } = buildSet(b, {
+    if (b.designerId && !(await isTeamMember(b.designerId, req.user.teamId))) {
+      await client.query('ROLLBACK')
+      return res.status(400).json({ message: 'Designer harus anggota tim ini' })
+    }
+    // Memilih designer dari akun = teks lama tidak diperlukan lagi (cegah data dobel)
+    const input = b.designerId ? { ...b, designerLegacy: null } : b
+
+    const { sets, values } = buildSet(input, {
       image: 'image',
       title: { col: 'title', map: trimOrNull },
       buyerName: { col: 'buyer_name', map: trimOrNull },
       buyerReference: 'buyer_reference',
       storeName: 'store_name',
-      designerName: 'designer_name',
+      designerId: 'designer_id',
+      designerLegacy: 'designer_name',
       category: 'category',
       characterType: 'character_type',
       style: 'style',
