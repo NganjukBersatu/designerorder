@@ -2,7 +2,7 @@
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
-import { useProducts } from '../composables/useProducts'
+import { useProductOverview } from '../composables/useProductOverview'
 import { useOptions } from '../composables/useOptions'
 import { useAppSettings } from '../composables/useAppSettings'
 import { useProfile } from '../composables/useProfile'
@@ -10,7 +10,7 @@ import { useProfile } from '../composables/useProfile'
 const route = useRoute()
 const router = useRouter()
 const { logout: clearSession, user, role: authRole } = useAuth()
-const { products } = useProducts()
+const { styleNames } = useProductOverview()
 const { mergeOptions } = useOptions()
 const { settings } = useAppSettings()
 const { profile, displayNameOrUsername } = useProfile()
@@ -73,15 +73,8 @@ watch(isKategoriRelated, (val) => {
   }
 }, { immediate: true })
 
-// Ambil daftar kategori (Style) secara dinamis
-const categoryList = computed(() => {
-  const styles = new Set()
-  for (const p of products.value) {
-    const s = (p.style || '').trim()
-    if (s) styles.add(s)
-  }
-  return mergeOptions('style', [...styles].sort())
-})
+// Daftar kategori (Style) dari ringkasan produk di server (bukan dihitung dari semua produk di browser)
+const categoryList = computed(() => mergeOptions('style', styleNames.value))
 
 // Ambil username (bisa string atau object { username })
 function getUsername() {
@@ -106,8 +99,13 @@ const displayName = computed(() => displayNameOrUsername.value)
 const menu = [
   {
     to: '/',
-    label: 'Ringkasan',
+    label: 'Ringkasan Order',
     icon: 'M3 12l9-9 9 9M5 10v10h14V10'
+  },
+  {
+    to: '/ringkasan-penjualan',
+    label: 'Ringkasan Penjualan',
+    icon: 'M3 3v18h18M7 15l4-4 3 3 5-6'
   },
   {
     to: '/orders',

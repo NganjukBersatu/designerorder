@@ -21,7 +21,7 @@
           <div class="flex flex-wrap items-center gap-3">
             <h2 class="text-2xl font-semibold text-ink-900">{{ name }}</h2>
             <span class="inline-flex items-center px-2.5 py-1 rounded-full bg-cream-100 text-ink-600 text-[12px] font-medium tabular-nums">
-              {{ items.length }} produk<template v-if="categoryBundles.length"> · {{ categoryBundles.length }} bundling</template>
+              {{ productCount }} produk<template v-if="categoryBundles.length"> · {{ categoryBundles.length }} bundling</template>
             </span>
           </div>
           <p class="text-sm text-ink-500 mt-1">Semua produk dengan Style {{ name }}.</p>
@@ -120,7 +120,7 @@
             Reset filter
           </button>
           <span class="ml-auto text-[13px] text-ink-400 tabular-nums">
-            {{ filteredItems.length + filteredBundles.length }} dari {{ items.length + categoryBundles.length }}
+            {{ matchedTotal }} dari {{ categoryTotal }}
           </span>
         </div>
 
@@ -215,7 +215,7 @@
                 class="border-b border-ink-50 dark:border-ink-800 hover:bg-black/[0.03] dark:hover:bg-white/[0.06] transition group cursor-pointer"
               >
                 <td class="px-4 py-4 text-ink-400 sticky left-0 z-10 bg-white dark:bg-cream-900 group-hover:bg-black/[0.03] dark:group-hover:bg-white/[0.06]">
-                  {{ filteredBundles.length + index + 1 }}
+                  {{ filteredBundles.length + rowOffset + index + 1 }}
                 </td>
                 <td class="px-4 py-3">
                   <div class="flex items-center gap-3">
@@ -341,9 +341,12 @@
                 <td class="px-4 py-4 text-ink-500 dark:text-ink-400">{{ item.note || '—' }}</td>
               </tr>
 
-              <tr v-if="filteredItems.length + filteredBundles.length === 0">
+              <tr v-if="listLoading && filteredItems.length === 0">
+                <td colspan="14" class="px-4 py-16 text-center text-ink-400">Memuat produk...</td>
+              </tr>
+              <tr v-else-if="filteredItems.length + filteredBundles.length === 0">
                 <td colspan="14" class="px-4 py-16 text-center text-ink-400">
-                  <template v-if="items.length + categoryBundles.length === 0">
+                  <template v-if="categoryTotal === 0">
                     Belum ada produk di kategori ini. Klik <strong>Tambah Produk</strong> untuk menambahkan yang pertama.
                   </template>
                   <template v-else>
@@ -353,6 +356,15 @@
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <!-- Halaman (produk dimuat per halaman dari server) -->
+        <div v-if="pageMeta.totalPages > 1" class="shrink-0 flex items-center justify-between gap-3 px-5 py-3 border-t border-ink-100 dark:border-ink-800 text-[13px] text-ink-500">
+          <span class="tabular-nums">Halaman {{ pageMeta.page }} dari {{ pageMeta.totalPages }} · {{ pageMeta.total }} produk</span>
+          <div class="flex items-center gap-2">
+            <button type="button" class="px-3 py-1.5 rounded-lg border border-ink-200 dark:border-ink-800 hover:bg-ink-500/5 disabled:opacity-40" :disabled="listLoading || pageMeta.page <= 1" @click="goToPage(pageMeta.page - 1)">Sebelumnya</button>
+            <button type="button" class="px-3 py-1.5 rounded-lg border border-ink-200 dark:border-ink-800 hover:bg-ink-500/5 disabled:opacity-40" :disabled="listLoading || pageMeta.page >= pageMeta.totalPages" @click="goToPage(pageMeta.page + 1)">Berikutnya</button>
+          </div>
         </div>
       </div>
     </template>
@@ -374,13 +386,17 @@
       :open="showBundleModal"
       mode="create"
       :category="name"
-      :candidates="items"
+      :candidates="bundleCandidates"
+      :candidates-total="bundleCandMeta.total"
+      :candidates-loading="bundleCandLoading"
       :substyle-options="substyleOptions"
       :platform-options="optionsOf('platform')"
       :saving="savingBundle"
       :error="bundleError"
       @close="showBundleModal = false"
       @save="submitBundle"
+      @search="onBundleCandSearch"
+      @more="loadBundleCandidates(bundleCandMeta.page + 1)"
     />
 
     <!-- ==================== MODAL TAMBAH PRODUK ==================== -->
@@ -784,7 +800,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useProducts, formatPrice, formatDateTime, nowLocal, normalizeUrl } from '../composables/useProducts'
+import { useProducts, fetchProductPage, formatPrice, formatDateTime, nowLocal, normalizeUrl } from '../composables/useProducts'
 import { useOptions } from '../composables/useOptions'
 import { useTeamMembers } from '../composables/useTeamMembers'
 import { uploadImage } from '../utils/imageFile'
@@ -795,33 +811,40 @@ import OptionSelect from '../components/OptionSelect.vue'
 import PlatformPicker from '../components/PlatformPicker.vue'
 import BundleForm from '../components/BundleForm.vue'
 import PriceInput from '../components/PriceInput.vue'
-import { useBundles } from '../composables/useBundles'
+import { useBundles, fetchBundles } from '../composables/useBundles'
+import { useProductOverview, productsVersion } from '../composables/useProductOverview'
+import { api } from '../utils/api.js'
 
 const route = useRoute()
 const router = useRouter()
 
-const { products, totalSold, isSold, addProduct, updateProduct, removeProduct } = useProducts()
+const { totalSold, isSold, addProduct, updateProduct, removeProduct } = useProducts()
+const { styleOf, overview, substyles: usedSubstyles, productionStatuses: usedStatuses } = useProductOverview()
 const { optionsOf, mergeOptions } = useOptions()
 const { members } = useTeamMembers()
 const { bundlesOf, addBundle } = useBundles()
 
-const substyleOptions = computed(() =>
-  mergeOptions('substyle', [...new Set(products.value.map(p => p.substyle).filter(Boolean))].sort())
-)
-const productionStatusOptions = computed(() =>
-  mergeOptions('productionStatus', [...new Set(products.value.map(p => p.productionStatus).filter(Boolean))].sort())
-)
+const substyleOptions = computed(() => mergeOptions('substyle', [...usedSubstyles.value].sort()))
+const productionStatusOptions = computed(() => mergeOptions('productionStatus', [...usedStatuses.value].sort()))
 
 const NONE = '__none'
 
 // ========== DATA KATEGORI ==========
+// Produk di kategori ini dimuat PER HALAMAN dari server (filter, pencarian, dan hitungan dikerjakan
+// di database), jadi halaman tetap ringan walau satu kategori berisi ribuan produk.
 const name = computed(() => String(route.params.name || ''))
-const items = computed(() =>
-  products.value.filter(p => (p.style || '').trim() === name.value)
-)
+const PAGE_SIZE = 25
+const pageItems = ref([])
+const pageMeta = ref({ page: 1, totalPages: 1, total: 0 })
+const listLoading = ref(true)
+const facets = ref({ substyles: [], productionStatuses: [], platforms: [], designers: [] })
+
 const categoryBundles = computed(() => bundlesOf(name.value))
+// Jumlah produk satuan di kategori ini (tanpa filter) dari ringkasan server; bundling dihitung terpisah
+const productCount = computed(() => Math.max(0, (styleOf(name.value)?.count || 0) - categoryBundles.value.length))
+const overviewReady = computed(() => !!overview.value)
 const categoryExists = computed(
-  () => items.value.length > 0 || categoryBundles.value.length > 0 || optionsOf('style').includes(name.value)
+  () => !overviewReady.value || productCount.value > 0 || categoryBundles.value.length > 0 || optionsOf('style').includes(name.value)
 )
 
 // ========== WARNA BADGE STATUS PRODUKSI ==========
@@ -865,18 +888,15 @@ watch(
   { immediate: true }
 )
 
+// Chip substyle + jumlahnya dari server (produk satuan + bundling di kategori ini)
 const substyleChips = computed(() => {
-  const chips = [{ key: 'all', label: 'Semua', count: items.value.length + categoryBundles.value.length }]
-  const subs = new Map()
-  let none = 0
-  for (const p of [...items.value, ...categoryBundles.value]) {
-    const sub = (p.substyle || '').trim()
-    if (sub) subs.set(sub, (subs.get(sub) || 0) + 1)
-    else none++
-  }
-  const sorted = [...subs.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-  for (const [label, count] of sorted) chips.push({ key: label, label, count })
-  if (none && subs.size) chips.push({ key: NONE, label: 'Tanpa substyle', count: none })
+  const subs = facets.value.substyles
+  const total = subs.reduce((sum, x) => sum + x.count, 0)
+  const chips = [{ key: 'all', label: 'Semua', count: total }]
+  const named = subs.filter((x) => x.name).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+  for (const x of named) chips.push({ key: x.name, label: x.name, count: x.count })
+  const none = subs.find((x) => !x.name)?.count || 0
+  if (none && named.length) chips.push({ key: NONE, label: 'Tanpa substyle', count: none })
   return chips
 })
 
@@ -890,16 +910,18 @@ function resetFilters() {
 }
 watch(() => route.params.name, resetFilters)
 
-// Pilihan filter diambil dari data kategori ini saja, jadi tidak ada opsi yang pasti kosong
+// Pilihan filter datang dari server (nilai yang benar-benar ada di kategori ini)
 const filterOptions = computed(() => {
   const uniq = (list) => [...new Set(list.filter(Boolean))].sort((a, b) => a.localeCompare(b))
   return {
-    productionStatus: uniq(items.value.map((p) => p.productionStatus)),
-    platform: uniq([...items.value, ...categoryBundles.value].flatMap((p) => splitPlatforms(p.platform))),
-    designer: uniq(items.value.map((p) => p.designer)),
+    productionStatus: uniq(facets.value.productionStatuses),
+    platform: uniq(facets.value.platforms.flatMap((v) => splitPlatforms(v))),
+    designer: uniq(facets.value.designers),
   }
 })
 
+// Bundling di satu kategori jumlahnya kecil dan sudah dimuat utuh, jadi disaring di browser.
+// Produk satuan disaring di server (lihat reload di bawah).
 const matchesSearch = (q, fields) => !q || fields.some((f) => (f || '').toLowerCase().includes(q))
 const matchesSub = (p) => {
   const sub = (p.substyle || '').trim()
@@ -910,28 +932,94 @@ const matchesSold = (soldQty) =>
   !filters.value.sold || (filters.value.sold === 'sold' ? soldQty > 0 : soldQty === 0)
 const matchesPlatform = (p) => !filters.value.platform || splitPlatforms(p.platform).includes(filters.value.platform)
 
-const filteredItems = computed(() => {
-  const q = searchQuery.value.toLowerCase().trim()
-  const f = filters.value
-  return items.value.filter(
-    (p) =>
-      matchesSub(p) &&
-      matchesSearch(q, [p.name, p.substyle, p.designer, p.platform, p.productionStatus, p.note]) &&
-      (!f.productionStatus || p.productionStatus === f.productionStatus) &&
-      (!f.designer || p.designer === f.designer) &&
-      matchesPlatform(p) &&
-      matchesSold(totalSold(p.id))
-  )
-})
+// Produk satuan di halaman ini (sudah disaring & dipaginasi server)
+const filteredItems = computed(() => pageItems.value)
 
-// Bundling tidak punya designer / status produksi, jadi tersaring keluar kalau filter itu dipakai
+// Bundling tidak punya designer / status produksi, jadi tersaring keluar kalau filter itu dipakai.
+// Bundling hanya tampil di halaman pertama supaya tidak berulang di tiap halaman.
 const filteredBundles = computed(() => {
   const q = searchQuery.value.toLowerCase().trim()
   const f = filters.value
-  if (f.productionStatus || f.designer) return []
+  if (pageMeta.value.page > 1 || f.productionStatus || f.designer) return []
   return categoryBundles.value.filter(
     (b) => matchesSub(b) && matchesSearch(q, [b.name, b.substyle, b.platform, b.note]) && matchesPlatform(b) && matchesSold(b.soldQty)
   )
+})
+// Nomor baris produk melanjutkan dari halaman sebelumnya
+const rowOffset = computed(() => (pageMeta.value.page - 1) * PAGE_SIZE)
+// Total yang cocok filter (produk dari server + bundling yang lolos filter) vs total kategori
+const matchedTotal = computed(() => pageMeta.value.total + bundlesMatchingCount.value)
+const categoryTotal = computed(() => productCount.value + categoryBundles.value.length)
+const bundlesMatchingCount = computed(() => {
+  const q = searchQuery.value.toLowerCase().trim()
+  const f = filters.value
+  if (f.productionStatus || f.designer) return 0
+  return categoryBundles.value.filter(
+    (b) => matchesSub(b) && matchesSearch(q, [b.name, b.substyle, b.platform, b.note]) && matchesPlatform(b) && matchesSold(b.soldQty)
+  ).length
+})
+
+// ----- Muat dari server -----
+let reqSeq = 0
+async function reload(page = 1) {
+  const seq = ++reqSeq // abaikan respons lama kalau filter keburu berubah
+  listLoading.value = true
+  try {
+    const f = filters.value
+    const res = await fetchProductPage({
+      style: name.value,
+      substyle: activeSub.value === 'all' ? '' : activeSub.value,
+      productionStatus: f.productionStatus,
+      platform: f.platform,
+      designer: f.designer,
+      sold: f.sold,
+      search: searchQuery.value.trim(),
+      page,
+      limit: PAGE_SIZE,
+    })
+    if (seq !== reqSeq) return
+    pageItems.value = res.data
+    pageMeta.value = res.pagination || { page, totalPages: 1, total: res.data.length }
+  } catch (err) {
+    if (seq === reqSeq) pageItems.value = []
+    console.error('Gagal memuat produk kategori:', err.message)
+  } finally {
+    if (seq === reqSeq) listLoading.value = false
+  }
+}
+
+async function loadFacets() {
+  try {
+    const res = await api.get(`/products/facets?style=${encodeURIComponent(name.value)}`)
+    facets.value = res.data
+  } catch (err) {
+    console.error('Gagal memuat pilihan filter:', err.message)
+  }
+}
+
+function goToPage(page) {
+  if (page < 1 || page > pageMeta.value.totalPages) return
+  reload(page)
+}
+
+// Ganti kategori: muat bundling + pilihan filter kategori itu (daftar produk ikut dimuat watcher di bawah)
+watch(name, () => {
+  fetchBundles(name.value)
+  loadFacets()
+}, { immediate: true })
+
+// Filter/substyle berubah -> kembali ke halaman 1; ketikan pencarian ditunda supaya tidak menembak server tiap huruf
+watch(() => [name.value, activeSub.value, filters.value.productionStatus, filters.value.platform, filters.value.designer, filters.value.sold], () => reload(1), { immediate: true })
+let searchTimer = null
+watch(searchQuery, () => {
+  clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => reload(1), 300)
+})
+
+// Produk berubah (tambah/ubah/hapus/catat penjualan) -> muat ulang halaman yang sedang dibuka + hitungan substyle
+watch(productsVersion, () => {
+  reload(pageMeta.value.page)
+  loadFacets()
 })
 
 // ========== BUAT BUNDLING ==========
@@ -939,9 +1027,34 @@ const showBundleModal = ref(false)
 const savingBundle = ref(false)
 const bundleError = ref('')
 
+// Kandidat isi bundling: produk satuan kategori ini, dicari & dipaginasi di server (30 per halaman)
+const bundleCandidates = ref([])
+const bundleCandMeta = ref({ page: 1, totalPages: 1, total: 0 })
+const bundleCandLoading = ref(false)
+let bundleCandSearch = ''
+async function loadBundleCandidates(page = 1) {
+  bundleCandLoading.value = true
+  try {
+    const res = await fetchProductPage({ style: name.value, search: bundleCandSearch, page, limit: 30 })
+    bundleCandidates.value = page === 1 ? res.data : [...bundleCandidates.value, ...res.data]
+    bundleCandMeta.value = res.pagination || { page, totalPages: 1, total: res.data.length }
+  } catch (err) {
+    bundleError.value = err.message
+  } finally {
+    bundleCandLoading.value = false
+  }
+}
+function onBundleCandSearch(q) {
+  bundleCandSearch = q
+  loadBundleCandidates(1)
+}
+
 function openBundleModal() {
   bundleError.value = ''
+  bundleCandSearch = ''
+  bundleCandidates.value = []
   showBundleModal.value = true
+  loadBundleCandidates(1)
 }
 async function submitBundle(payload) {
   savingBundle.value = true

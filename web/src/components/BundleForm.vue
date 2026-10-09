@@ -13,13 +13,15 @@ const props = defineProps({
   mode: { type: String, default: 'create' },
   category: { type: String, required: true }, // kategori bundling (tidak bisa diubah)
   bundle: { type: Object, default: null }, // untuk mode edit
-  candidates: { type: Array, default: () => [] }, // produk satuan di kategori ini (mode create)
+  candidates: { type: Array, default: () => [] }, // produk satuan di kategori ini (mode create), sudah disaring server
+  candidatesTotal: { type: Number, default: 0 }, // total yang cocok di server (untuk tombol "muat lebih banyak")
+  candidatesLoading: { type: Boolean, default: false },
   substyleOptions: { type: Array, default: () => [] },
   platformOptions: { type: Array, default: () => [] },
   saving: { type: Boolean, default: false },
   error: { type: String, default: '' },
 })
-const emit = defineEmits(['close', 'save'])
+const emit = defineEmits(['close', 'save', 'search', 'more'])
 
 const input = 'w-full px-3 py-2.5 rounded-xl border border-ink-200 dark:border-ink-800 bg-white dark:bg-cream-800 text-ink-800 dark:text-ink-100 focus:border-brand-400 outline-none text-sm transition'
 const label = 'block text-sm font-medium text-ink-700 dark:text-ink-200 mb-1.5'
@@ -59,12 +61,24 @@ watch(
   { immediate: true }
 )
 
-const visibleCandidates = computed(() => {
-  const q = pickSearch.value.toLowerCase().trim()
-  return q ? props.candidates.filter((p) => (p.name || '').toLowerCase().includes(q)) : props.candidates
-})
-const pickedItems = computed(() => props.candidates.filter((p) => picked.value.includes(p.id)))
+// Daftar kandidat datang dari server (dicari & dipaginasi di sana). Produk yang sudah dicentang
+// disimpan sendiri supaya tetap terhitung walau hasil pencarian berikutnya tidak memuatnya.
+const visibleCandidates = computed(() => props.candidates)
+const pickedMap = ref({})
+watch([picked, () => props.candidates], () => {
+  const next = {}
+  for (const id of picked.value) {
+    next[id] = pickedMap.value[id] || props.candidates.find((p) => p.id === id)
+  }
+  pickedMap.value = next
+}, { deep: true })
+const pickedItems = computed(() => picked.value.map((id) => pickedMap.value[id]).filter(Boolean))
 const pickedTotal = computed(() => pickedItems.value.reduce((sum, p) => sum + (Number(p.price) || 0), 0))
+let searchTimer = null
+function onSearchInput() {
+  clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => emit('search', pickSearch.value.trim()), 250)
+}
 // Mata uang bundling mengikuti isinya, jadi semua produk yang dipilih harus sama mata uangnya
 const pickedCurrencies = computed(() => [...new Set(pickedItems.value.map((p) => p.currency || 'USD'))])
 const mixedCurrency = computed(() => pickedCurrencies.value.length > 1)
@@ -178,7 +192,7 @@ function submit() {
               <label class="block text-sm font-medium text-ink-700 dark:text-ink-200">
                 Isi Bundling <span class="text-ink-400 font-normal">({{ picked.length }} dipilih, minimal 2)</span>
               </label>
-              <input v-model="pickSearch" type="text" placeholder="Cari produk..." class="w-40 px-3 py-1.5 rounded-lg border border-ink-200 dark:border-ink-800 bg-white dark:bg-cream-800 text-sm outline-none focus:border-brand-400" />
+              <input v-model="pickSearch" type="text" placeholder="Cari produk..." @input="onSearchInput" class="w-40 px-3 py-1.5 rounded-lg border border-ink-200 dark:border-ink-800 bg-white dark:bg-cream-800 text-sm outline-none focus:border-brand-400" />
             </div>
             <div class="max-h-56 overflow-y-auto rounded-xl border border-ink-200 dark:border-ink-800 divide-y divide-ink-100 dark:divide-ink-800">
               <label v-for="p in visibleCandidates" :key="p.id" class="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-cream-50 dark:hover:bg-cream-800">
@@ -190,8 +204,15 @@ function submit() {
                 <span class="text-[13px] text-ink-500 tabular-nums">{{ formatPrice(p.price, p.currency) }}</span>
               </label>
               <p v-if="!visibleCandidates.length" class="px-3 py-6 text-center text-sm text-ink-400">
-                {{ candidates.length ? 'Tidak ada produk yang cocok.' : `Belum ada produk satuan di kategori ${category}.` }}
+                {{ pickSearch ? 'Tidak ada produk yang cocok.' : `Belum ada produk satuan di kategori ${category}.` }}
               </p>
+              <button
+                v-if="candidates.length < candidatesTotal"
+                type="button"
+                class="w-full px-3 py-2 text-[13px] text-brand-600 hover:bg-cream-50 dark:hover:bg-cream-800 disabled:opacity-50"
+                :disabled="candidatesLoading"
+                @click="emit('more')"
+              >Muat lebih banyak ({{ candidatesTotal - candidates.length }} lagi)</button>
             </div>
           </div>
 

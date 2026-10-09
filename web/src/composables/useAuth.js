@@ -8,7 +8,8 @@
 
 import { ref, computed } from 'vue'
 import { API_BASE, getToken, setToken } from '../utils/api.js'
-import { fetchProducts } from './useProducts'
+import { fetchProducts, clearProducts } from './useProducts'
+import { resetOverview } from './useProductOverview'
 import { fetchBundles } from './useBundles'
 import { fetchCurrency } from './useCurrency'
 import { fetchAppSettings } from './useAppSettings'
@@ -118,6 +119,9 @@ export function useAuth() {
   }
 
   function logout() {
+    clearProducts()
+    resetOverview()
+    fetchBundles('') // kosongkan daftar bundling di memori
     setToken('')
     currentUser.value = null
     writeJSON(USER_KEY, null)

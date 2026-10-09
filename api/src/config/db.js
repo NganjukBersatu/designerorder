@@ -240,6 +240,8 @@ export const SCHEMA_SQL = `
   CREATE INDEX IF NOT EXISTS idx_products_bundle_id ON products (bundle_id) WHERE bundle_id IS NOT NULL;
   -- daftar produk satuan: hanya yang belum ter-bundling
   CREATE INDEX IF NOT EXISTS idx_products_team_single ON products (team_id, created_at DESC) WHERE bundle_id IS NULL;
+  -- daftar produk per kategori (filter style + urut terbaru) — dipakai halaman Kategori yang berpaginasi
+  CREATE INDEX IF NOT EXISTS idx_products_team_style ON products (team_id, style, created_at DESC) WHERE bundle_id IS NULL;
 
   CREATE TABLE IF NOT EXISTS bundle_sales (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

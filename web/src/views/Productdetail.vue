@@ -95,7 +95,7 @@
         <div class="relative bg-white rounded-card shadow-card border border-ink-100 overflow-hidden pl-5 pr-4 py-4">
           <span class="absolute left-0 top-0 bottom-0 w-1 bg-brand-400"></span>
           <p class="text-[13px] text-ink-500 mb-1.5">Jumlah Transaksi</p>
-          <p class="text-[28px] leading-none font-semibold text-ink-900">{{ productSales.length }}</p>
+          <p class="text-[28px] leading-none font-semibold text-ink-900">{{ salesCount }}</p>
         </div>
 
         <div class="relative bg-white rounded-card shadow-card border border-ink-100 overflow-hidden pl-5 pr-4 py-4">
@@ -199,23 +199,13 @@
           </div>
 
           <!-- Cari -->
-          <div v-if="productSales.length" class="relative w-full lg:w-72 shrink-0">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-400"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            <input
-              v-model="saleSearchQuery"
-              type="text"
-              placeholder="Cari pembeli, platform, atau paket..."
-              class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-ink-200 bg-cream-50 focus:bg-white focus:border-brand-400 outline-none text-sm transition text-ink-800"
-            />
-          </div>
+          <SearchInput
+            v-if="salesCount || saleSearch"
+            v-model="saleSearch"
+            variant="soft"
+            class="w-full lg:w-72 shrink-0"
+            placeholder="Cari pembeli, platform, atau paket..."
+          />
         </div>
 
         <div class="overflow-x-auto">
@@ -234,12 +224,12 @@
 
             <tbody>
               <tr
-                v-for="(sale, index) in filteredSales"
+                v-for="(sale, index) in saleRows"
                 :key="sale.id"
                 class="border-b border-ink-50 hover:bg-cream-50/70 transition cursor-pointer"
                 @click="router.push(`/produk/${route.params.id}/penjualan/${sale.id}`)"
               >
-                <td class="px-4 py-4 text-ink-400">{{ index + 1 }}</td>
+                <td class="px-4 py-4 text-ink-400">{{ (saleMeta.page - 1) * saleMeta.limit + index + 1 }}</td>
                 <td class="px-4 py-4 font-medium text-ink-800">{{ sale.buyer }}</td>
                 <td class="px-4 py-4 text-ink-600">{{ sale.platform || '—' }}</td>
                 <td class="px-4 py-4">
@@ -281,9 +271,9 @@
                 </td>
               </tr>
 
-              <tr v-if="filteredSales.length === 0">
+              <tr v-if="saleRows.length === 0">
                 <td colspan="7" class="px-4 py-14 text-center text-ink-400">
-                  <template v-if="productSales.length === 0">
+                  <template v-if="salesCount === 0 && !saleSearch">
                     Belum ada penjualan. Klik <strong>Catat Penjualan</strong> untuk menambahkan pembeli pertama.
                   </template>
                   <template v-else>
@@ -294,11 +284,13 @@
             </tbody>
           </table>
         </div>
+
+        <Pager :pagination="saleMeta" label="transaksi" :loading="saleLoading" @page="goSalePage" />
       </div>
     </template>
 
     <!-- ==================== PRODUK TIDAK DITEMUKAN ==================== -->
-    <div v-else class="bg-white rounded-card shadow-card border border-ink-100 px-6 py-16 text-center">
+    <div v-else-if="!loadingDetail" class="bg-white rounded-card shadow-card border border-ink-100 px-6 py-16 text-center">
       <p class="text-ink-800 font-medium mb-1">Produk tidak ditemukan</p>
       <p class="text-sm text-ink-500 mb-5">Produk ini mungkin sudah dihapus.</p>
       <button
@@ -552,7 +544,7 @@
         <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
           <h2 class="text-lg font-semibold text-ink-900 mb-1">Hapus produk ini?</h2>
           <p class="text-sm text-ink-500 mb-6">
-            <span class="font-medium text-ink-700">{{ product?.name }}</span> akan dihapus<template v-if="productSales.length > 0"> beserta {{ productSales.length }} transaksi penjualannya</template>. Tindakan ini tidak bisa dibatalkan.
+            <span class="font-medium text-ink-700">{{ product?.name }}</span> akan dihapus<template v-if="salesCount > 0"> beserta {{ salesCount }} transaksi penjualannya</template>. Tindakan ini tidak bisa dibatalkan.
           </p>
 
           <div class="flex justify-end gap-3">
@@ -662,32 +654,48 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useProducts, formatDateTime, formatPrice, nowLocal, normalizeUrl } from '../composables/useProducts'
 import { uploadImage } from '../utils/imageFile'
 import { getLinks, cleanLinks } from '../utils/links'
 import { useOptions } from '../composables/useOptions'
+import { useProductOverview, productsVersion } from '../composables/useProductOverview'
 import { useTeamMembers } from '../composables/useTeamMembers'
 import OptionSelect from '../components/OptionSelect.vue'
 import PlatformPicker from '../components/PlatformPicker.vue'
 import PriceInput from '../components/PriceInput.vue'
+import SearchInput from '../components/SearchInput.vue'
+import Pager from '../components/Pager.vue'
+import { api } from '../utils/api.js'
 
 const route = useRoute()
 const router = useRouter()
-const { products, getProduct, loadSales, salesOf, totalSold, isSold, addSale, removeSale, updateSale, updateProduct, removeProduct } = useProducts()
+const { getProduct, loadSales, salesOf, totalSold, isSold, addSale, removeSale, updateSale, updateProduct, removeProduct } = useProducts()
 const { optionsOf, mergeOptions } = useOptions()
 const { members } = useTeamMembers()
 
-const substyleOptions = computed(() =>
-  mergeOptions('substyle', [...new Set(products.value.map(p => p.substyle).filter(Boolean))].sort())
-)
-const productionStatusOptions = computed(() =>
-  mergeOptions('productionStatus', [...new Set(products.value.map(p => p.productionStatus).filter(Boolean))].sort())
-)
+// Pilihan substyle & status produksi yang sudah dipakai di produk, dari ringkasan di server
+const { substyles: usedSubstyles, productionStatuses: usedStatuses } = useProductOverview()
+const substyleOptions = computed(() => mergeOptions('substyle', [...usedSubstyles.value].sort()))
+const productionStatusOptions = computed(() => mergeOptions('productionStatus', [...usedStatuses.value].sort()))
 
 // ========== DATA ==========
 const product = computed(() => getProduct(route.params.id))
+
+// Produk + riwayat penjualannya dimuat dari server per id (tidak ada lagi daftar semua produk di browser)
+const loadingDetail = ref(true)
+async function loadDetail() {
+  try {
+    await Promise.all([loadSales(route.params.id), loadSaleRows()])
+  } catch (err) {
+    console.error('Gagal memuat produk:', err.message) // 404 -> tampil "Produk tidak ditemukan"
+  } finally {
+    loadingDetail.value = false
+  }
+}
+watch(() => route.params.id, () => { loadingDetail.value = true; loadDetail() })
+watch(productsVersion, loadDetail) // produk/penjualan berubah -> muat ulang
 const productSales = computed(() => salesOf(route.params.id))
 const totalQty = computed(() => totalSold(route.params.id))
 const sold = computed(() => isSold(route.params.id))
@@ -695,17 +703,35 @@ const lastSale = computed(() => productSales.value[0] || null) // sudah diurutka
 const revenue = computed(() => totalQty.value * (product.value?.price || 0))
 const links = computed(() => getLinks(product.value))
 
-// ========== PENCARIAN RIWAYAT PENJUALAN ==========
-const saleSearchQuery = ref('')
-const filteredSales = computed(() => {
-  const q = saleSearchQuery.value.toLowerCase().trim()
-  if (!q) return productSales.value
-  return productSales.value.filter(sale =>
-    (sale.buyer || '').toLowerCase().includes(q) ||
-    (sale.platform || '').toLowerCase().includes(q) ||
-    (sale.package || '').toLowerCase().includes(q)
-  )
-})
+// ========== RIWAYAT PENJUALAN (cari + halaman dikerjakan di server) ==========
+const saleSearch = ref('')
+const salePage = ref(1)
+const saleRows = ref([])
+const saleMeta = ref({ page: 1, limit: 20, totalPages: 1, total: 0 })
+const saleLoading = ref(false)
+const salesCount = computed(() => product.value?.salesCount || 0)
+
+async function loadSaleRows() {
+  saleLoading.value = true
+  try {
+    const q = new URLSearchParams({ page: salePage.value, limit: saleMeta.value.limit })
+    if (saleSearch.value) q.set('search', saleSearch.value)
+    const res = await api.get(`/products/${route.params.id}/sales?${q}`)
+    saleRows.value = res.data
+    saleMeta.value = res.pagination
+  } catch (err) {
+    saleRows.value = []
+    console.error('Gagal memuat riwayat penjualan:', err.message)
+  } finally {
+    saleLoading.value = false
+  }
+}
+function goSalePage(p) {
+  salePage.value = p
+  loadSaleRows()
+}
+watch(saleSearch, () => { salePage.value = 1; loadSaleRows() })
+watch(() => route.params.id, () => { saleSearch.value = ''; salePage.value = 1 })
 
 function goBack() {
   const style = product.value?.style?.trim()
@@ -918,8 +944,8 @@ async function confirmDelete() {
 }
 
 // Kalau dibuka dari tombol centang di List Produk (?jual=1), langsung buka form
-onMounted(() => {
-  loadSales(route.params.id) // riwayat penjualan produk ini (daftar produk hanya membawa agregatnya)
+onMounted(async () => {
+  await loadDetail()
   if (route.query.jual && product.value) {
     openSaleModal()
     router.replace({ path: route.path }) // bersihkan query

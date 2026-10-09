@@ -3,8 +3,11 @@
 // Sekarang data diambil dari API (bukan disimpan di memory lagi), jadi tidak
 // hilang saat halaman di-refresh.
 import { ref } from 'vue'
-import { API_BASE, getToken, setToken } from '../utils/api.js'
+import { API_BASE, getToken, setToken, api } from '../utils/api.js'
+import { invalidateProducts } from './useProductOverview.js'
 
+// Cache produk yang pernah dimuat (halaman daftar, detail, picker). BUKAN seluruh produk tim:
+// angka agregat ada di useProductOverview, dan daftar diambil per halaman lewat fetchProductPage.
 const products = ref([])
 const salesByProduct = ref({}) // { [productId]: penjualan produk itu } — dimuat per produk (halaman detail)
 const loading = ref(false)
@@ -36,33 +39,51 @@ async function request(path, options = {}) {
   return body.data
 }
 
-// Daftar produk tidak membawa isi penjualan (hanya agregat: soldQty, salesCount) supaya
-// responsnya tidak membengkak. Isi penjualan SATU produk dimuat dari GET /products/:id
-// saat halaman detailnya dibuka.
+// Simpan/ganti produk di cache berdasarkan id (urutan dan produk lain tidak berubah)
+function upsertProducts(list) {
+  const next = [...products.value]
+  for (const item of list) {
+    const i = next.findIndex((p) => p.id === item.id)
+    if (i === -1) next.push(item)
+    else next[i] = item
+  }
+  products.value = next
+}
+
+// Detail SATU produk beserta riwayat penjualannya (GET /products/:id). Daftar produk hanya
+// membawa agregat (soldQty, salesCount), jadi halaman detail memanggil ini.
 async function loadSales(productId) {
   const data = await request(`/products/${productId}`)
+  upsertProducts([data])
   salesByProduct.value = { ...salesByProduct.value, [productId]: data.sales || [] }
+  return data
 }
 
 // ========== FETCH ==========
-export async function fetchProducts() {
-  loading.value = true
-  error.value = null
-  try {
-    const data = await request('/products')
-    products.value = data
-  } catch (err) {
-    error.value = err.message
-    console.error('Gagal memuat produk:', err.message)
-  } finally {
-    loading.value = false
+// Satu halaman produk dengan filter di server. params: style, substyle, productionStatus, platform,
+// designer, currency, sold ('sold' | 'unsold'), search, page, limit. Hasilnya masuk cache supaya
+// getProduct()/totalSold() langsung bisa dipakai untuk baris-baris itu.
+export async function fetchProductPage(params = {}) {
+  const qs = new URLSearchParams()
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null && v !== '') qs.set(k, v)
   }
+  const body = await api.get(`/products?${qs}`)
+  upsertProducts(body.data || [])
+  return { data: body.data || [], pagination: body.pagination }
 }
 
-// Muat otomatis begitu composable ini pertama kali dipakai, tapi cuma kalau
-// sudah ada token (mis. refresh halaman waktu masih login). Kalau belum
-// login, useAuth yang akan memanggil fetchProducts() setelah login sukses.
-if (getToken()) fetchProducts()
+// Kosongkan cache saat logout supaya data tim sebelumnya tidak terlihat oleh akun berikutnya
+export function clearProducts() {
+  products.value = []
+  salesByProduct.value = {}
+}
+
+// Dipanggil setelah login dan setelah tiap perubahan data produk. TIDAK lagi memuat semua produk:
+// hanya menyegarkan ringkasan dan memberi tahu halaman yang terbuka agar memuat ulang halamannya.
+export function fetchProducts() {
+  return invalidateProducts()
+}
 
 // ========== HELPER FORMAT ==========
 export function formatDateTime(dateStr) {
@@ -151,21 +172,21 @@ function getProduct(id) {
 
   async function addSale(productId, data) {
     await request(`/products/${productId}/sales`, { method: 'POST', body: JSON.stringify(data) })
-    await Promise.all([fetchProducts(), loadSales(productId)])
+    await fetchProducts()
   }
 
   async function removeSale(saleId, productId) {
     // productId dibutuhkan karena endpoint di-nest di bawah /products/:id/sales/:saleId
     const pid = productId ?? productIdOfSale(saleId)
     await request(`/products/${pid}/sales/${saleId}`, { method: 'DELETE' })
-    await Promise.all([fetchProducts(), loadSales(pid)])
+    await fetchProducts()
   }
 
   async function updateSale(saleId, data, productId) {
     // productId dibutuhkan karena endpoint di-nest di bawah /products/:id/sales/:saleId
     const pid = productId ?? productIdOfSale(saleId)
     await request(`/products/${pid}/sales/${saleId}`, { method: 'PATCH', body: JSON.stringify(data) })
-    await Promise.all([fetchProducts(), loadSales(pid)])
+    await fetchProducts()
   }
 
   return {

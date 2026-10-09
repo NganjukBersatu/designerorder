@@ -1,39 +1,70 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../utils/api.js'
-import { amount, shortDate } from '../utils/format.js'
+import { amount, shortDate, STATUS_LABEL } from '../utils/format.js'
 import StatusBadge from '../components/StatusBadge.vue'
+import SearchInput from '../components/SearchInput.vue'
+import Pager from '../components/Pager.vue'
+import FilterResetButton from '../components/FilterResetButton.vue'
 
 const route = useRoute()
 const router = useRouter()
 
 const ROLE_LABELS = { owner: 'Owner', admin: 'Admin', member: 'Anggota' }
-const LIST_LIMIT = 20
+const LIST_LIMIT = 10
 
 const member = ref(null)
 const orders = ref([])
-const ordersTotal = ref(0)
+const pagination = ref(null) // { page, limit, total, totalPages }
 const loading = ref(true)
+const listLoading = ref(false)
 const errorMsg = ref('')
+
+// Pencarian, filter status, dan halaman dikerjakan di server (anggota bisa punya ratusan order)
+const search = ref('')
+const status = ref('all')
+const page = ref(1)
+const hasFilter = computed(() => !!search.value || status.value !== 'all')
+
+async function loadOrders() {
+  listLoading.value = true
+  try {
+    const params = new URLSearchParams({ createdBy: route.params.id, page: page.value, limit: LIST_LIMIT })
+    if (search.value) params.set('search', search.value)
+    if (status.value !== 'all') params.set('status', status.value)
+    const o = await api.get(`/orders?${params}`)
+    orders.value = o.data
+    pagination.value = o.pagination
+  } catch (err) {
+    errorMsg.value = err.message
+  } finally {
+    listLoading.value = false
+  }
+}
 
 async function load() {
   loading.value = true
   errorMsg.value = ''
   try {
-    const [m, o] = await Promise.all([
-      api.get(`/team/members/${route.params.id}`),
-      api.get(`/orders?createdBy=${route.params.id}&page=1&limit=${LIST_LIMIT}`),
-    ])
+    const m = await api.get(`/team/members/${route.params.id}`)
     member.value = m.data
-    orders.value = o.data
-    ordersTotal.value = o.pagination?.total ?? o.data.length
+    await loadOrders()
   } catch (err) {
     errorMsg.value = err.message
   } finally {
     loading.value = false
   }
 }
+function resetFilters() {
+  search.value = ''
+  status.value = 'all'
+}
+watch([search, status], () => {
+  page.value = 1
+  loadOrders()
+})
+watch(page, loadOrders)
 onMounted(load)
 
 const name = computed(() => member.value?.displayName || member.value?.username || '')
@@ -75,8 +106,22 @@ const nameOf = (o) => o.title || o.buyerName || 'Order'
           <span class="text-[12px] text-ink-400">Bergabung {{ shortDate(member.createdAt) }}</span>
         </div>
 
+        <!-- Cari & filter status -->
+        <div class="flex flex-col sm:flex-row sm:items-center gap-3 px-5 py-3 border-b border-ink-100">
+          <SearchInput v-model="search" class="flex-1" placeholder="Cari judul, pembeli, atau kategori..." />
+          <select
+            v-model="status"
+            aria-label="Filter status"
+            class="px-3 py-2 rounded-lg border border-ink-200 bg-white text-[13px] text-ink-700 outline-none focus:border-brand-400 shrink-0"
+          >
+            <option value="all">Semua status</option>
+            <option v-for="(label, key) in STATUS_LABEL" :key="key" :value="key">{{ label }}</option>
+          </select>
+          <FilterResetButton v-if="hasFilter" @click="resetFilters" />
+        </div>
+
         <div v-if="orders.length === 0" class="py-12 text-center text-[13.5px] text-ink-400">
-          Belum ada order yang dibuat anggota ini.
+          {{ hasFilter ? 'Tidak ada order yang cocok dengan pencarian / filter.' : 'Belum ada order yang dibuat anggota ini.' }}
         </div>
         <ul v-else class="divide-y divide-ink-100">
           <li
@@ -96,9 +141,7 @@ const nameOf = (o) => o.title || o.buyerName || 'Order'
             <StatusBadge :status="o.status" />
           </li>
         </ul>
-        <p v-if="ordersTotal > orders.length" class="px-5 py-3 border-t border-ink-100 text-[12px] text-ink-400">
-          Menampilkan {{ orders.length }} dari {{ ordersTotal }} order terbaru.
-        </p>
+        <Pager :pagination="pagination" label="order" :loading="listLoading" @page="page = $event" />
       </div>
     </template>
   </div>

@@ -21,6 +21,17 @@
       v-if="open"
       class="absolute z-10 mt-1.5 w-full rounded-xl border border-ink-100 bg-white shadow-card-hover overflow-hidden py-1 max-h-56 overflow-y-auto"
     >
+      <!-- Pencarian (opsional): ketikan dikirim ke induk lewat event "search", mis. untuk mencari di server -->
+      <div v-if="searchable" class="px-2 pb-1 pt-0.5 sticky top-0 bg-white">
+        <input
+          v-model="query"
+          type="text"
+          :placeholder="searchPlaceholder"
+          class="w-full px-3 py-1.5 rounded-lg border border-ink-200 text-sm outline-none focus:border-brand-400"
+          @input="emit('search', query)"
+          @click.stop
+        />
+      </div>
       <button
         v-if="allowEmpty"
         type="button"
@@ -50,7 +61,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 
 const props = defineProps({
   modelValue: { type: String, default: '' },
@@ -58,12 +69,19 @@ const props = defineProps({
   placeholder: { type: String, default: 'Pilih...' },
   // Tampilkan pilihan "kosongkan" (setara <option value="">Pilih...</option>) di atas daftar.
   allowEmpty: { type: Boolean, default: true },
+  // Tampilkan kotak cari di dalam dropdown; ketikannya dikirim lewat event "search"
+  searchable: { type: Boolean, default: false },
+  searchPlaceholder: { type: String, default: 'Cari...' },
 })
 
-const emit = defineEmits(['update:modelValue'])
+const emit = defineEmits(['update:modelValue', 'search'])
 
 const open = ref(false)
 const rootRef = ref(null)
+
+const query = ref('')
+// tutup dropdown mengosongkan pencarian supaya daftar kembali ke awal
+watch(open, (v) => { if (!v && query.value) { query.value = ''; emit('search', '') } })
 
 function select(value) {
   emit('update:modelValue', value)

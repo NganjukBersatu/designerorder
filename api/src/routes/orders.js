@@ -129,10 +129,10 @@ async function replaceLinks(client, orderId, urls) {
   )
 }
 
-// GET /api/orders?search=&status=&mine=true&createdBy=<userId>&designerId=<userId>&month=YYYY-MM&page=&limit=
+// GET /api/orders?search=&status=&mine=true&createdBy=<userId>&designerId=<userId>&category=&store=&month=YYYY-MM&page=&limit=
 router.get('/', async (req, res) => {
   try {
-    const { search, status, mine, month, createdBy, designerId } = req.query
+    const { search, status, mine, month, createdBy, designerId, category, store } = req.query
     const params = [req.user.teamId]
     const where = ['o.team_id = $1']
 
@@ -174,6 +174,14 @@ router.get('/', async (req, res) => {
       params.push(designerId)
       where.push(`o.designer_id = $${params.length}`)
     }
+    if (typeof category === 'string' && category.trim()) {
+      params.push(category.trim())
+      where.push(`o.category = $${params.length}`)
+    }
+    if (typeof store === 'string' && store.trim()) {
+      params.push(store.trim())
+      where.push(`o.store_name = $${params.length}`)
+    }
     if (mine === 'true' || mine === '1') {
       params.push(req.user.id)
       where.push(`o.created_by = $${params.length}`)
@@ -191,16 +199,16 @@ router.get('/', async (req, res) => {
       limitSql += ` OFFSET $${queryParams.length}`
     }
 
-    const result = await pool.query(
-      `${SELECT_ORDER} ${whereSql} ORDER BY o.order_date DESC, o.created_at DESC${limitSql}`,
-      queryParams
-    )
+    // Query data dan COUNT tidak saling bergantung, jadi dijalankan bersamaan (bukan berurutan)
+    const [result, countResult] = await Promise.all([
+      pool.query(
+        `${SELECT_ORDER} ${whereSql} ORDER BY o.order_date DESC, o.created_at DESC${limitSql}`,
+        queryParams
+      ),
+      pagination ? pool.query(`SELECT COUNT(*)::int AS total FROM orders o ${whereSql}`, params) : null,
+    ])
 
-    let meta = null
-    if (pagination) {
-      const countResult = await pool.query(`SELECT COUNT(*)::int AS total FROM orders o ${whereSql}`, params)
-      meta = buildPaginationMeta(pagination, countResult.rows[0].total)
-    }
+    const meta = pagination ? buildPaginationMeta(pagination, countResult.rows[0].total) : null
 
     res.json({ data: result.rows.map(mapRow), pagination: meta })
   } catch (err) {

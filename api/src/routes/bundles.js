@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { pool } from '../config/db.js'
+import { parsePagination, buildPaginationMeta } from '../utils/pagination.js'
 import { validateBody } from '../middleware/validate.js'
 import { uuidParam, isUuid } from '../utils/uuid.js'
 import { buildSet } from '../utils/sql.js'
@@ -156,11 +157,41 @@ router.get('/:id', async (req, res) => {
   try {
     const result = await pool.query(`${SELECT_BUNDLE} WHERE b.id = $1 AND b.team_id = $2`, [req.params.id, req.user.teamId])
     if (!result.rows.length) return res.status(404).json({ message: 'Bundling tidak ditemukan' })
-    const sales = await pool.query('SELECT * FROM bundle_sales WHERE bundle_id = $1 ORDER BY sold_at DESC', [req.params.id])
+    // Hanya 10 penjualan terbaru; riwayat lengkap diambil per halaman lewat GET /:id/sales
+    const sales = await pool.query('SELECT * FROM bundle_sales WHERE bundle_id = $1 ORDER BY sold_at DESC LIMIT 10', [req.params.id])
     res.json({ data: { ...mapBundle(result.rows[0]), sales: sales.rows.map(mapSale) } })
   } catch (err) {
     console.error(err)
     res.status(500).json({ message: 'Gagal mengambil bundling', error: err.message })
+  }
+})
+
+// GET /api/bundles/:id/sales?search=&page=&limit= — riwayat penjualan satu bundling, terbaru dulu,
+// berpaginasi (default 20/halaman). search mencari pembeli atau platform.
+router.get('/:id/sales', async (req, res) => {
+  try {
+    const owned = await pool.query('SELECT 1 FROM bundles WHERE id = $1 AND team_id = $2', [req.params.id, req.user.teamId])
+    if (!owned.rows.length) return res.status(404).json({ message: 'Bundling tidak ditemukan' })
+
+    const params = [req.params.id]
+    let whereSql = 'WHERE s.bundle_id = $1'
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : ''
+    if (search) {
+      params.push(`%${search.replace(/[\\%_]/g, '\\$&')}%`)
+      whereSql += ' AND (s.buyer ILIKE $2 OR s.platform ILIKE $2)'
+    }
+    const pagination = parsePagination({ page: req.query.page || 1, limit: req.query.limit || 20 })
+    const [rows, count] = await Promise.all([
+      pool.query(
+        `SELECT s.* FROM bundle_sales s ${whereSql} ORDER BY s.sold_at DESC, s.id DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+        [...params, pagination.limit, pagination.offset]
+      ),
+      pool.query(`SELECT COUNT(*)::int AS total FROM bundle_sales s ${whereSql}`, params),
+    ])
+    res.json({ data: rows.rows.map(mapSale), pagination: buildPaginationMeta(pagination, count.rows[0].total) })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ message: 'Gagal mengambil riwayat penjualan', error: err.message })
   }
 })
 

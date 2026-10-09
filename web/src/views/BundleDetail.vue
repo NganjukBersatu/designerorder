@@ -2,16 +2,20 @@
 import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useBundles } from '../composables/useBundles'
-import { useProducts, formatPrice, formatDateTime, nowLocal } from '../composables/useProducts'
+import { fetchProductPage, formatPrice, formatDateTime, nowLocal } from '../composables/useProducts'
+import { useProductOverview } from '../composables/useProductOverview'
 import { useOptions } from '../composables/useOptions'
 import BundleForm from '../components/BundleForm.vue'
 import PlatformBadges from '../components/PlatformBadges.vue'
 import PlatformPicker from '../components/PlatformPicker.vue'
+import SearchInput from '../components/SearchInput.vue'
+import Pager from '../components/Pager.vue'
+import { api } from '../utils/api.js'
 
 const route = useRoute()
 const router = useRouter()
 const { loadBundle, updateBundle, removeBundle, addSale, updateSale, removeSale } = useBundles()
-const { products } = useProducts()
+const { substyles: usedSubstyles } = useProductOverview()
 const { optionsOf, mergeOptions } = useOptions()
 
 const bundle = ref(null)
@@ -23,6 +27,7 @@ async function load() {
   errorMsg.value = ''
   try {
     bundle.value = await loadBundle(route.params.id)
+    await loadSaleRows()
     if (route.query.jual) {
       router.replace({ query: {} }) // buka form sekali saja
       openSale()
@@ -37,14 +42,76 @@ async function load() {
 watch(() => route.params.id, load, { immediate: true })
 
 const input = 'w-full px-3 py-2.5 rounded-xl border border-ink-200 bg-white text-ink-800 focus:border-brand-400 outline-none text-sm transition'
-const sales = computed(() => bundle.value?.sales || [])
+// ===== Riwayat penjualan (cari + halaman dikerjakan di server) =====
+const saleSearch = ref('')
+const salePage = ref(1)
+const saleRows = ref([])
+const saleMeta = ref({ page: 1, limit: 20, totalPages: 1, total: 0 })
+const saleLoading = ref(false)
+const salesCount = computed(() => bundle.value?.salesCount || 0)
+
+async function loadSaleRows() {
+  saleLoading.value = true
+  try {
+    const q = new URLSearchParams({ page: salePage.value, limit: saleMeta.value.limit })
+    if (saleSearch.value) q.set('search', saleSearch.value)
+    const res = await api.get(`/bundles/${route.params.id}/sales?${q}`)
+    saleRows.value = res.data
+    saleMeta.value = res.pagination
+  } catch (err) {
+    saleRows.value = []
+  } finally {
+    saleLoading.value = false
+  }
+}
+function goSalePage(p) {
+  salePage.value = p
+  loadSaleRows()
+}
+watch(saleSearch, () => { salePage.value = 1; loadSaleRows() })
+watch(() => route.params.id, () => { saleSearch.value = ''; salePage.value = 1 })
 const itemsTotal = computed(() => (bundle.value?.items || []).reduce((s, p) => s + (p.price || 0), 0))
-const candidates = computed(() =>
-  products.value.filter((p) => (p.style || '').trim() === bundle.value?.style && !p.bundleId && p.currency === bundle.value?.currency)
-)
-const substyleOptions = computed(() =>
-  mergeOptions('substyle', [...new Set(products.value.map((p) => p.substyle).filter(Boolean))].sort())
-)
+const substyleOptions = computed(() => mergeOptions('substyle', [...usedSubstyles.value].sort()))
+
+// Kandidat isi bundling dimuat dari server saat dialog dibuka (filter kategori + mata uang di server),
+// per halaman dan bisa dicari — bukan menyaring semua produk di browser.
+const candidates = ref([])
+const candidateSearch = ref('')
+const candidateMeta = ref({ page: 1, totalPages: 1, total: 0 })
+const candidatesLoading = ref(false)
+const CANDIDATE_PAGE = 30
+let candidateTimer = null
+
+async function loadCandidates(page = 1) {
+  if (!bundle.value) return
+  candidatesLoading.value = true
+  try {
+    const res = await fetchProductPage({
+      style: bundle.value.style,
+      currency: bundle.value.currency,
+      search: candidateSearch.value.trim(),
+      page,
+      limit: CANDIDATE_PAGE,
+    })
+    candidates.value = page === 1 ? res.data : [...candidates.value, ...res.data]
+    candidateMeta.value = res.pagination || { page, totalPages: 1, total: res.data.length }
+  } catch (err) {
+    actionError.value = err.message
+  } finally {
+    candidatesLoading.value = false
+  }
+}
+function onCandidateSearch() {
+  clearTimeout(candidateTimer)
+  candidateTimer = setTimeout(() => loadCandidates(1), 250)
+}
+function openAddItems() {
+  toAdd.value = []
+  candidateSearch.value = ''
+  candidates.value = []
+  showAddItems.value = true
+  loadCandidates(1)
+}
 
 // ===== Edit info =====
 const showEdit = ref(false)
@@ -216,7 +283,7 @@ async function deleteSale(sale) {
       <div class="bg-white rounded-card shadow-card p-5">
         <div class="flex items-center justify-between gap-3 mb-3">
           <h2 class="text-[15px] font-semibold text-ink-900">Isi bundling <span class="text-ink-400 font-normal">({{ bundle.items.length }} produk)</span></h2>
-          <button class="text-sm font-medium text-brand-600 hover:underline" @click="toAdd = []; showAddItems = true">+ Tambah produk</button>
+          <button class="text-sm font-medium text-brand-600 hover:underline" @click="openAddItems">+ Tambah produk</button>
         </div>
         <ul class="divide-y divide-ink-100">
           <li v-for="p in bundle.items" :key="p.id" class="flex items-center gap-3 py-2.5">
@@ -233,36 +300,55 @@ async function deleteSale(sale) {
       </div>
 
       <!-- Penjualan -->
-      <div class="bg-white rounded-card shadow-card p-5">
-        <h2 class="text-[15px] font-semibold text-ink-900 mb-3">Riwayat penjualan</h2>
-        <div v-if="!sales.length" class="py-8 text-center text-sm text-ink-400">Belum ada penjualan. Klik <strong>Catat Penjualan</strong> untuk pembeli pertama.</div>
+      <div class="bg-white rounded-card shadow-card overflow-hidden">
+        <div class="px-5 py-4 border-b border-ink-100 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <h2 class="text-[15px] font-semibold text-ink-900">Riwayat penjualan</h2>
+          <SearchInput
+            v-if="salesCount || saleSearch"
+            v-model="saleSearch"
+            variant="soft"
+            class="w-full lg:w-72 shrink-0"
+            placeholder="Cari pembeli atau platform..."
+          />
+        </div>
+        <div v-if="!saleRows.length" class="py-10 text-center text-sm text-ink-400">
+          <template v-if="salesCount === 0 && !saleSearch">Belum ada penjualan. Klik <strong>Catat Penjualan</strong> untuk pembeli pertama.</template>
+          <template v-else>Tidak ada transaksi yang cocok dengan pencarian.</template>
+        </div>
         <div v-else class="overflow-x-auto">
-          <table class="w-full text-sm">
+          <table v-rtable class="rtable w-full text-sm">
             <thead>
-              <tr class="text-ink-500 border-b border-ink-100">
-                <th class="px-3 py-2.5 text-left font-medium">Pembeli</th>
-                <th class="px-3 py-2.5 text-right font-medium">Jumlah</th>
-                <th class="px-3 py-2.5 text-left font-medium">Platform</th>
-                <th class="px-3 py-2.5 text-right font-medium">Total</th>
-                <th class="px-3 py-2.5 text-left font-medium whitespace-nowrap">Tanggal & Jam</th>
-                <th class="px-3 py-2.5 w-28"></th>
+              <tr class="bg-cream-100 text-ink-500 border-b border-ink-100">
+                <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap">Pembeli</th>
+                <th class="px-4 py-3.5 text-right font-medium whitespace-nowrap">Jumlah</th>
+                <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap">Platform</th>
+                <th class="px-4 py-3.5 text-right font-medium whitespace-nowrap">Total</th>
+                <th class="px-4 py-3.5 text-left font-medium whitespace-nowrap">Tanggal &amp; Jam</th>
+                <th class="px-4 py-3.5 text-center font-medium whitespace-nowrap w-24">Aksi</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="s in sales" :key="s.id" class="border-b border-ink-50 hover:bg-black/[0.03] cursor-pointer" @click="router.push(`/bundling/${bundle.id}/penjualan/${s.id}`)">
-                <td class="px-3 py-3 font-medium text-ink-800">{{ s.buyer }}</td>
-                <td class="px-3 py-3 text-right tabular-nums">{{ s.qty }}</td>
-                <td class="px-3 py-3"><PlatformBadges :platform="s.platform" /></td>
-                <td class="px-3 py-3 text-right tabular-nums font-medium">{{ formatPrice(s.total ?? bundle.price * s.qty, s.currency || bundle.currency) }}</td>
-                <td class="px-3 py-3 text-ink-500 text-[13px] whitespace-nowrap">{{ formatDateTime(s.soldAt) }}</td>
-                <td class="px-3 py-3 text-right whitespace-nowrap" @click.stop>
-                  <button class="px-2 py-1 rounded-lg text-[13px] text-ink-600 hover:bg-ink-100" @click="openSale(s)">Edit</button>
-                  <button class="px-2 py-1 rounded-lg text-[13px] text-danger-600 hover:bg-danger-50" @click="deleteSale(s)">Hapus</button>
+              <tr v-for="s in saleRows" :key="s.id" class="border-b border-ink-50 hover:bg-cream-50/70 transition cursor-pointer" @click="router.push(`/bundling/${bundle.id}/penjualan/${s.id}`)">
+                <td class="px-4 py-4 font-medium text-ink-800">{{ s.buyer }}</td>
+                <td class="px-4 py-4 text-right tabular-nums">{{ s.qty }}</td>
+                <td class="px-4 py-4"><PlatformBadges :platform="s.platform" /></td>
+                <td class="px-4 py-4 text-right tabular-nums font-medium">{{ formatPrice(s.total ?? bundle.price * s.qty, s.currency || bundle.currency) }}</td>
+                <td class="px-4 py-4 text-ink-500 text-[13px] whitespace-nowrap">{{ formatDateTime(s.soldAt) }}</td>
+                <td class="px-4 py-4 text-center cursor-default" @click.stop>
+                  <div class="flex items-center justify-center gap-1">
+                    <button class="p-1.5 rounded-lg hover:bg-ink-100 text-ink-500 transition" title="Edit transaksi" aria-label="Edit transaksi" @click="openSale(s)">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                    </button>
+                    <button class="p-1.5 rounded-lg hover:bg-danger-50 text-danger-600 transition" title="Hapus transaksi" aria-label="Hapus transaksi" @click="deleteSale(s)">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                    </button>
+                  </div>
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
+        <Pager :pagination="saleMeta" label="transaksi" :loading="saleLoading" @page="goSalePage" />
       </div>
     </template>
 
@@ -286,13 +372,27 @@ async function deleteSale(sale) {
         <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
           <h3 class="text-base font-semibold text-ink-900 mb-1">Tambah produk ke bundling</h3>
           <p class="text-[13px] text-ink-500 mb-3">Hanya produk satuan di kategori {{ bundle?.style }} dengan mata uang {{ bundle?.currency }}.</p>
+          <input
+            v-model="candidateSearch"
+            type="text"
+            placeholder="Cari produk..."
+            class="w-full mb-2 px-3 py-2 rounded-xl border border-ink-200 bg-white text-sm outline-none focus:border-brand-400"
+            @input="onCandidateSearch"
+          />
           <div class="max-h-64 overflow-y-auto rounded-xl border border-ink-200 divide-y divide-ink-100">
             <label v-for="p in candidates" :key="p.id" class="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-cream-50">
               <input v-model="toAdd" type="checkbox" :value="p.id" class="w-4 h-4 accent-brand-500" />
               <span class="flex-1 min-w-0 truncate text-sm">{{ p.name }}</span>
               <span class="text-[13px] text-ink-500 tabular-nums">{{ formatPrice(p.price, p.currency) }}</span>
             </label>
-            <p v-if="!candidates.length" class="px-3 py-6 text-center text-sm text-ink-400">Tidak ada produk satuan lain di kategori ini.</p>
+            <p v-if="!candidates.length && !candidatesLoading" class="px-3 py-6 text-center text-sm text-ink-400">Tidak ada produk satuan lain di kategori ini.</p>
+            <button
+              v-if="candidateMeta.page < candidateMeta.totalPages"
+              type="button"
+              class="w-full px-3 py-2 text-[13px] text-brand-600 hover:bg-cream-50 disabled:opacity-50"
+              :disabled="candidatesLoading"
+              @click="loadCandidates(candidateMeta.page + 1)"
+            >Muat lebih banyak ({{ candidateMeta.total - candidates.length }} lagi)</button>
           </div>
           <div class="flex justify-end gap-3 mt-4">
             <button class="px-4 py-2.5 rounded-xl border border-ink-200 text-ink-600 text-sm font-medium" @click="showAddItems = false">Batal</button>

@@ -21,6 +21,7 @@ import bundlesRoutes from './routes/bundles.js'
 import currencyRoutes from './routes/currency.js'
 import appSettingsRoutes from './routes/appSettings.js'
 import { linkLegacyDesigners } from './utils/designers.js'
+import { invalidateOnWrite, invalidateAllOnWrite } from './utils/cache.js'
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -32,16 +33,16 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'designer
 
 app.use('/api/auth', authRoutes)
 app.use('/api/team', teamRoutes)
-app.use('/api/orders', requireAuth, ordersRoutes)
+app.use('/api/orders', requireAuth, invalidateOnWrite, ordersRoutes)
 app.use('/api/dashboard', requireAuth, dashboardRoutes)
-app.use('/api/products', requireAuth, productsRoutes)
+app.use('/api/products', requireAuth, invalidateOnWrite, productsRoutes)
 app.use('/api/options', requireAuth, optionsRoutes)
 app.use('/api/uploads', requireAuth, uploadsRoutes)
-app.use('/api/sales', requireAuth, salesRoutes)
-app.use('/api/bundles', requireAuth, bundlesRoutes)
+app.use('/api/sales', requireAuth, invalidateOnWrite, salesRoutes)
+app.use('/api/bundles', requireAuth, invalidateOnWrite, bundlesRoutes)
 app.use('/api/currency', requireAuth, currencyRoutes)
 app.use('/api/app-settings', requireAuth, appSettingsRoutes)
-app.use('/api/admin', requireAuth, requirePrivileged, adminRoutes)
+app.use('/api/admin', requireAuth, requirePrivileged, invalidateAllOnWrite, adminRoutes)
 // Publik (tanpa login): tag <img> tidak bisa mengirim token. Key-nya UUID acak dan divalidasi ketat.
 app.use('/api/files', filesRoutes)
 

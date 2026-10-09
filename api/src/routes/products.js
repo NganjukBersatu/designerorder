@@ -7,6 +7,7 @@ import { deleteImageByUrl } from '../config/storage.js'
 import { isTeamMember } from '../utils/designers.js'
 import { buildSet } from '../utils/sql.js'
 import { currencyRule, checkCurrency } from '../utils/currency.js'
+import { cached } from '../utils/cache.js'
 
 const router = Router()
 router.param('id', uuidParam)
@@ -46,8 +47,8 @@ const saleFieldsUpdate = Object.fromEntries(
   Object.entries(saleFieldsCreate).map(([key, rule]) => [key, { ...rule, required: false }])
 )
 
-// Query dasar yang menempelkan links & sales sebagai JSON array
-// langsung dari SQL, supaya frontend tidak perlu request terpisah.
+// Query dasar untuk DETAIL produk: links, paket, dan 10 penjualan TERBARU (sold_qty / sales_count
+// dihitung dari seluruh penjualan). Riwayat lengkap diambil per halaman lewat GET /:id/sales.
 const SELECT_PRODUCT = `
   SELECT
     p.*,
@@ -68,9 +69,11 @@ const SELECT_PRODUCT = `
           'id', s.id, 'productId', s.product_id, 'buyer', s.buyer, 'qty', s.qty,
           'platform', s.platform, 'package', s.package, 'total', s.total, 'currency', s.currency, 'soldAt', s.sold_at
         ) ORDER BY s.sold_at DESC)
-       FROM sales s WHERE s.product_id = p.id),
+       FROM (SELECT * FROM sales WHERE product_id = p.id ORDER BY sold_at DESC LIMIT 10) s),
       '[]'
     ) AS sales,
+    (SELECT COALESCE(SUM(qty), 0)::int FROM sales WHERE product_id = p.id) AS sold_qty,
+    (SELECT COUNT(*)::int FROM sales WHERE product_id = p.id) AS sales_count,
     COALESCE(NULLIF(btrim(d.display_name), ''), d.username, p.designer) AS designer_label
   FROM products p
   LEFT JOIN users d ON d.id = p.designer_id
@@ -178,17 +181,266 @@ async function replacePackages(client, productId, packages) {
   )
 }
 
-// GET /api/products
+// Ekspresi nama designer yang tampil (akun tertaut, atau teks lama kalau belum tertaut)
+const DESIGNER_LABEL = `COALESCE(NULLIF(btrim(d.display_name), ''), d.username, p.designer)`
+const NO_SUBSTYLE = '__none' // nilai khusus untuk filter "Tanpa substyle"
+
+// Escape karakter khusus LIKE supaya ketikan user (%, _) dicari apa adanya
+const likeEscape = (v) => String(v).replace(/[\\%_]/g, '\\$&')
+const str = (v) => (typeof v === 'string' ? v.trim() : '')
+
+// Menyusun WHERE dari query string. Semua filter dikerjakan di database supaya halaman yang
+// diminta cukup membaca baris-barisnya saja (bukan seluruh produk tim lalu disaring di browser).
+function buildProductFilters(query, teamId) {
+  const where = ['p.team_id = $1', 'p.bundle_id IS NULL']
+  const params = [teamId]
+  const add = (sql, value) => {
+    params.push(value)
+    where.push(sql.replaceAll('?', `$${params.length}`))
+  }
+
+  const style = str(query.style)
+  if (style) add('p.style = ?', style)
+
+  const substyle = str(query.substyle)
+  if (substyle === NO_SUBSTYLE) where.push(`(p.substyle IS NULL OR btrim(p.substyle) = '')`)
+  else if (substyle) add('btrim(p.substyle) = ?', substyle)
+
+  const productionStatus = str(query.productionStatus)
+  if (productionStatus) add('p.production_status = ?', productionStatus)
+
+  const platform = str(query.platform)
+  if (platform) {
+    add(`p.platform ILIKE '%' || ? || '%'`, likeEscape(platform))
+    // data lama: "both" berarti Etsy & Booth
+    if (/^(etsy|booth)$/i.test(platform)) where[where.length - 1] = `(${where[where.length - 1]} OR lower(btrim(p.platform)) = 'both')`
+  }
+
+  const designer = str(query.designer)
+  if (designer) add(`${DESIGNER_LABEL} = ?`, designer)
+
+  const currency = str(query.currency)
+  if (currency) add('p.currency = ?', currency.toUpperCase())
+
+  const search = str(query.search)
+  if (search) {
+    params.push(`%${likeEscape(search)}%`)
+    const n = `$${params.length}`
+    where.push(
+      `(p.name ILIKE ${n} OR p.substyle ILIKE ${n} OR p.platform ILIKE ${n} OR p.production_status ILIKE ${n}
+        OR p.note ILIKE ${n} OR ${DESIGNER_LABEL} ILIKE ${n})`
+    )
+  }
+
+  const sold = str(query.sold)
+  if (sold === 'sold') where.push('COALESCE(sa.sold_qty, 0) > 0')
+  else if (sold === 'unsold') where.push('COALESCE(sa.sold_qty, 0) = 0')
+
+  return { whereSql: `WHERE ${where.join(' AND ')}`, params, needsSold: sold === 'sold' || sold === 'unsold' }
+}
+
+// GET /api/products?style=&substyle=&productionStatus=&platform=&designer=&currency=&sold=sold|unsold
+//                  &search=&page=&limit=
+// Tanpa page/limit semua baris yang cocok dikembalikan (kompatibel dengan pemanggil lama).
+// Dengan page/limit: berpaginasi (maks 200 per halaman) + `pagination` berisi total.
 router.get('/', async (req, res) => {
   try {
-    const result = await pool.query(
-      `${SELECT_PRODUCT_LIST} WHERE p.team_id = $1 AND p.bundle_id IS NULL ORDER BY p.created_at DESC`,
-      [req.user.teamId]
-    )
-    res.json({ data: result.rows.map(mapRow) })
+    const { whereSql, params, needsSold } = buildProductFilters(req.query, req.user.teamId)
+    const pagination = parsePagination(req.query)
+
+    let limitSql = ''
+    const dataParams = [...params]
+    if (pagination) {
+      dataParams.push(pagination.limit, pagination.offset)
+      limitSql = ` LIMIT $${dataParams.length - 1} OFFSET $${dataParams.length}`
+    }
+
+    // COUNT hanya perlu join users (untuk filter/pencarian designer) dan agregat penjualan kalau filter jual dipakai
+    const countFrom = `FROM products p LEFT JOIN users d ON d.id = p.designer_id${
+      needsSold
+        ? ` LEFT JOIN LATERAL (SELECT COALESCE(SUM(s.qty), 0)::int AS sold_qty FROM sales s WHERE s.product_id = p.id) sa ON true`
+        : ''
+    }`
+
+    const [result, countResult] = await Promise.all([
+      pool.query(`${SELECT_PRODUCT_LIST} ${whereSql} ORDER BY p.created_at DESC, p.id DESC${limitSql}`, dataParams),
+      pagination ? pool.query(`SELECT COUNT(*)::int AS total ${countFrom} ${whereSql}`, params) : null,
+    ])
+
+    res.json({
+      data: result.rows.map(mapRow),
+      pagination: pagination ? buildPaginationMeta(pagination, countResult.rows[0].total) : null,
+    })
   } catch (err) {
     console.error(err)
     res.status(500).json({ message: 'Gagal mengambil data produk', error: err.message })
+  }
+})
+
+// GET /api/products/overview — agregat seluruh produk & bundling tim (satu query, di-cache).
+// Dipakai sidebar, halaman Kategori, Ringkasan Penjualan, dan pilihan dropdown di form, supaya
+// semuanya TIDAK perlu memuat daftar produk lengkap. Nilai uang per mata uang asalnya
+// (konversi ke mata uang tampilan dilakukan di browser, karena kurs bisa berubah kapan saja).
+router.get('/overview', async (req, res) => {
+  try {
+    const teamId = req.user.teamId
+    const data = await cached(teamId, 'products-overview', async () => {
+      const ITEMS = `
+        WITH items AS MATERIALIZED (
+          SELECT 'product'::text AS kind, p.id, p.name, p.image, NULLIF(btrim(p.style), '') AS style,
+                 NULLIF(btrim(p.substyle), '') AS substyle, p.created_at,
+                 p.currency, p.price, COALESCE(sa.q, 0) AS units, COALESCE(sa.c, 0) AS tx
+          FROM products p
+          LEFT JOIN LATERAL (SELECT SUM(s.qty)::int AS q, COUNT(*)::int AS c FROM sales s WHERE s.product_id = p.id) sa ON true
+          WHERE p.team_id = $1 AND p.bundle_id IS NULL
+          UNION ALL
+          SELECT 'bundle'::text, b.id, b.name, b.image, NULLIF(btrim(b.style), ''),
+                 NULLIF(btrim(b.substyle), ''), b.created_at, b.currency, b.price,
+                 COALESCE(bs.q, 0), COALESCE(bs.c, 0)
+          FROM bundles b
+          LEFT JOIN LATERAL (SELECT SUM(x.qty)::int AS q, COUNT(*)::int AS c FROM bundle_sales x WHERE x.bundle_id = b.id) bs ON true
+          WHERE b.team_id = $1
+        )`
+      const [byStyleRes, topRes, facetRes, subRes, thumbRes] = await Promise.all([
+        pool.query(
+          `${ITEMS}
+           SELECT style, currency, count(*)::int AS count, count(*) FILTER (WHERE units > 0)::int AS sold,
+                  COALESCE(SUM(units), 0)::int AS units, COALESCE(SUM(tx), 0)::int AS tx,
+                  COALESCE(SUM(units * price), 0) AS revenue
+           FROM items GROUP BY style, currency`,
+          [teamId]
+        ),
+        pool.query(
+          `${ITEMS}
+           SELECT kind, id, name, image, currency, price, units, tx FROM items
+           WHERE units > 0 ORDER BY units DESC, units * price DESC LIMIT 5`,
+          [teamId]
+        ),
+        pool.query(
+          `SELECT
+             COALESCE(array_agg(DISTINCT btrim(substyle)) FILTER (WHERE btrim(substyle) <> ''), '{}') AS substyles,
+             COALESCE(array_agg(DISTINCT production_status) FILTER (WHERE production_status <> ''), '{}') AS statuses
+           FROM products WHERE team_id = $1`,
+          [teamId]
+        ),
+        pool.query(
+          `${ITEMS}
+           SELECT style, substyle, count(*)::int AS n FROM items
+           WHERE style IS NOT NULL AND substyle IS NOT NULL GROUP BY style, substyle`,
+          [teamId]
+        ),
+        // 4 gambar terbaru per kategori untuk kartu di halaman Kategori
+        pool.query(
+          `${ITEMS}
+           SELECT style, id, name, image FROM (
+             SELECT style, id, name, image,
+                    row_number() OVER (PARTITION BY style ORDER BY created_at DESC) AS rn
+             FROM items WHERE style IS NOT NULL AND image IS NOT NULL AND image <> ''
+           ) t WHERE rn <= 4 ORDER BY style, rn`,
+          [teamId]
+        ),
+      ])
+
+      // Gabungkan baris (style, currency) jadi satu entri per style
+      const styles = new Map()
+      const totals = { count: 0, sold: 0, units: 0, transactions: 0 }
+      for (const r of byStyleRes.rows) {
+        const key = r.style || ''
+        const entry = styles.get(key) || { style: key, count: 0, units: 0, revenue: {}, substyles: [], thumbs: [] }
+        entry.count += r.count
+        entry.units += r.units
+        entry.revenue[r.currency] = (entry.revenue[r.currency] || 0) + Number(r.revenue)
+        styles.set(key, entry)
+        totals.count += r.count
+        totals.sold += r.sold
+        totals.units += r.units
+        totals.transactions += r.tx
+      }
+
+      for (const r of subRes.rows) {
+        const entry = styles.get(r.style)
+        if (entry) (entry.substyles ||= []).push({ name: r.substyle, count: r.n })
+      }
+      for (const r of thumbRes.rows) {
+        const entry = styles.get(r.style)
+        if (entry) (entry.thumbs ||= []).push({ id: r.id, name: r.name, src: r.image })
+      }
+
+      return {
+        totals,
+        styles: [...styles.values()],
+        topProducts: topRes.rows.map((r) => ({
+          kind: r.kind,
+          id: r.id,
+          name: r.name,
+          image: r.image,
+          currency: r.currency,
+          price: Number(r.price),
+          units: r.units,
+        })),
+        substyles: facetRes.rows[0].substyles,
+        productionStatuses: facetRes.rows[0].statuses,
+      }
+    })
+    res.json({ data })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ message: 'Gagal mengambil ringkasan produk', error: err.message })
+  }
+})
+
+// GET /api/products/facets?style= — pilihan filter untuk satu kategori (produk satuan + bundling):
+// substyle beserta jumlahnya, status produksi, platform, dan designer yang benar-benar ada di sana.
+router.get('/facets', async (req, res) => {
+  try {
+    const style = str(req.query.style)
+    const teamId = req.user.teamId
+
+    // Tanpa ?style=: daftar nilai yang dipakai di seluruh tim (untuk "Ambil dari produk" di Pengaturan)
+    if (!style) {
+      const all = await pool.query(
+        `SELECT
+           COALESCE(array_agg(DISTINCT btrim(style)) FILTER (WHERE btrim(style) <> ''), '{}') AS styles,
+           COALESCE(array_agg(DISTINCT btrim(substyle)) FILTER (WHERE btrim(substyle) <> ''), '{}') AS substyles,
+           COALESCE(array_agg(DISTINCT production_status) FILTER (WHERE production_status <> ''), '{}') AS statuses,
+           COALESCE(array_agg(DISTINCT platform) FILTER (WHERE platform <> ''), '{}') AS platforms
+         FROM products WHERE team_id = $1`,
+        [teamId]
+      )
+      const r = all.rows[0]
+      return res.json({ data: { styles: r.styles, substyles: r.substyles, productionStatuses: r.statuses, platforms: r.platforms } })
+    }
+    const [subs, rest] = await Promise.all([
+      pool.query(
+        `SELECT COALESCE(btrim(substyle), '') AS name, count(*)::int AS n FROM (
+           SELECT substyle FROM products WHERE team_id = $1 AND style = $2 AND bundle_id IS NULL
+           UNION ALL
+           SELECT substyle FROM bundles WHERE team_id = $1 AND style = $2
+         ) x GROUP BY 1`,
+        [teamId, style]
+      ),
+      pool.query(
+        `SELECT
+           COALESCE(array_agg(DISTINCT p.production_status) FILTER (WHERE p.production_status <> ''), '{}') AS statuses,
+           COALESCE(array_agg(DISTINCT p.platform) FILTER (WHERE p.platform <> ''), '{}')
+             || COALESCE((SELECT array_agg(DISTINCT b.platform) FROM bundles b WHERE b.team_id = $1 AND b.style = $2 AND b.platform <> ''), '{}') AS platforms,
+           COALESCE(array_agg(DISTINCT ${DESIGNER_LABEL}) FILTER (WHERE ${DESIGNER_LABEL} IS NOT NULL), '{}') AS designers
+         FROM products p LEFT JOIN users d ON d.id = p.designer_id
+         WHERE p.team_id = $1 AND p.style = $2 AND p.bundle_id IS NULL`,
+        [teamId, style]
+      ),
+    ])
+    res.json({
+      data: {
+        substyles: subs.rows.map((r) => ({ name: r.name, count: r.n })),
+        productionStatuses: rest.rows[0].statuses,
+        platforms: rest.rows[0].platforms,
+        designers: rest.rows[0].designers,
+      },
+    })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ message: 'Gagal mengambil pilihan filter', error: err.message })
   }
 })
 
@@ -206,6 +458,48 @@ router.get('/:id', async (req, res) => {
   } catch (err) {
     console.error(err)
     res.status(500).json({ message: 'Gagal mengambil produk', error: err.message })
+  }
+})
+
+// GET /api/products/:id/sales?search=&page=&limit= — riwayat penjualan satu produk, terbaru dulu,
+// berpaginasi (default 20/halaman). search mencari pembeli, platform, atau paket.
+router.get('/:id/sales', async (req, res) => {
+  try {
+    const owned = await pool.query('SELECT 1 FROM products WHERE id = $1 AND team_id = $2', [req.params.id, req.user.teamId])
+    if (!owned.rows.length) return res.status(404).json({ message: 'Produk tidak ditemukan' })
+
+    const params = [req.params.id]
+    let whereSql = 'WHERE s.product_id = $1'
+    const search = str(req.query.search)
+    if (search) {
+      params.push(`%${likeEscape(search)}%`)
+      whereSql += ` AND (s.buyer ILIKE $2 OR s.platform ILIKE $2 OR s.package ILIKE $2)`
+    }
+    const pagination = parsePagination({ page: req.query.page || 1, limit: req.query.limit || 20 })
+    const [rows, count] = await Promise.all([
+      pool.query(
+        `SELECT s.* FROM sales s ${whereSql} ORDER BY s.sold_at DESC, s.id DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+        [...params, pagination.limit, pagination.offset]
+      ),
+      pool.query(`SELECT COUNT(*)::int AS total FROM sales s ${whereSql}`, params),
+    ])
+    res.json({
+      data: rows.rows.map((s) => ({
+        id: s.id,
+        productId: s.product_id,
+        buyer: s.buyer,
+        qty: s.qty,
+        platform: s.platform,
+        package: s.package,
+        total: s.total !== null ? Number(s.total) : null,
+        currency: s.currency,
+        soldAt: s.sold_at,
+      })),
+      pagination: buildPaginationMeta(pagination, count.rows[0].total),
+    })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ message: 'Gagal mengambil riwayat penjualan', error: err.message })
   }
 })
 

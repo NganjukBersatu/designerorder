@@ -7,6 +7,8 @@ import StatusBadge from '../components/StatusBadge.vue'
 import Modal from '../components/Modal.vue'
 import OrderForm from '../components/OrderForm.vue'
 import { useTeamMembers } from '../composables/useTeamMembers'
+import { useOptions } from '../composables/useOptions'
+import FilterResetButton from '../components/FilterResetButton.vue'
 
 const router = useRouter()
 const nameOf = (o) => o.title || o.buyerName || 'Order'
@@ -19,7 +21,23 @@ const showCreate = ref(false)
 const owner = ref('all') // 'all' | 'mine' (order buatan sendiri)
 const designerId = ref('')
 const month = ref('') // 'YYYY-MM' atau kosong = semua bulan
+const category = ref('') // kategori order (sama dengan pilihan Style/Kategori di Pengaturan)
+const store = ref('') // platform / toko tempat order masuk
 const { members } = useTeamMembers()
+const { optionsOf } = useOptions()
+
+// Pilihan dari Pengaturan; nilai yang sedang dipilih tetap tampil walau sudah dihapus dari pengaturan
+const withCurrent = (list, current) => (current && !list.includes(current) ? [current, ...list] : list)
+const categoryOptions = computed(() => withCurrent(optionsOf('style'), category.value))
+const storeOptions = computed(() => withCurrent(optionsOf('platform'), store.value))
+
+const hasExtraFilter = computed(() => !!(designerId.value || month.value || category.value || store.value))
+function resetExtraFilters() {
+  designerId.value = ''
+  month.value = ''
+  category.value = ''
+  store.value = ''
+}
 
 // --- Statistik status (kartu ringkasan) ---
 const stats = ref({ pending: 0, progress: 0, done: 0 })
@@ -120,6 +138,8 @@ async function load() {
     if (owner.value === 'mine') params.set('mine', 'true')
     if (designerId.value) params.set('designerId', designerId.value)
     if (month.value) params.set('month', month.value)
+    if (category.value) params.set('category', category.value)
+    if (store.value) params.set('store', store.value)
     params.set('page', page.value)
     params.set('limit', limit.value)
     const qs = params.toString()
@@ -148,6 +168,8 @@ watch(status, resetAndLoad)
 watch(owner, resetAndLoad)
 watch(designerId, resetAndLoad)
 watch(month, resetAndLoad)
+watch(category, resetAndLoad)
+watch(store, resetAndLoad)
 watch(page, load)
 onMounted(load)
 onMounted(loadStats)
@@ -272,8 +294,8 @@ function goToPage(p) {
     </div>
 
     <!-- Search & filter status -->
-    <div class="flex flex-col sm:flex-row sm:items-center gap-3">
-      <div class="relative flex-1 min-w-0">
+    <div class="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3">
+      <div class="relative flex-1 min-w-0 sm:min-w-[18rem]">
         <svg class="w-4 h-4 text-ink-300 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
         <input
           v-model="search"
@@ -337,29 +359,43 @@ function goToPage(p) {
         </button>
       </div>
 
-      <select
-        v-model="designerId"
-        aria-label="Filter designer"
-        class="px-3 py-2 rounded-lg border border-ink-200 bg-white text-[13px] text-ink-700 outline-none focus:border-brand-400 shrink-0"
-      >
-        <option value="">Semua designer</option>
-        <option v-for="m in members" :key="m.id" :value="m.id">{{ m.displayName || m.username }}</option>
-      </select>
+      <!-- Filter sekunder: 2 kolom di layar kecil, sebaris dengan yang lain di layar lebar -->
+      <div class="grid grid-cols-2 gap-3 sm:contents">
+        <select
+          v-model="designerId"
+          aria-label="Filter designer"
+          class="px-3 py-2 rounded-lg border border-ink-200 bg-white text-[13px] text-ink-700 outline-none focus:border-brand-400 shrink-0"
+        >
+          <option value="">Semua designer</option>
+          <option v-for="m in members" :key="m.id" :value="m.id">{{ m.displayName || m.username }}</option>
+        </select>
 
-      <input
-        v-model="month"
-        type="month"
-        aria-label="Filter bulan"
-        class="px-3 py-1.5 rounded-lg border border-ink-200 bg-white text-[13px] text-ink-700 outline-none focus:border-brand-400 shrink-0"
-      />
-      <button
-        v-if="designerId || month"
-        type="button"
-        class="px-3 py-2 rounded-lg text-[13px] font-medium text-brand-600 hover:bg-brand-50 transition shrink-0"
-        @click="designerId = ''; month = ''"
-      >
-        Reset
-      </button>
+        <select
+          v-model="category"
+          aria-label="Filter kategori"
+          class="px-3 py-2 rounded-lg border border-ink-200 bg-white text-[13px] text-ink-700 outline-none focus:border-brand-400 shrink-0"
+        >
+          <option value="">Semua kategori</option>
+          <option v-for="c in categoryOptions" :key="c" :value="c">{{ c }}</option>
+        </select>
+
+        <select
+          v-model="store"
+          aria-label="Filter toko / platform"
+          class="px-3 py-2 rounded-lg border border-ink-200 bg-white text-[13px] text-ink-700 outline-none focus:border-brand-400 shrink-0"
+        >
+          <option value="">Semua toko</option>
+          <option v-for="o in storeOptions" :key="o" :value="o">{{ o }}</option>
+        </select>
+
+        <input
+          v-model="month"
+          type="month"
+          aria-label="Filter bulan"
+          class="px-3 py-1.5 rounded-lg border border-ink-200 bg-white text-[13px] text-ink-700 outline-none focus:border-brand-400 shrink-0"
+        />
+        <FilterResetButton v-if="hasExtraFilter" label="Reset filter" @click="resetExtraFilters" />
+      </div>
 
       <span v-if="pagination" class="sm:ml-2 shrink-0 text-[12.5px] text-ink-400">
         {{ pagination.total }} order cocok

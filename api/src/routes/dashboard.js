@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { pool } from '../config/db.js'
+import { cached } from '../utils/cache.js'
 
 const router = Router()
 
@@ -18,11 +19,8 @@ function parseMonthStart(raw) {
 // membuat index tidak terpakai dan seluruh order tim dipindai di setiap request.
 //
 // GET /api/dashboard/summary?month=YYYY-MM
-router.get('/summary', async (req, res) => {
-  const teamId = req.user.teamId
-  const monthStart = parseMonthStart(req.query.month)
-
-  try {
+async function buildSummary(teamId, monthStart) {
+  {
     const [statusRes, totalsRes, monthlyRes, categoryRes, recentRes] = await Promise.all([
       // Hitung per status di database (bukan menarik semua baris lalu dihitung di JS)
       pool.query(
@@ -118,7 +116,7 @@ router.get('/summary', async (req, res) => {
       buyerReference: r.buyer_reference,
     }))
 
-    res.json({
+    return {
       totalOrders: pendingOrders + progressOrders + doneOrders,
       pendingOrders,
       progressOrders,
@@ -128,7 +126,17 @@ router.get('/summary', async (req, res) => {
       monthlyRevenue,
       categoryPerformance,
       recentOrders,
-    })
+    }
+  }
+}
+
+// Hasilnya di-cache per tim + bulan (60 dtk) dan dibersihkan otomatis tiap ada penulisan data tim
+// itu (lihat utils/cache.js), jadi membuka Ringkasan berulang kali tidak mengulang 5 agregasi.
+router.get('/summary', async (req, res) => {
+  try {
+    const monthStart = parseMonthStart(req.query.month)
+    const payload = await cached(req.user.teamId, `summary:${monthStart}`, () => buildSummary(req.user.teamId, monthStart))
+    res.json(payload)
   } catch (err) {
     console.error(err)
     res.status(500).json({ message: 'Gagal mengambil ringkasan dashboard', error: err.message })

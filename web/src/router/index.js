@@ -18,8 +18,14 @@ const routes = [
       {
         path: '',
         name: 'dashboard',
-        component: () => import('../views/Ringkasan.vue'),
-        meta: { title: 'Ringkasan', subtitle: 'Ringkasan pesanan, produk, penjualan, dan pendapatan' },
+        component: () => import('../views/RingkasanOrder.vue'),
+        meta: { title: 'Ringkasan Order', subtitle: 'Ringkasan pesanan desain: status, pendapatan, dan performa kategori' },
+      },
+      {
+        path: 'ringkasan-penjualan',
+        name: 'ringkasan-penjualan',
+        component: () => import('../views/RingkasanPenjualan.vue'),
+        meta: { title: 'Ringkasan Penjualan', subtitle: 'Ringkasan produk yang dijual di platform: produk terlaris dan transaksi' },
       },
       {
         path: 'orders',

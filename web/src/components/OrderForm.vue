@@ -1,7 +1,7 @@
 <script setup>
-import { reactive, computed, ref, watch } from 'vue'
+import { reactive, computed, ref, watch, onMounted } from 'vue'
 import { api } from '../utils/api.js'
-import { useProducts, normalizeUrl } from '../composables/useProducts'
+import { useProducts, fetchProductPage, normalizeUrl } from '../composables/useProducts'
 import { useOptions } from '../composables/useOptions'
 import { useTeamMembers } from '../composables/useTeamMembers'
 import { useAuth } from '../composables/useAuth'
@@ -23,7 +23,7 @@ const saving = ref(false)
 const errorMsg = ref('')
 const imageError = ref('')
 
-const { products } = useProducts()
+const { products, loadSales } = useProducts()
 const { optionsOf } = useOptions()
 const { members } = useTeamMembers()
 const { user } = useAuth()
@@ -93,7 +93,34 @@ const PRODUCT_NONE_LABEL = '— Bukan dari katalog —'
 function productLabelOf(p) {
   return `${p.name} (${p.style || 'Tanpa kategori'})`
 }
-const productLabels = computed(() => [PRODUCT_NONE_LABEL, ...products.value.map(productLabelOf)])
+// Pilihan produk diambil dari server per pencarian (30 teratas), bukan memuat semua produk tim.
+const pickerResults = ref([])
+let pickerTimer = null
+async function searchProducts(q = '') {
+  try {
+    const res = await fetchProductPage({ search: q.trim(), page: 1, limit: 30 })
+    pickerResults.value = res.data
+  } catch (err) {
+    console.error('Gagal memuat produk:', err.message)
+  }
+}
+function onProductSearch(q) {
+  clearTimeout(pickerTimer)
+  pickerTimer = setTimeout(() => searchProducts(q), 250)
+}
+onMounted(async () => {
+  await searchProducts('')
+  // Edit order yang sudah terhubung ke produk: pastikan produknya ada di cache walau di luar 30 teratas
+  if (props.initial?.productId && !products.value.some(p => p.id === props.initial.productId)) {
+    try { await loadSales(props.initial.productId) } catch { /* produk sudah dihapus: biarkan kosong */ }
+  }
+})
+const productLabels = computed(() => {
+  const list = [...pickerResults.value]
+  // produk yang sedang dipilih tetap tampil di daftar walau tidak masuk hasil pencarian
+  if (selectedProduct.value && !list.some(p => p.id === selectedProduct.value.id)) list.unshift(selectedProduct.value)
+  return [PRODUCT_NONE_LABEL, ...list.map(productLabelOf)]
+})
 const productLabel = computed({
   get() {
     const p = products.value.find(p => p.id === form.productId)
@@ -227,6 +254,9 @@ async function submit() {
           :options="productLabels"
           :allow-empty="false"
           placeholder="Pilih produk"
+          searchable
+          search-placeholder="Cari produk..."
+          @search="onProductSearch"
         />
       </div>
       <p class="text-[12px] text-ink-400 mt-1">Pilih produk supaya Kategori &amp; Style otomatis terisi.</p>

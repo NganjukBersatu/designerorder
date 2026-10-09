@@ -593,7 +593,6 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 import { useOptions, OPTION_GROUPS, fetchOptions } from '../composables/useOptions'
-import { useProducts } from '../composables/useProducts'
 import { useAppSettings } from '../composables/useAppSettings'
 import { useProfile } from '../composables/useProfile'
 import { splitPlatforms } from '../utils/platforms'
@@ -777,8 +776,6 @@ async function submitCurrency() {
     currencySaving.value = false
   }
 }
-const { products } = useProducts()
-
 const currentGroups = computed(() => OPTION_GROUPS)
 
 const newOption = ref(Object.fromEntries(OPTION_GROUPS.map(g => [g.id, ''])))
@@ -790,14 +787,24 @@ function submitOption(group) {
   if (result.ok) newOption.value[group.id] = ''
 }
 
-function importFromProducts(group) {
+// Nilai-nilai yang sudah dipakai di produk dihitung di server (bukan memuat semua produk ke browser)
+const FACET_KEY = { style: 'styles', substyle: 'substyles', productionStatus: 'productionStatuses', platform: 'platforms' }
+
+async function importFromProducts(group) {
   const key = group.key
-  const found = []
-  for (const p of products.value) {
-    const values = key === 'platform' ? splitPlatforms(p.platform) : [p[key]]
-    for (const v of values) {
-      if (v && String(v).trim()) found.push(String(v).trim())
+  let found = []
+  try {
+    const res = await api.get('/products/facets')
+    const raw = res.data?.[FACET_KEY[key]] || []
+    for (const item of raw) {
+      const values = key === 'platform' ? splitPlatforms(item) : [item]
+      for (const v of values) {
+        if (v && String(v).trim()) found.push(String(v).trim())
+      }
     }
+  } catch (err) {
+    optionMsg.value = { id: group.id, ok: false, text: err.message }
+    return
   }
 
   let added = 0
