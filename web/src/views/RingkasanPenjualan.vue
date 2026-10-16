@@ -8,6 +8,7 @@ import { useCurrency } from '../composables/useCurrency'
 import SearchInput from '../components/SearchInput.vue'
 import Pager from '../components/Pager.vue'
 import FilterResetButton from '../components/FilterResetButton.vue'
+import AppChart from '../components/AppChart.vue'
 
 // Halaman ini HANYA untuk produk & penjualan di platform (Kategori). Data order/task
 // desain ada di halaman terpisah: RingkasanOrder.vue.
@@ -34,6 +35,19 @@ function setMonth(key) {
   selectedMonth.value = key
   salesPage.value = 1
   loadSales()
+  loadDaily()
+}
+
+// ========== GRAFIK (agregat per hari dari server) ==========
+const dailyRows = ref([])
+const trendMetric = ref('value')
+async function loadDaily() {
+  try {
+    const res = await api.get(`/sales/daily?month=${selectedMonth.value}`)
+    dailyRows.value = res.data || []
+  } catch (err) {
+    dailyRows.value = []
+  }
 }
 
 // ========== TRANSAKSI (berpaginasi di server) ==========
@@ -92,9 +106,15 @@ function goSalesPage(page) {
   salesPage.value = page
   loadSales()
 }
-onMounted(loadSales)
+onMounted(() => {
+  loadSales()
+  loadDaily()
+})
 // Data produk/penjualan berubah (mis. dicatat dari halaman lain) -> muat ulang halaman ini
-watch(productsVersion, loadSales)
+watch(productsVersion, () => {
+  loadSales()
+  loadDaily()
+})
 
 // ========== AGREGAT PRODUK & PENJUALAN (dari server) ==========
 const { totals, styles, topProducts: topRaw } = useProductOverview()
@@ -155,6 +175,54 @@ const categoryStats = computed(() => {
 })
 
 const maxCategoryRevenue = computed(() => Math.max(...categoryStats.value.map((c) => c.revenue), 1))
+
+// Semua hari di bulan terpilih (hari tanpa penjualan = 0), nilai dikonversi ke mata uang tampilan
+const trendDays = computed(() => {
+  const [y, m] = selectedMonth.value.split('-').map(Number)
+  const count = new Date(y, m, 0).getDate()
+  const byDay = new Map()
+  for (const r of dailyRows.value) {
+    const cur = byDay.get(r.day) || { value: 0, units: 0 }
+    cur.value += toDisplay(r.value, r.currency)
+    cur.units += r.units
+    byDay.set(r.day, cur)
+  }
+  return Array.from({ length: count }, (_, i) => {
+    const day = `${selectedMonth.value}-${pad(i + 1)}`
+    const v = byDay.get(day)
+    return { day, value: v?.value || 0, units: v?.units || 0 }
+  })
+})
+const monthRevenue = computed(() => trendDays.value.reduce((s, d) => s + d.value, 0))
+const monthUnits = computed(() => trendDays.value.reduce((s, d) => s + d.units, 0))
+const hasTrend = computed(() => monthUnits.value > 0 || monthRevenue.value > 0)
+const bestDay = computed(() => trendDays.value.reduce((b, d) => (d.value > b.value ? d : b), { value: 0, day: '' }))
+// Item grafik batang: label = tanggal, nilai sesuai metrik yang dipilih
+const trendItems = computed(() =>
+  trendDays.value.map((d) => ({
+    label: Number(d.day.slice(8)),
+    value: trendMetric.value === 'units' ? d.units : d.value,
+    hint: trendMetric.value === 'value' ? `${d.units} unit` : '',
+  }))
+)
+const trendFormat = (v) => (trendMetric.value === 'units' ? `${Math.round(v)} unit` : shown(v))
+
+// Pendapatan bulan ini per platform
+const platformShare = computed(() => {
+  const map = new Map()
+  for (const r of dailyRows.value) {
+    const name = r.platform || 'Lainnya'
+    map.set(name, (map.get(name) || 0) + toDisplay(r.value, r.currency))
+  }
+  return [...map.entries()]
+    .map(([label, value]) => ({ label, value }))
+    .filter((i) => i.value > 0)
+    .sort((a, b) => b.value - a.value)
+})
+// Pendapatan semua waktu per kategori (data sudah ada di ringkasan)
+const categoryShare = computed(() =>
+  categoryStats.value.filter((c) => c.revenue > 0).map((c) => ({ label: c.name, value: c.revenue })).sort((a, b) => b.value - a.value)
+)
 
 // ========== EKSPOR (CSV & Cetak) ==========
 // Nilai penjualan dalam mata uang penjualannya: total yang tercatat, atau harga x jumlah kalau kosong
@@ -318,6 +386,51 @@ function printReport() {
             <p class="text-[22px] font-semibold text-ink-900">{{ totalUnits }}</p>
             <p class="text-[11px] text-ink-400">dari {{ totalTransactions }} transaksi</p>
           </div>
+        </div>
+      </div>
+
+      <!-- Grafik tren penjualan bulan ini -->
+      <div class="bg-white rounded-card shadow-card p-5">
+        <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
+          <div>
+            <h2 class="text-[15px] font-semibold text-ink-900">Tren penjualan</h2>
+            <p class="text-[12px] text-ink-400 mt-0.5">
+              <template v-if="hasTrend">
+                {{ shown(monthRevenue) }} dari {{ monthUnits }} unit<template v-if="bestDay.value > 0"> · terbaik tanggal {{ Number(bestDay.day.slice(8)) }} ({{ shown(bestDay.value) }})</template>
+              </template>
+              <template v-else>Per hari di bulan terpilih</template>
+            </p>
+          </div>
+          <div class="print-hidden inline-flex p-0.5 rounded-lg bg-cream-100 text-[12px]">
+            <button
+              type="button"
+              @click="trendMetric = 'value'"
+              :class="trendMetric === 'value' ? 'bg-white shadow-sm text-ink-900' : 'text-ink-500'"
+              class="px-3 py-1.5 rounded-md font-medium transition"
+            >Pendapatan</button>
+            <button
+              type="button"
+              @click="trendMetric = 'units'"
+              :class="trendMetric === 'units' ? 'bg-white shadow-sm text-ink-900' : 'text-ink-500'"
+              class="px-3 py-1.5 rounded-md font-medium transition"
+            >Unit</button>
+          </div>
+        </div>
+        <AppChart v-if="hasTrend" type="bar" :items="trendItems" :format="trendFormat" title-prefix="Tanggal" />
+        <p v-else class="text-center text-[13px] text-ink-400 py-10">Belum ada penjualan pada bulan ini.</p>
+      </div>
+
+      <!-- Komposisi pendapatan -->
+      <div class="fx-grid [--fx-min:22rem] gap-6">
+        <div class="bg-white rounded-card shadow-card p-5">
+          <h2 class="text-[15px] font-semibold text-ink-900 mb-4">Pendapatan per platform <span class="text-[12px] font-normal text-ink-400">bulan ini</span></h2>
+          <AppChart v-if="platformShare.length" type="donut" :items="platformShare" :format="shown" />
+          <p v-else class="text-center text-[13px] text-ink-400 py-10">Belum ada data platform.</p>
+        </div>
+        <div class="bg-white rounded-card shadow-card p-5">
+          <h2 class="text-[15px] font-semibold text-ink-900 mb-4">Pendapatan per kategori <span class="text-[12px] font-normal text-ink-400">semua waktu</span></h2>
+          <AppChart v-if="categoryShare.length" type="donut" :items="categoryShare" :format="shown" />
+          <p v-else class="text-center text-[13px] text-ink-400 py-10">Belum ada data kategori.</p>
         </div>
       </div>
 

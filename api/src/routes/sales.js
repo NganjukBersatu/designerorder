@@ -91,4 +91,45 @@ router.get('/', async (req, res) => {
   }
 })
 
+// GET /api/sales/daily?month=YYYY-MM — agregat penjualan per hari, platform, dan mata uang untuk grafik.
+// Nilai = total yang tercatat, atau harga x jumlah kalau total kosong (sama seperti daftar transaksi).
+router.get('/daily', async (req, res) => {
+  try {
+    const { month } = req.query
+    if (typeof month !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+      return res.status(400).json({ message: 'Parameter month (YYYY-MM) wajib diisi' })
+    }
+    const result = await pool.query(
+      `SELECT day, platform, currency, sum(qty)::int AS units, sum(value) AS value, count(*)::int AS transactions FROM (
+         SELECT s.sold_at::date AS day, COALESCE(s.platform, '') AS platform,
+                COALESCE(s.currency, p.currency) AS currency, s.qty,
+                COALESCE(s.total, p.price * s.qty) AS value
+         FROM sales s JOIN products p ON p.id = s.product_id
+         WHERE p.team_id = $1 AND s.sold_at >= $2::date AND s.sold_at < $2::date + interval '1 month'
+         UNION ALL
+         SELECT bs.sold_at::date, COALESCE(bs.platform, ''), COALESCE(bs.currency, b.currency), bs.qty,
+                COALESCE(bs.total, b.price * bs.qty)
+         FROM bundle_sales bs JOIN bundles b ON b.id = bs.bundle_id
+         WHERE bs.team_id = $1 AND bs.sold_at >= $2::date AND bs.sold_at < $2::date + interval '1 month'
+       ) x
+       GROUP BY day, platform, currency
+       ORDER BY day`,
+      [req.user.teamId, `${month}-01`]
+    )
+    res.json({
+      data: result.rows.map((r) => ({
+        day: r.day instanceof Date ? `${r.day.getFullYear()}-${String(r.day.getMonth() + 1).padStart(2, '0')}-${String(r.day.getDate()).padStart(2, '0')}` : String(r.day).slice(0, 10),
+        platform: r.platform,
+        currency: r.currency,
+        units: r.units,
+        value: Number(r.value),
+        transactions: r.transactions,
+      })),
+    })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ message: 'Gagal mengambil grafik penjualan', error: err.message })
+  }
+})
+
 export default router

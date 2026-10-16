@@ -91,6 +91,26 @@ async function main() {
     // --- 2. Buat skema baru ---
     await client.query(SCHEMA_SQL)
 
+    // Database lama bisa dari versi aplikasi yang mana pun, jadi kolom yang ditambahkan belakangan
+    // (display_name, photo, platform, dst) mungkin belum ada. Kolom yang tidak ada diisi nilai bawaan
+    // (default NULL) alih-alih membuat migrasi gagal. Kolom inti (nama, username, dst) tetap wajib ada.
+    const legacyCols = new Map()
+    const colRows = await client.query(
+      'SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = $1',
+      [LEGACY]
+    )
+    for (const r of colRows.rows) {
+      if (!legacyCols.has(r.table_name)) legacyCols.set(r.table_name, new Set())
+      legacyCols.get(r.table_name).add(r.column_name)
+    }
+    const missing = []
+    // c('users', 'u', 'photo') -> "u.photo" kalau kolomnya ada di tabel lama, selain itu `fallback`
+    const c = (table, alias, column, fallback = 'NULL') => {
+      if (legacyCols.get(table)?.has(column)) return `${alias}.${column}`
+      missing.push(`${table}.${column}`)
+      return fallback
+    }
+
     // --- Baris tanpa tim (data sebelum multi-tim): tempelkan ke tim tunggal kalau ada ---
     const orphan = await client.query(`
       SELECT
@@ -133,8 +153,8 @@ async function main() {
 
     await client.query(`
       INSERT INTO users (id, team_id, username, password_hash, role, display_name, photo, created_at)
-      SELECT mu.new_id, COALESCE(mt.new_id, $1::uuid), u.username, u.password_hash, u.role,
-             u.display_name, u.photo, u.created_at
+      SELECT mu.new_id, COALESCE(mt.new_id, $1::uuid), u.username, u.password_hash, ${c('users', 'u', 'role', "'owner'")},
+             ${c('users', 'u', 'display_name')}, ${c('users', 'u', 'photo')}, u.created_at
       FROM ${LEGACY}.users u
       JOIN m_users mu ON mu.old_id = u.id
       LEFT JOIN m_teams mt ON mt.old_id = u.team_id
@@ -148,9 +168,12 @@ async function main() {
                           production_status, order_date, completion_date, due_date, status, price, note,
                           created_at, updated_at)
       SELECT mo.new_id, COALESCE(mt.new_id, $1::uuid), NULL, NULL, NULL, NULL, o.buyer_name,
-             o.buyer_reference, o.store_name, o.designer_name, o.category, o.character_type, o.style,
-             o.package, NULL, o.order_date, o.completion_date, NULL, o.status, o.price, NULL,
-             o.created_at, o.updated_at
+             ${c('orders', 'o', 'buyer_reference')}, ${c('orders', 'o', 'store_name')}, ${c('orders', 'o', 'designer_name')},
+             ${c('orders', 'o', 'category')}, ${c('orders', 'o', 'character_type')}, ${c('orders', 'o', 'style')},
+             ${c('orders', 'o', 'package')}, NULL, ${c('orders', 'o', 'order_date', 'CURRENT_DATE')},
+             ${c('orders', 'o', 'completion_date')}, NULL, ${c('orders', 'o', 'status', "'Pending'")},
+             ${c('orders', 'o', 'price', '0')}, NULL,
+             ${c('orders', 'o', 'created_at', 'now()')}, ${c('orders', 'o', 'updated_at', 'now()')}
       FROM ${LEGACY}.orders o
       JOIN m_orders mo ON mo.old_id = o.id
       LEFT JOIN m_teams mt ON mt.old_id = o.team_id
@@ -163,9 +186,11 @@ async function main() {
       INSERT INTO orders (id, team_id, created_by, product_id, image, title, buyer_name, designer_name,
                           category, character_type, production_status, order_date, completion_date,
                           due_date, status, price, note, created_at, updated_at)
-      SELECT m.new_id, mt.new_id, mu.new_id, NULL, t.image, t.title, t.client_name, t.designer,
-             t.style, t.substyle, t.production_status, COALESCE(t.date::date, t.created_at::date),
-             t.upload_date::date, t.due_date, t.status, 0, t.note, t.created_at, t.updated_at
+      SELECT m.new_id, mt.new_id, mu.new_id, NULL, ${c('tasks', 't', 'image')}, t.title, ${c('tasks', 't', 'client_name')},
+             ${c('tasks', 't', 'designer')}, ${c('tasks', 't', 'style')}, ${c('tasks', 't', 'substyle')},
+             ${c('tasks', 't', 'production_status')}, COALESCE(${c('tasks', 't', 'date')}::date, t.created_at::date),
+             ${c('tasks', 't', 'upload_date')}::date, ${c('tasks', 't', 'due_date')}, ${c('tasks', 't', 'status', "'Pending'")},
+             0, ${c('tasks', 't', 'note')}, t.created_at, t.updated_at
       FROM ${LEGACY}.tasks t
       JOIN m_tasks m ON m.old_id = t.id
       JOIN m_teams mt ON mt.old_id = t.team_id
@@ -176,13 +201,15 @@ async function main() {
       INSERT INTO products (id, team_id, order_id, image, name, style, substyle, designer, date,
                             upload_date, production_status, platform, link_db, price, note,
                             created_at, updated_at)
-      SELECT mp.new_id, COALESCE(mt.new_id, $1::uuid), mo.new_id, p.image, p.name, p.style, p.substyle,
-             p.designer, p.date, p.upload_date, p.production_status, p.platform, p.link_db,
-             p.price, p.note, p.created_at, p.updated_at
+      SELECT mp.new_id, COALESCE(mt.new_id, $1::uuid), mo.new_id, ${c('products', 'p', 'image')}, p.name,
+             ${c('products', 'p', 'style')}, ${c('products', 'p', 'substyle')}, ${c('products', 'p', 'designer')},
+             ${c('products', 'p', 'date')}, ${c('products', 'p', 'upload_date')}, ${c('products', 'p', 'production_status')},
+             ${c('products', 'p', 'platform')}, ${c('products', 'p', 'link_db')},
+             ${c('products', 'p', 'price', '0')}, ${c('products', 'p', 'note')}, p.created_at, p.updated_at
       FROM ${LEGACY}.products p
       JOIN m_products mp ON mp.old_id = p.id
       LEFT JOIN m_teams mt ON mt.old_id = p.team_id
-      LEFT JOIN m_orders mo ON mo.old_id = p.order_id
+      LEFT JOIN m_orders mo ON mo.old_id = ${c('products', 'p', 'order_id')}
     `, [fb])
 
     await client.query(`
@@ -195,7 +222,7 @@ async function main() {
 
     await client.query(`
       INSERT INTO product_links (id, product_id, url, position)
-      SELECT m.new_id, mp.new_id, l.url, l.position
+      SELECT m.new_id, mp.new_id, l.url, ${c('product_links', 'l', 'position', '0')}
       FROM ${LEGACY}.product_links l
       JOIN m_product_links m ON m.old_id = l.id
       JOIN m_products mp ON mp.old_id = l.product_id
@@ -203,7 +230,7 @@ async function main() {
 
     await client.query(`
       INSERT INTO product_packages (id, product_id, name, price, description, position)
-      SELECT m.new_id, mp.new_id, k.name, k.price, k.description, k.position
+      SELECT m.new_id, mp.new_id, k.name, ${c('product_packages', 'k', 'price', '0')}, ${c('product_packages', 'k', 'description')}, ${c('product_packages', 'k', 'position', '0')}
       FROM ${LEGACY}.product_packages k
       JOIN m_product_packages m ON m.old_id = k.id
       JOIN m_products mp ON mp.old_id = k.product_id
@@ -211,7 +238,8 @@ async function main() {
 
     await client.query(`
       INSERT INTO sales (id, product_id, buyer, qty, platform, package, total, sold_at, created_at, updated_at)
-      SELECT m.new_id, mp.new_id, s.buyer, s.qty, s.platform, s.package, s.total, s.sold_at,
+      SELECT m.new_id, mp.new_id, s.buyer, ${c('sales', 's', 'qty', '1')}, ${c('sales', 's', 'platform')},
+             ${c('sales', 's', 'package')}, ${c('sales', 's', 'total')}, s.sold_at,
              s.created_at, s.updated_at
       FROM ${LEGACY}.sales s
       JOIN m_sales m ON m.old_id = s.id
@@ -221,7 +249,7 @@ async function main() {
     // Link DB tugas -> order_links milik order hasil gabungan
     await client.query(`
       INSERT INTO order_links (id, order_id, url, position)
-      SELECT m.new_id, mo.new_id, l.url, l.position
+      SELECT m.new_id, mo.new_id, l.url, ${c('task_links', 'l', 'position', '0')}
       FROM ${LEGACY}.task_links l
       JOIN m_task_links m ON m.old_id = l.id
       JOIN m_tasks mo ON mo.old_id = l.task_id
@@ -231,7 +259,7 @@ async function main() {
     if (hasOptions.rows[0].t) {
       await client.query(`
         INSERT INTO team_options (team_id, data, updated_at)
-        SELECT mt.new_id, o.data, o.updated_at
+        SELECT mt.new_id, o.data, ${c('team_options', 'o', 'updated_at', 'now()')}
         FROM ${LEGACY}.team_options o JOIN m_teams mt ON mt.old_id = o.team_id
       `)
     }
@@ -256,6 +284,7 @@ async function main() {
       await client.query('UPDATE team_options SET data = $1::jsonb WHERE team_id = $2', [JSON.stringify(data), row.team_id])
     }
 
+    if (missing.length) console.log(`      Kolom tidak ada di database lama, diisi nilai bawaan: ${[...new Set(missing)].join(', ')}`)
     console.log('[4/4] Memverifikasi jumlah baris sebelum COMMIT...')
     // --- 5. Verifikasi jumlah baris sebelum COMMIT ---
     // orders baru = order lama + tugas lama (digabung); order_links baru = task_links lama.
