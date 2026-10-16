@@ -2,7 +2,9 @@
 // Satu-satunya pintu untuk semua grafik di aplikasi: <AppChart type="bar" | "donut" :items="..." />
 // Warna, tooltip, mode gelap, dan legenda diatur di sini supaya semua grafik konsisten.
 //
-// items: [{ label, value, hint? }]  — `hint` = keterangan tambahan di tooltip (opsional)
+// items: [{ label, value, hint?, badge?, tone? }]
+//   hint  = keterangan tambahan di tooltip (opsional)
+//   badge = teks kecil di legenda donat, mis. '↑ 12%'; tone: 'up' | 'down' | '' mewarnainya
 import { computed } from 'vue'
 import { Bar, Doughnut } from 'vue-chartjs'
 import { PALETTE, useChartColors } from './chartTheme'
@@ -14,6 +16,8 @@ const props = defineProps({
   titlePrefix: { type: String, default: '' }, // bar: judul tooltip, mis. "Tanggal"
   centerLabel: { type: String, default: 'Total' }, // donut: teks kecil di tengah
   height: { type: String, default: 'h-60' }, // bar: tinggi grafik (kelas Tailwind)
+  cumulative: { type: Boolean, default: false }, // bar: tambah garis akumulasi (jumlah berjalan) di sumbu kanan
+  highlightPeak: { type: Boolean, default: false }, // bar: batang tertinggi diberi warna tegas, sisanya pucat
 })
 
 const isDark = useChartColors()
@@ -23,12 +27,31 @@ const total = computed(() => props.items.reduce((s, i) => s + i.value, 0))
 const labels = computed(() => props.items.map((i) => i.label))
 const values = computed(() => props.items.map((i) => i.value))
 
-const barData = computed(() => ({
-  labels: labels.value,
-  datasets: [
-    { data: values.value, backgroundColor: '#3D8A82', hoverBackgroundColor: '#246560', borderRadius: 4, maxBarThickness: 22 },
-  ],
-}))
+const barData = computed(() => {
+  const peak = Math.max(...values.value, 0)
+  const colors = props.highlightPeak
+    ? values.value.map((v) => (v === peak && peak > 0 ? '#2C7A74' : '#A3CBC6'))
+    : '#3D8A82'
+  const datasets = [
+    { type: 'bar', data: values.value, backgroundColor: colors, hoverBackgroundColor: '#246560', borderRadius: 6, maxBarThickness: props.highlightPeak ? 48 : 22, order: 2 },
+  ]
+  if (props.cumulative) {
+    let run = 0
+    datasets.push({
+      type: 'line',
+      data: values.value.map((v) => (run += v)),
+      yAxisID: 'y1',
+      borderColor: '#D9A441',
+      backgroundColor: '#D9A441',
+      borderWidth: 2,
+      pointRadius: 0,
+      pointHoverRadius: 4,
+      tension: 0.3,
+      order: 1,
+    })
+  }
+  return { labels: labels.value, datasets }
+})
 const barOptions = computed(() => ({
   responsive: true,
   maintainAspectRatio: false,
@@ -38,6 +61,7 @@ const barOptions = computed(() => ({
       callbacks: {
         title: (t) => `${props.titlePrefix} ${t[0].label}`.trim(),
         label: (c) => {
+          if (c.dataset.type === 'line') return `Akumulasi: ${props.format(c.parsed.y)}`
           const hint = props.items[c.dataIndex]?.hint
           return `${props.format(c.parsed.y)}${hint ? ` · ${hint}` : ''}`
         },
@@ -52,6 +76,9 @@ const barOptions = computed(() => ({
       border: { display: false },
       ticks: { color: AXIS, maxTicksLimit: 4, precision: 0 },
     },
+    ...(props.cumulative
+      ? { y1: { position: 'right', beginAtZero: true, grid: { display: false }, border: { display: false }, ticks: { color: '#D9A441', maxTicksLimit: 4, precision: 0 } } }
+      : {}),
   },
 }))
 
@@ -95,6 +122,11 @@ const donutOptions = computed(() => ({
       <li v-for="(s, i) in items" :key="s.label" class="flex items-center gap-2.5 text-[13px]">
         <span class="w-2.5 h-2.5 rounded-full shrink-0" :style="{ background: colorOf(i) }" />
         <span class="flex-1 truncate text-ink-700">{{ s.label }}</span>
+        <span
+          v-if="s.badge"
+          class="text-[11.5px] font-medium tabular-nums"
+          :class="s.tone === 'up' ? 'text-ok-600' : s.tone === 'down' ? 'text-danger-600' : 'text-ink-400'"
+        >{{ s.badge }}</span>
         <span class="text-ink-500 tabular-nums">{{ total ? Math.round((s.value / total) * 100) : 0 }}%</span>
         <span class="w-20 text-right font-medium text-ink-800 tabular-nums">{{ format(s.value) }}</span>
       </li>

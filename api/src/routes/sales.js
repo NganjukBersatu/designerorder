@@ -137,4 +137,51 @@ router.get('/daily', async (req, res) => {
   }
 })
 
+// GET /api/sales/monthly?month=YYYY-MM&months=6 — agregat per bulan & kategori untuk N bulan yang berakhir
+// di `month` (dipakai grafik pendapatan per bulan dan perbandingan kategori dengan bulan lalu).
+router.get('/monthly', async (req, res) => {
+  try {
+    const { month } = req.query
+    if (typeof month !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+      return res.status(400).json({ message: 'Parameter month (YYYY-MM) wajib diisi' })
+    }
+    const months = Math.min(Math.max(parseInt(req.query.months, 10) || 6, 2), 24)
+    const teamIds = await resolveTeamIds(req)
+    if (!teamIds) return res.status(404).json({ message: 'Tim tidak ditemukan' })
+    const result = await pool.query(
+      `WITH win AS (
+         SELECT ($2::date - make_interval(months => $3 - 1)) AS from_d, ($2::date + interval '1 month') AS to_d
+       )
+       SELECT to_char(sold_at, 'YYYY-MM') AS month, style, currency, sum(qty)::int AS units,
+              sum(value) AS value, count(*)::int AS transactions FROM (
+         SELECT s.sold_at, COALESCE(NULLIF(btrim(p.style), ''), '') AS style, s.currency, s.qty,
+                COALESCE(s.total, p.price * s.qty) AS value
+         FROM sales s JOIN products p ON p.id = s.product_id, win
+         WHERE p.team_id = ANY($1::uuid[]) AND s.sold_at >= win.from_d AND s.sold_at < win.to_d
+         UNION ALL
+         SELECT bs.sold_at, COALESCE(NULLIF(btrim(b.style), ''), ''), bs.currency, bs.qty,
+                COALESCE(bs.total, b.price * bs.qty)
+         FROM bundle_sales bs JOIN bundles b ON b.id = bs.bundle_id, win
+         WHERE bs.team_id = ANY($1::uuid[]) AND bs.sold_at >= win.from_d AND bs.sold_at < win.to_d
+       ) x
+       GROUP BY 1, 2, 3
+       ORDER BY 1`,
+      [teamIds, `${month}-01`, months]
+    )
+    res.json({
+      data: result.rows.map((r) => ({
+        month: r.month,
+        style: r.style,
+        currency: r.currency,
+        units: r.units,
+        value: Number(r.value),
+        transactions: r.transactions,
+      })),
+    })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ message: 'Gagal mengambil ringkasan bulanan', error: err.message })
+  }
+})
+
 export default router

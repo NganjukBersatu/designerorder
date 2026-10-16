@@ -1,11 +1,10 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { api } from '../utils/api.js'
-import { formatDateTime } from '../composables/useProducts'
+import { formatDateTime, formatPrice } from '../composables/useProducts'
 import { productsVersion } from '../composables/useProductOverview'
 import { useAuth } from '../composables/useAuth'
 import { useOptions } from '../composables/useOptions'
-import { useCurrency } from '../composables/useCurrency'
 import SearchInput from '../components/SearchInput.vue'
 import Pager from '../components/Pager.vue'
 import FilterResetButton from '../components/FilterResetButton.vue'
@@ -55,10 +54,20 @@ function setMonth(key) {
   salesPage.value = 1
   loadSales()
   loadDaily()
+  loadMonthly()
 }
 
 // ========== GRAFIK (agregat per hari dari server) ==========
 const dailyRows = ref([])
+const monthlyRows = ref([]) // 6 bulan terakhir (berakhir di bulan terpilih), per kategori
+async function loadMonthly() {
+  try {
+    const res = await api.get(`/sales/monthly?month=${selectedMonth.value}&months=6${teamParam() ? `&team=${teamParam()}` : ''}`)
+    monthlyRows.value = res.data || []
+  } catch (err) {
+    monthlyRows.value = []
+  }
+}
 const trendMetric = ref('value')
 async function loadDaily() {
   try {
@@ -131,6 +140,7 @@ onMounted(() => {
   loadOverview()
   loadSales()
   loadDaily()
+  loadMonthly()
 })
 // Ganti tim -> semua angka & grafik dimuat ulang
 watch(teamScope, () => {
@@ -138,12 +148,14 @@ watch(teamScope, () => {
   loadOverview()
   loadSales()
   loadDaily()
+  loadMonthly()
 })
 // Data produk/penjualan berubah (mis. dicatat dari halaman lain) -> muat ulang halaman ini
 watch(productsVersion, () => {
   loadOverview()
   loadSales()
   loadDaily()
+  loadMonthly()
 })
 
 // ========== AGREGAT PRODUK & PENJUALAN (dari server) ==========
@@ -161,22 +173,32 @@ async function loadOverview() {
 const totals = computed(() => overview.value?.totals || { count: 0, sold: 0, units: 0, transactions: 0 })
 const styles = computed(() => overview.value?.styles || [])
 const topRaw = computed(() => overview.value?.topProducts || [])
-const { toDisplay, shown, display, displayCurrency, missingRates } = useCurrency()
 const { optionsOf } = useOptions()
 const platformOptions = computed(() => optionsOf('platform'))
 const styleOptions = computed(() => optionsOf('style'))
 
-// Semua nilai di halaman ini ditampilkan dalam satu mata uang (diatur di Pengaturan > Mata Uang).
-const amount = (value, from = 'USD') => display(value, from)
-
-// Mata uang yang dipakai tapi kursnya belum diisi: nilainya belum ikut terhitung
-const missingCurrencies = computed(() => {
-  const used = new Set()
-  for (const s of styles.value) {
-    for (const [cur, value] of Object.entries(s.revenue || {})) if (value > 0) used.add(cur)
+// ========== MATA UANG (tanpa konversi) ==========
+// Penjualan ditampilkan apa adanya dalam mata uang aslinya (JPY tetap JPY), tidak ada kurs dan tidak
+// ada angka yang dikonversi. Kalau penjualan memakai lebih dari satu mata uang, pilih satu lewat tombol
+// di toolbar; grafik & angka ringkasan menghitung mata uang yang dipilih saja (unit tidak terpengaruh).
+const selectedCurrency = ref('')
+const availableCurrencies = computed(() => {
+  const count = new Map()
+  for (const r of [...monthlyRows.value, ...dailyRows.value]) {
+    count.set(r.currency, (count.get(r.currency) || 0) + r.transactions)
   }
-  return missingRates([...used])
+  for (const st of styles.value) {
+    for (const [c, v] of Object.entries(st.revenue || {})) if (v > 0 && !count.has(c)) count.set(c, 0)
+  }
+  return [...count.entries()].sort((x, y) => y[1] - x[1]).map(([c]) => c)
 })
+const cur = computed(() =>
+  availableCurrencies.value.includes(selectedCurrency.value) ? selectedCurrency.value : availableCurrencies.value[0] || 'USD'
+)
+const shown = (value) => formatPrice(value, cur.value)
+const amount = (value, from = 'USD') => formatPrice(value, from)
+// nilai `v` bermata uang `c` hanya dihitung kalau sama dengan mata uang yang sedang dipilih
+const inCur = (v, c) => (c === cur.value ? Number(v) || 0 : 0)
 
 const sellableLink = (p) => (p.kind === 'bundle' ? `/bundling/${p.id}` : `/produk/${p.id}`)
 const saleLink = (s) => (s.kind === 'bundle' ? `/bundling/${s.productId}/penjualan/${s.id}` : `/produk/${s.productId}/penjualan/${s.id}`)
@@ -197,7 +219,8 @@ const topProducts = computed(() =>
     name: p.name,
     image: p.image || null,
     units: p.units,
-    revenue: toDisplay(p.units * (p.price || 0), p.currency),
+    revenue: p.units * (p.price || 0),
+    currency: p.currency,
   }))
 )
 const maxUnits = computed(() => Math.max(...topProducts.value.map((p) => p.units), 1))
@@ -212,21 +235,21 @@ const categoryStats = computed(() => {
       name,
       count: s?.count || 0,
       units: s?.units || 0,
-      revenue: Object.entries(s?.revenue || {}).reduce((sum, [cur, v]) => sum + toDisplay(v, cur), 0),
+      revenue: Object.entries(s?.revenue || {}).reduce((sum, [c, v]) => sum + inCur(v, c), 0),
     }
   }).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
 })
 
 const maxCategoryRevenue = computed(() => Math.max(...categoryStats.value.map((c) => c.revenue), 1))
 
-// Semua hari di bulan terpilih (hari tanpa penjualan = 0), nilai dikonversi ke mata uang tampilan
+// Semua hari di bulan terpilih (hari tanpa penjualan = 0), nilai dalam mata uang yang dipilih
 const trendDays = computed(() => {
   const [y, m] = selectedMonth.value.split('-').map(Number)
   const count = new Date(y, m, 0).getDate()
   const byDay = new Map()
   for (const r of dailyRows.value) {
     const cur = byDay.get(r.day) || { value: 0, units: 0 }
-    cur.value += toDisplay(r.value, r.currency)
+    cur.value += inCur(r.value, r.currency)
     cur.units += r.units
     byDay.set(r.day, cur)
   }
@@ -250,23 +273,95 @@ const trendItems = computed(() =>
 )
 const trendFormat = (v) => (trendMetric.value === 'units' ? `${Math.round(v)} unit` : shown(v))
 
+// ---- Perbandingan bulanan (6 bulan berakhir di bulan terpilih) ----
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
+const monthLabel = (key) => MONTH_NAMES[Number(key.slice(5, 7)) - 1]
+const monthWindow = computed(() => Array.from({ length: 6 }, (_, i) => shiftMonth(selectedMonth.value, i - 5)))
+const monthlyTotals = computed(() =>
+  monthWindow.value.map((m) => {
+    let value = 0
+    let units = 0
+    for (const r of monthlyRows.value) {
+      if (r.month !== m) continue
+      value += inCur(r.value, r.currency)
+      units += r.units
+    }
+    return { month: m, value, units }
+  })
+)
+const monthlyItems = computed(() =>
+  monthlyTotals.value.map((m) => ({ label: monthLabel(m.month), value: m.value, hint: `${m.units} unit` }))
+)
+const hasMonthly = computed(() => monthlyTotals.value.some((m) => m.value > 0))
+const prevMonthRevenue = computed(() => monthlyTotals.value[monthlyTotals.value.length - 2]?.value || 0)
+// Perubahan pendapatan bulan ini dibanding bulan lalu (null kalau bulan lalu kosong)
+const pctChange = (now, before) => (before > 0 ? Math.round(((now - before) / before) * 100) : null)
+const revenueChange = computed(() => pctChange(monthRevenue.value, prevMonthRevenue.value))
+const avgPerTransaction = computed(() => (monthTransactionsInCur.value ? monthRevenue.value / monthTransactionsInCur.value : 0))
+const monthTransactions = computed(() => dailyRows.value.reduce((s, r) => s + r.transactions, 0))
+// Transaksi bermata uang terpilih saja (pembagi rata-rata per transaksi)
+const monthTransactionsInCur = computed(() => dailyRows.value.filter((r) => r.currency === cur.value).reduce((s, r) => s + r.transactions, 0))
+// Total bulan ini untuk mata uang lain (ditampilkan sebagai catatan di kartu utama)
+const otherCurrencyTotals = computed(() => {
+  const map = new Map()
+  for (const r of dailyRows.value) if (r.currency !== cur.value) map.set(r.currency, (map.get(r.currency) || 0) + r.value)
+  return [...map.entries()].filter(([, v]) => v > 0).map(([c, v]) => formatPrice(v, c))
+})
+
+// Performa kategori: bulan ini vs bulan lalu
+const categoryPerformance = computed(() => {
+  const cur = selectedMonth.value
+  const prev = shiftMonth(cur, -1)
+  const map = new Map()
+  for (const r of monthlyRows.value) {
+    if (r.month !== cur && r.month !== prev) continue
+    const name = r.style || 'Tanpa kategori'
+    const e = map.get(name) || { name, revenue: 0, prevRevenue: 0, units: 0 }
+    const v = inCur(r.value, r.currency)
+    if (r.month === cur) {
+      e.revenue += v
+      e.units += r.units
+    } else {
+      e.prevRevenue += v
+    }
+    map.set(name, e)
+  }
+  return [...map.values()]
+    .filter((e) => e.revenue > 0 || e.prevRevenue > 0)
+    .map((e) => ({ ...e, change: pctChange(e.revenue, e.prevRevenue) }))
+    .sort((a, b) => b.revenue - a.revenue)
+})
+const maxPerfRevenue = computed(() => Math.max(...categoryPerformance.value.map((c) => c.revenue), 1))
+// Donat kategori mengikuti bulan terpilih (sama dengan donat platform)
+const monthCategoryShare = computed(() =>
+  categoryPerformance.value
+    .filter((c) => c.revenue > 0)
+    .map((c) => ({
+      label: c.name,
+      value: c.revenue,
+      // perbandingan dengan bulan lalu, tampil di legenda donat
+      badge: c.change === null ? 'baru' : `${c.change > 0 ? '↑' : c.change < 0 ? '↓' : '→'} ${Math.abs(c.change)}%`,
+      tone: c.change === null ? '' : c.change > 0 ? 'up' : c.change < 0 ? 'down' : '',
+      hint: `${c.units} unit`,
+    }))
+)
+
+// Sorotan singkat bulan ini
+const activeDays = computed(() => trendDays.value.filter((d) => d.units > 0).length)
+const avgPerActiveDay = computed(() => (activeDays.value ? monthRevenue.value / activeDays.value : 0))
+
 // Pendapatan bulan ini per platform
 const platformShare = computed(() => {
   const map = new Map()
   for (const r of dailyRows.value) {
     const name = r.platform || 'Lainnya'
-    map.set(name, (map.get(name) || 0) + toDisplay(r.value, r.currency))
+    map.set(name, (map.get(name) || 0) + inCur(r.value, r.currency))
   }
   return [...map.entries()]
     .map(([label, value]) => ({ label, value }))
     .filter((i) => i.value > 0)
     .sort((a, b) => b.value - a.value)
 })
-// Pendapatan semua waktu per kategori (data sudah ada di ringkasan)
-const categoryShare = computed(() =>
-  categoryStats.value.filter((c) => c.revenue > 0).map((c) => ({ label: c.name, value: c.revenue })).sort((a, b) => b.value - a.value)
-)
-
 // ========== EKSPOR (CSV & Cetak) ==========
 // Nilai penjualan dalam mata uang penjualannya: total yang tercatat, atau harga x jumlah kalau kosong
 const saleValue = (s) => s.total ?? (s.product.price || 0) * (Number(s.qty) || 0)
@@ -294,7 +389,7 @@ async function downloadCsv() {
   exporting.value = true
   try {
     const sales = await fetchAllMonthSales()
-    const rows = [['Tanggal', 'Pembeli', 'Produk', 'Paket', 'Jumlah', `Nilai (${displayCurrency.value})`, 'Platform']]
+    const rows = [['Tanggal', 'Pembeli', 'Produk', 'Paket', 'Jumlah', 'Nilai', 'Mata uang', 'Platform']]
     for (const s of sales) {
       rows.push([
         formatDateTime(s.soldAt),
@@ -302,7 +397,8 @@ async function downloadCsv() {
         s.product.name,
         s.kind === 'bundle' ? 'Bundling' : s.package || 'Satuan',
         s.qty,
-        Math.round(toDisplay(saleValue(s), s.currency) * 100) / 100,
+        Math.round(saleValue(s) * 100) / 100,
+        s.currency,
         s.platform || '',
       ])
     }
@@ -378,6 +474,17 @@ function printReport() {
         <option v-for="t in teamOptions" :key="t.id" :value="t.id">{{ t.name }}</option>
       </select>
 
+      <div v-if="availableCurrencies.length > 1" class="inline-flex p-0.5 rounded-xl bg-cream-100 text-[13px]" role="group" aria-label="Mata uang">
+        <button
+          v-for="c in availableCurrencies"
+          :key="c"
+          type="button"
+          @click="selectedCurrency = c"
+          :class="cur === c ? 'bg-white shadow-sm text-ink-900' : 'text-ink-500'"
+          class="px-3 py-2 rounded-[10px] font-medium transition"
+        >{{ c }}</button>
+      </div>
+
       <div class="ml-auto flex items-center gap-2">
         <button
           type="button"
@@ -399,59 +506,77 @@ function printReport() {
       </div>
     </div>
 
-    <p v-if="missingCurrencies.length" class="print-hidden text-[13px] text-warn-700 bg-warn-100 rounded-xl px-4 py-3">
-      Kurs {{ missingCurrencies.join(', ') }} belum diisi, jadi nilainya belum ikut terhitung di ringkasan.
-      Isi di <router-link to="/pengaturan?tab=mata-uang" class="underline font-medium">Pengaturan &gt; Mata Uang</router-link>.
-    </p>
-
     <section class="space-y-5">
-      <!-- Kartu statistik produk -->
+      <!-- Pendapatan bulan ini + sorotan -->
       <div class="fx-grid [--fx-min:11rem] gap-4">
-        <router-link to="/kategori" class="bg-white rounded-card shadow-card p-4 hover:bg-ink-500/5 transition flex flex-col justify-between">
+        <div class="fx-2 bg-white rounded-card shadow-card p-5 flex flex-col justify-between border-l-4 border-brand-500">
           <div class="flex items-start justify-between">
-            <p class="text-[12px] text-ink-400">Total produk</p>
-            <div class="w-7 h-7 rounded-lg bg-cream-100 flex items-center justify-center text-ink-500">
-              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M9 21V9" /></svg>
-            </div>
+            <p class="text-[12.5px] text-ink-400">Pendapatan bulan ini · {{ cur }}</p>
+            <span
+              v-if="revenueChange !== null"
+              class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[12px] font-medium"
+              :class="revenueChange > 0 ? 'bg-ok-100 text-ok-700' : revenueChange < 0 ? 'bg-danger-100 text-danger-700' : 'bg-cream-100 text-ink-500'"
+            >{{ revenueChange > 0 ? '↑' : revenueChange < 0 ? '↓' : '→' }} {{ Math.abs(revenueChange) }}% dari bulan lalu</span>
           </div>
-          <p class="text-[22px] font-semibold text-ink-900">{{ totalProducts }}</p>
-        </router-link>
-        <router-link to="/kategori" class="bg-white rounded-card shadow-card p-4 hover:bg-ink-500/5 transition flex flex-col justify-between">
-          <div class="flex items-start justify-between">
-            <p class="text-[12px] text-ink-400">Produk terjual</p>
-            <div class="w-7 h-7 rounded-lg bg-cream-100 flex items-center justify-center text-ink-500">
-              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
-            </div>
-          </div>
-          <div>
-            <p class="text-[22px] font-semibold text-ink-900">{{ soldProducts }}</p>
-            <p class="text-[11px] text-ink-400">{{ unsoldProducts }} belum terjual</p>
-          </div>
-        </router-link>
+          <p class="text-[32px] font-semibold leading-tight text-ink-900 mt-2">{{ shown(monthRevenue) }}</p>
+          <p class="text-[12px] text-ink-400 mt-1">
+            {{ monthTransactionsInCur }} transaksi · {{ shown(avgPerTransaction) }} rata-rata
+            <template v-if="otherCurrencyTotals.length"> · juga: {{ otherCurrencyTotals.join(', ') }}</template>
+          </p>
+        </div>
+
         <div class="bg-white rounded-card shadow-card p-4 flex flex-col justify-between">
-          <div class="flex items-start justify-between">
-            <p class="text-[12px] text-ink-400">Unit terjual</p>
-            <div class="w-7 h-7 rounded-lg bg-cream-100 flex items-center justify-center text-ink-500">
-              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
-            </div>
-          </div>
+          <p class="text-[12px] text-ink-400">Unit terjual bulan ini</p>
           <div>
-            <p class="text-[22px] font-semibold text-ink-900">{{ totalUnits }}</p>
-            <p class="text-[11px] text-ink-400">dari {{ totalTransactions }} transaksi</p>
+            <p class="text-[22px] font-semibold text-ink-900">{{ monthUnits }}</p>
+            <p class="text-[11px] text-ink-400">dari {{ monthTransactions }} transaksi · {{ activeDays }} hari ada penjualan</p>
           </div>
         </div>
+
+        <div class="bg-white rounded-card shadow-card p-4 flex flex-col justify-between">
+          <p class="text-[12px] text-ink-400">Hari terbaik</p>
+          <div v-if="bestDay.value > 0">
+            <p class="text-[22px] font-semibold text-ink-900">Tgl {{ Number(bestDay.day.slice(8)) }}</p>
+            <p class="text-[11px] text-ink-400">{{ shown(bestDay.value) }}</p>
+          </div>
+          <p v-else class="text-[22px] font-semibold text-ink-300">—</p>
+        </div>
+
+        <div class="bg-white rounded-card shadow-card p-4 flex flex-col justify-between">
+          <p class="text-[12px] text-ink-400">Platform teratas</p>
+          <div v-if="platformShare.length">
+            <p class="text-[22px] font-semibold text-ink-900 truncate">{{ platformShare[0].label }}</p>
+            <p class="text-[11px] text-ink-400">{{ shown(platformShare[0].value) }}</p>
+          </div>
+          <p v-else class="text-[22px] font-semibold text-ink-300">—</p>
+        </div>
+
+        <div class="bg-white rounded-card shadow-card p-4 flex flex-col justify-between">
+          <p class="text-[12px] text-ink-400">Kategori teratas</p>
+          <div v-if="monthCategoryShare.length">
+            <p class="text-[22px] font-semibold text-ink-900 truncate">{{ monthCategoryShare[0].label }}</p>
+            <p class="text-[11px] text-ink-400">{{ shown(monthCategoryShare[0].value) }}</p>
+          </div>
+          <p v-else class="text-[22px] font-semibold text-ink-300">—</p>
+        </div>
+
+        <router-link to="/kategori" class="bg-white rounded-card shadow-card p-4 hover:bg-ink-500/5 transition flex flex-col justify-between">
+          <p class="text-[12px] text-ink-400">Katalog produk</p>
+          <div>
+            <p class="text-[22px] font-semibold text-ink-900">{{ totalProducts }}</p>
+            <p class="text-[11px] text-ink-400">{{ soldProducts }} pernah terjual · {{ unsoldProducts }} belum · {{ totalUnits }} unit total</p>
+          </div>
+        </router-link>
       </div>
 
-      <!-- Grafik tren penjualan bulan ini -->
+      <!-- Tren harian: batang = penjualan per hari, garis emas = akumulasi sepanjang bulan -->
       <div class="bg-white rounded-card shadow-card p-5">
         <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
           <div>
-            <h2 class="text-[15px] font-semibold text-ink-900">Tren penjualan</h2>
+            <h2 class="text-[15px] font-semibold text-ink-900">Tren penjualan harian</h2>
             <p class="text-[12px] text-ink-400 mt-0.5">
-              <template v-if="hasTrend">
-                {{ shown(monthRevenue) }} dari {{ monthUnits }} unit<template v-if="bestDay.value > 0"> · terbaik tanggal {{ Number(bestDay.day.slice(8)) }} ({{ shown(bestDay.value) }})</template>
-              </template>
-              <template v-else>Per hari di bulan terpilih</template>
+              Batang = per hari · garis emas = akumulasi
+              <template v-if="trendMetric === 'value'">({{ cur }})</template>
             </p>
           </div>
           <div class="print-hidden inline-flex p-0.5 rounded-lg bg-cream-100 text-[12px]">
@@ -469,22 +594,29 @@ function printReport() {
             >Unit</button>
           </div>
         </div>
-        <AppChart v-if="hasTrend" type="bar" :items="trendItems" :format="trendFormat" title-prefix="Tanggal" />
+        <AppChart v-if="hasTrend" type="bar" :items="trendItems" :format="trendFormat" title-prefix="Tanggal" cumulative height="h-64" />
         <p v-else class="text-center text-[13px] text-ink-400 py-10">Belum ada penjualan pada bulan ini.</p>
       </div>
 
-      <!-- Komposisi pendapatan -->
+      <!-- Perbandingan bulan & platform -->
       <div class="fx-grid [--fx-min:22rem] gap-6">
+        <div class="bg-white rounded-card shadow-card p-5">
+          <h2 class="text-[15px] font-semibold text-ink-900 mb-4">Pendapatan 6 bulan terakhir <span class="text-[12px] font-normal text-ink-400">{{ cur }}</span></h2>
+          <AppChart v-if="hasMonthly" type="bar" :items="monthlyItems" :format="shown" highlight-peak height="h-52" />
+          <p v-else class="text-center text-[13px] text-ink-400 py-10">Belum ada data pendapatan.</p>
+        </div>
         <div class="bg-white rounded-card shadow-card p-5">
           <h2 class="text-[15px] font-semibold text-ink-900 mb-4">Pendapatan per platform <span class="text-[12px] font-normal text-ink-400">bulan ini</span></h2>
           <AppChart v-if="platformShare.length" type="donut" :items="platformShare" :format="shown" />
           <p v-else class="text-center text-[13px] text-ink-400 py-10">Belum ada data platform.</p>
         </div>
-        <div class="bg-white rounded-card shadow-card p-5">
-          <h2 class="text-[15px] font-semibold text-ink-900 mb-4">Pendapatan per kategori <span class="text-[12px] font-normal text-ink-400">semua waktu</span></h2>
-          <AppChart v-if="categoryShare.length" type="donut" :items="categoryShare" :format="shown" />
-          <p v-else class="text-center text-[13px] text-ink-400 py-10">Belum ada data kategori.</p>
-        </div>
+      </div>
+
+      <!-- Kategori: porsi bulan ini + naik/turun dibanding bulan lalu -->
+      <div class="bg-white rounded-card shadow-card p-5">
+        <h2 class="text-[15px] font-semibold text-ink-900 mb-4">Pendapatan per kategori <span class="text-[12px] font-normal text-ink-400">bulan ini · panah = dibanding bulan lalu</span></h2>
+        <AppChart v-if="monthCategoryShare.length" type="donut" :items="monthCategoryShare" :format="shown" />
+        <p v-else class="text-center text-[13px] text-ink-400 py-10">Belum ada data kategori.</p>
       </div>
 
       <!-- Ringkasan per kategori -->

@@ -1,8 +1,8 @@
 // Tema bersama untuk Chart.js: ikut mode terang/gelap (class `dark` di <html>)
 import { ref, onMounted, onBeforeUnmount } from 'vue'
-import { Chart, BarElement, ArcElement, CategoryScale, LinearScale, Tooltip, Legend } from 'chart.js'
+import { Chart, BarElement, ArcElement, LineElement, PointElement, LineController, CategoryScale, LinearScale, Tooltip, Legend } from 'chart.js'
 
-Chart.register(BarElement, ArcElement, CategoryScale, LinearScale, Tooltip, Legend)
+Chart.register(BarElement, ArcElement, LineElement, PointElement, LineController, CategoryScale, LinearScale, Tooltip, Legend)
 
 export const PALETTE = ['#2C7A74', '#6FA9A2', '#D9A441', '#A3CBC6', '#C9774B', '#869A95', '#163F3C', '#E4C887']
 
