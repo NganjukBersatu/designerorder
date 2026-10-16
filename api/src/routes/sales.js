@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { pool } from '../config/db.js'
 import { parsePagination, buildPaginationMeta } from '../utils/pagination.js'
+import { resolveTeamIds } from '../utils/teamScope.js'
 
 const router = Router()
 
@@ -10,7 +11,9 @@ const router = Router()
 // barang yang dijual (produk atau bundling), supaya tampilan bisa memperlakukannya sama.
 router.get('/', async (req, res) => {
   try {
-    const params = [req.user.teamId]
+    const teamIds = await resolveTeamIds(req)
+    if (!teamIds) return res.status(404).json({ message: 'Tim tidak ditemukan' })
+    const params = [teamIds]
     let monthSql = (col) => ''
 
     const { month } = req.query
@@ -50,12 +53,12 @@ router.get('/', async (req, res) => {
       SELECT s.id, 'product'::text AS kind, s.product_id AS ref_id, s.buyer, s.qty, s.platform, s.package,
              s.total, s.currency, s.sold_at, p.name AS item_name, p.image AS item_image, p.price AS item_price, p.currency AS item_currency
       FROM sales s JOIN products p ON p.id = s.product_id
-      WHERE p.team_id = $1${monthSql('s.sold_at')}${extra.product}`
+      WHERE p.team_id = ANY($1::uuid[])${monthSql('s.sold_at')}${extra.product}`
     const bundlePart = `
       SELECT bs.id, 'bundle'::text AS kind, bs.bundle_id AS ref_id, bs.buyer, bs.qty, bs.platform, NULL::varchar AS package,
              bs.total, bs.currency, bs.sold_at, b.name AS item_name, b.image AS item_image, b.price AS item_price, b.currency AS item_currency
       FROM bundle_sales bs JOIN bundles b ON b.id = bs.bundle_id
-      WHERE bs.team_id = $1${monthSql('bs.sold_at')}${extra.bundle}`
+      WHERE bs.team_id = ANY($1::uuid[])${monthSql('bs.sold_at')}${extra.bundle}`
 
     const pagination = parsePagination({ page: req.query.page || 1, limit: req.query.limit || 50 })
     // Data halaman dan total baris tidak saling bergantung, jadi dijalankan bersamaan
@@ -99,22 +102,24 @@ router.get('/daily', async (req, res) => {
     if (typeof month !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
       return res.status(400).json({ message: 'Parameter month (YYYY-MM) wajib diisi' })
     }
+    const teamIds = await resolveTeamIds(req)
+    if (!teamIds) return res.status(404).json({ message: 'Tim tidak ditemukan' })
     const result = await pool.query(
       `SELECT day, platform, currency, sum(qty)::int AS units, sum(value) AS value, count(*)::int AS transactions FROM (
          SELECT s.sold_at::date AS day, COALESCE(s.platform, '') AS platform,
                 COALESCE(s.currency, p.currency) AS currency, s.qty,
                 COALESCE(s.total, p.price * s.qty) AS value
          FROM sales s JOIN products p ON p.id = s.product_id
-         WHERE p.team_id = $1 AND s.sold_at >= $2::date AND s.sold_at < $2::date + interval '1 month'
+         WHERE p.team_id = ANY($1::uuid[]) AND s.sold_at >= $2::date AND s.sold_at < $2::date + interval '1 month'
          UNION ALL
          SELECT bs.sold_at::date, COALESCE(bs.platform, ''), COALESCE(bs.currency, b.currency), bs.qty,
                 COALESCE(bs.total, b.price * bs.qty)
          FROM bundle_sales bs JOIN bundles b ON b.id = bs.bundle_id
-         WHERE bs.team_id = $1 AND bs.sold_at >= $2::date AND bs.sold_at < $2::date + interval '1 month'
+         WHERE bs.team_id = ANY($1::uuid[]) AND bs.sold_at >= $2::date AND bs.sold_at < $2::date + interval '1 month'
        ) x
        GROUP BY day, platform, currency
        ORDER BY day`,
-      [req.user.teamId, `${month}-01`]
+      [teamIds, `${month}-01`]
     )
     res.json({
       data: result.rows.map((r) => ({

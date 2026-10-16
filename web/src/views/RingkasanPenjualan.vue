@@ -2,7 +2,8 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { api } from '../utils/api.js'
 import { formatDateTime } from '../composables/useProducts'
-import { useProductOverview, productsVersion } from '../composables/useProductOverview'
+import { productsVersion } from '../composables/useProductOverview'
+import { useAuth } from '../composables/useAuth'
 import { useOptions } from '../composables/useOptions'
 import { useCurrency } from '../composables/useCurrency'
 import SearchInput from '../components/SearchInput.vue'
@@ -15,6 +16,24 @@ import AppChart from '../components/AppChart.vue'
 //
 // Angka agregat datang dari server (useProductOverview) dan tabel transaksi diambil per halaman,
 // jadi halaman ini tetap ringan walau produk dan penjualan sudah ribuan.
+
+// ========== CAKUPAN TIM (khusus owner/admin) ==========
+// Owner/admin berkuasa atas semua tim, jadi bisa melihat gabungan semua tim atau satu tim saja.
+// Anggota biasa selalu hanya melihat tim sendiri (server yang memaksa, bukan sekadar tampilan).
+const { role } = useAuth()
+const canPickTeam = computed(() => role.value === 'owner' || role.value === 'admin')
+const teamScope = ref('all') // 'all' | id tim
+const teamOptions = ref([])
+const teamParam = () => (canPickTeam.value ? teamScope.value : '')
+async function loadTeams() {
+  if (!canPickTeam.value) return
+  try {
+    const res = await api.get('/admin/teams')
+    teamOptions.value = res.data || []
+  } catch (err) {
+    teamOptions.value = []
+  }
+}
 
 // ========== BULAN YANG DIPILIH ==========
 const pad = (n) => String(n).padStart(2, '0')
@@ -43,7 +62,7 @@ const dailyRows = ref([])
 const trendMetric = ref('value')
 async function loadDaily() {
   try {
-    const res = await api.get(`/sales/daily?month=${selectedMonth.value}`)
+    const res = await api.get(`/sales/daily?month=${selectedMonth.value}${teamParam() ? `&team=${teamParam()}` : ''}`)
     dailyRows.value = res.data || []
   } catch (err) {
     dailyRows.value = []
@@ -68,6 +87,7 @@ function txFilterParams() {
   if (txSearch.value) p.set('search', txSearch.value)
   if (txPlatform.value) p.set('platform', txPlatform.value)
   if (txStyle.value) p.set('style', txStyle.value)
+  if (teamParam()) p.set('team', teamParam())
   return p
 }
 function resetTxFilters() {
@@ -89,7 +109,7 @@ async function loadSales() {
     q.set('limit', SALES_PER_PAGE)
     const [pageRes, recent] = await Promise.all([
       api.get(`/sales?${q}`),
-      api.get('/sales?page=1&limit=6'),
+      api.get(`/sales?page=1&limit=6${teamParam() ? `&team=${teamParam()}` : ''}`),
     ])
     monthSales.value = pageRes.data || []
     salesMeta.value = pageRes.pagination || { page: 1, limit: SALES_PER_PAGE, totalPages: 1, total: 0 }
@@ -107,17 +127,40 @@ function goSalesPage(page) {
   loadSales()
 }
 onMounted(() => {
+  loadTeams()
+  loadOverview()
+  loadSales()
+  loadDaily()
+})
+// Ganti tim -> semua angka & grafik dimuat ulang
+watch(teamScope, () => {
+  salesPage.value = 1
+  loadOverview()
   loadSales()
   loadDaily()
 })
 // Data produk/penjualan berubah (mis. dicatat dari halaman lain) -> muat ulang halaman ini
 watch(productsVersion, () => {
+  loadOverview()
   loadSales()
   loadDaily()
 })
 
 // ========== AGREGAT PRODUK & PENJUALAN (dari server) ==========
-const { totals, styles, topProducts: topRaw } = useProductOverview()
+const overview = ref(null)
+async function loadOverview() {
+  try {
+    const q = new URLSearchParams()
+    if (teamParam()) q.set('team', teamParam())
+    const res = await api.get(`/products/overview?${q}`)
+    overview.value = res.data
+  } catch (err) {
+    overview.value = null
+  }
+}
+const totals = computed(() => overview.value?.totals || { count: 0, sold: 0, units: 0, transactions: 0 })
+const styles = computed(() => overview.value?.styles || [])
+const topRaw = computed(() => overview.value?.topProducts || [])
 const { toDisplay, shown, display, displayCurrency, missingRates } = useCurrency()
 const { optionsOf } = useOptions()
 const platformOptions = computed(() => optionsOf('platform'))
@@ -324,6 +367,16 @@ function printReport() {
           Bulan ini
         </button>
       </div>
+
+      <select
+        v-if="canPickTeam"
+        v-model="teamScope"
+        aria-label="Pilih tim"
+        class="px-3 py-2.5 rounded-xl border border-ink-200 bg-cream-50 focus:bg-white focus:border-brand-400 outline-none text-sm"
+      >
+        <option value="all">Semua tim</option>
+        <option v-for="t in teamOptions" :key="t.id" :value="t.id">{{ t.name }}</option>
+      </select>
 
       <div class="ml-auto flex items-center gap-2">
         <button

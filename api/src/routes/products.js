@@ -8,6 +8,7 @@ import { isTeamMember } from '../utils/designers.js'
 import { buildSet } from '../utils/sql.js'
 import { currencyRule, checkCurrency } from '../utils/currency.js'
 import { cached } from '../utils/cache.js'
+import { resolveTeamIds, isOwnScope } from '../utils/teamScope.js'
 
 const router = Router()
 router.param('id', uuidParam)
@@ -283,8 +284,10 @@ router.get('/', async (req, res) => {
 // (konversi ke mata uang tampilan dilakukan di browser, karena kurs bisa berubah kapan saja).
 router.get('/overview', async (req, res) => {
   try {
-    const teamId = req.user.teamId
-    const data = await cached(teamId, 'products-overview', async () => {
+    const teamIds = await resolveTeamIds(req)
+    if (!teamIds) return res.status(404).json({ message: 'Tim tidak ditemukan' })
+    // Cache per tim hanya untuk tim sendiri; tampilan banyak tim (owner/admin) selalu dihitung ulang
+    const compute = async () => {
       const ITEMS = `
         WITH items AS MATERIALIZED (
           SELECT 'product'::text AS kind, p.id, p.name, p.image, NULLIF(btrim(p.style), '') AS style,
@@ -292,14 +295,14 @@ router.get('/overview', async (req, res) => {
                  p.currency, p.price, COALESCE(sa.q, 0) AS units, COALESCE(sa.c, 0) AS tx
           FROM products p
           LEFT JOIN LATERAL (SELECT SUM(s.qty)::int AS q, COUNT(*)::int AS c FROM sales s WHERE s.product_id = p.id) sa ON true
-          WHERE p.team_id = $1 AND p.bundle_id IS NULL
+          WHERE p.team_id = ANY($1::uuid[]) AND p.bundle_id IS NULL
           UNION ALL
           SELECT 'bundle'::text, b.id, b.name, b.image, NULLIF(btrim(b.style), ''),
                  NULLIF(btrim(b.substyle), ''), b.created_at, b.currency, b.price,
                  COALESCE(bs.q, 0), COALESCE(bs.c, 0)
           FROM bundles b
           LEFT JOIN LATERAL (SELECT SUM(x.qty)::int AS q, COUNT(*)::int AS c FROM bundle_sales x WHERE x.bundle_id = b.id) bs ON true
-          WHERE b.team_id = $1
+          WHERE b.team_id = ANY($1::uuid[])
         )`
       const [byStyleRes, topRes, facetRes, subRes, thumbRes] = await Promise.all([
         pool.query(
@@ -308,26 +311,26 @@ router.get('/overview', async (req, res) => {
                   COALESCE(SUM(units), 0)::int AS units, COALESCE(SUM(tx), 0)::int AS tx,
                   COALESCE(SUM(units * price), 0) AS revenue
            FROM items GROUP BY style, currency`,
-          [teamId]
+          [teamIds]
         ),
         pool.query(
           `${ITEMS}
            SELECT kind, id, name, image, currency, price, units, tx FROM items
            WHERE units > 0 ORDER BY units DESC, units * price DESC LIMIT 5`,
-          [teamId]
+          [teamIds]
         ),
         pool.query(
           `SELECT
              COALESCE(array_agg(DISTINCT btrim(substyle)) FILTER (WHERE btrim(substyle) <> ''), '{}') AS substyles,
              COALESCE(array_agg(DISTINCT production_status) FILTER (WHERE production_status <> ''), '{}') AS statuses
-           FROM products WHERE team_id = $1`,
-          [teamId]
+           FROM products WHERE team_id = ANY($1::uuid[])`,
+          [teamIds]
         ),
         pool.query(
           `${ITEMS}
            SELECT style, substyle, count(*)::int AS n FROM items
            WHERE style IS NOT NULL AND substyle IS NOT NULL GROUP BY style, substyle`,
-          [teamId]
+          [teamIds]
         ),
         // 4 gambar terbaru per kategori untuk kartu di halaman Kategori
         pool.query(
@@ -337,7 +340,7 @@ router.get('/overview', async (req, res) => {
                     row_number() OVER (PARTITION BY style ORDER BY created_at DESC) AS rn
              FROM items WHERE style IS NOT NULL AND image IS NOT NULL AND image <> ''
            ) t WHERE rn <= 4 ORDER BY style, rn`,
-          [teamId]
+          [teamIds]
         ),
       ])
 
@@ -381,7 +384,8 @@ router.get('/overview', async (req, res) => {
         substyles: facetRes.rows[0].substyles,
         productionStatuses: facetRes.rows[0].statuses,
       }
-    })
+    }
+    const data = isOwnScope(req, teamIds) ? await cached(req.user.teamId, 'products-overview', compute) : await compute()
     res.json({ data })
   } catch (err) {
     console.error(err)
